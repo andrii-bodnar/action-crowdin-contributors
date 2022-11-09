@@ -1,0 +1,41 @@
+name: 'action-crowdin-contributors'
+description: 'Automate acknowledging translators and proofreaders to your open-source projects in Crowdin'
+author: 'Andrii Bodnar'
+
+branding:
+  icon: 'users'
+  color: 'yellow'
+
+inputs:
+  max_contributors:
+    description: 'Only the specified amount of contributors will be shown'
+    default: '30'
+    required: false
+  min_words_contributed:
+    description: 'Minimum words contributed (both translated and approved)'
+    default: '100'
+    required: false
+  contributors_per_line:
+    description: 'Maximum number of columns for the contributors table'
+    default: '7'
+    required: false
+  image_size:
+    description: "Size (in px) of the user's avatar"
+    default: '100'
+    required: false
+  files:
+    description: 'Array of files to update'
+    default: 'README.md'
+    required: false
+  placeholder_start:
+    description: 'Placeholder that marks the start of the contributors table'
+    default: '<!-- CROWDIN-CONTRIBUTORS-START -->'
+    required: false
+  placeholder_end:
+    description: 'Placeholder that marks the end of the contributors table'
+    default: '<!-- CROWDIN-CONTRIBUTORS-END -->'
+    required: false
+
+runs:
+  using: 'node16'
+  main: 'dist/index.js'
