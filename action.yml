@@ -38,40 +38,6 @@ inputs:
     default: '<!-- CROWDIN-CONTRIBUTORS-END -->'
     required: false
 
-  # Pull request configuration
-  commit_message:
-    description: 'Commit message'
-    default: 'Update Crowdin Contributors table'
-    required: false
-  branch_name:
-    description: 'Push changes to the specified branch'
-    default: 'crowdin_contributors'
-    required: false
-  create_pull_request:
-    description: 'Create pull request after pushing to branch'
-    default: 'true'
-    required: false
-  base_branch_name:
-    description: 'Create pull request to the specified branch instead of default one'
-    default: 'main'
-    required: false
-  pull_request_title:
-    description: 'The title of the new pull request'
-    default: 'Update Crowdin Contributors table'
-    required: false
-  pull_request_body:
-    description: 'The contents of the pull request'
-    required: false
-  pull_request_labels:
-    description: 'To add labels for created pull request'
-    required: false
-  pull_request_assignees:
-    description: 'Array of assignee usernames of people to the created pull request (up to 10)'
-    required: false
-  pull_request_reviewers:
-    description: 'Array of usernames of people from whom a review is requested for this pull request'
-    required: false
-
 runs:
   using: 'node16'
   main: 'dist/index.js'

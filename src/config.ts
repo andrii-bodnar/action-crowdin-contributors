@@ -26,18 +26,4 @@ interface PullRequestConfig {
     pullRequestReviewers: string[];
 }
 
-/**
- * const pullRequestConfig: PullRequestConfig = {
- *       commitMessage: core.getInput('commit_message'),
- *       branchName: core.getInput('branch_name'),
- *       createPullRequest: core.getBooleanInput('create_pull_request'),
- *       baseBranchName: core.getInput('base_branch_name'),
- *       pullRequestTitle: core.getInput('pull_request_title'),
- *       pullRequestBody: core.getInput('pull_request_body'),
- *       pullRequestLabels: core.getMultilineInput('pull_request_labels'),
- *       pullRequestAssignees: core.getMultilineInput('pull_request_assignees'),
- *       pullRequestReviewers: core.getMultilineInput('pull_request_reviewers'),
- *     };
- */
-
 export { ContributorsTableConfig, PullRequestConfig, CredentialsConfig };

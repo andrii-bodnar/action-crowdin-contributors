@@ -3,15 +3,7 @@ import axios from 'axios';
 import * as fs from 'fs';
 import * as core from '@actions/core';
 import {ContributorsTableConfig, CredentialsConfig} from "./config";
-
-interface User {
-    id: number;
-    username: string;
-    name: string;
-    translated: number;
-    approved: number;
-    picture?: string;
-}
+import {wait} from "./wait";
 
 export class Contributors {
     private credentials: CredentialsConfig;
@@ -22,11 +14,13 @@ export class Contributors {
         this.config = config;
     }
 
-    public async generate() {
+    public async generate(): Promise<void> {
         this.validateFiles();
+
+        await this.getReport();
     }
 
-    private async getReport() {
+    private async getReport(): Promise<void> {
         core.info('Downloading the report...');
 
         const {reportsApi} = new crowdin({
@@ -43,31 +37,31 @@ export class Contributors {
                 }
             });
         } catch (e) {
-            throw Error(require('util').inspect(e, true, 8));
+            throw Error('Cannot generate report!');
         }
 
         while (true) {
             try {
                 var reportStatus = await reportsApi.checkReportStatus(this.credentials.projectId, report.data.identifier);
 
-                if (reportStatus.data.status == 'finished') {
+                if (reportStatus.data.status === 'finished') {
                     var reportJSON = await reportsApi.downloadReport(this.credentials.projectId, report.data.identifier);
 
-                    let results = await axios.get(reportJSON.data.url);
+                    const results = await axios.get(reportJSON.data.url);
 
                     await this.prepareData(results);
 
                     break;
                 }
             } catch (e) {
-                throw Error(require('util').inspect(e, true, 8));
+                throw Error('Cannot generate report');
             }
 
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            await wait(2000);
         }
     }
 
-    private async prepareData(report: any) {
+    private async prepareData(report: any): Promise<void> {
         const { usersApi } = new crowdin({
             token: this.credentials.token,
             organization: this.credentials.organization
@@ -78,7 +72,7 @@ export class Contributors {
         for (let i in report.data.data) {
             var user = report.data.data[i];
 
-            if (user.username == 'REMOVED_USER') {
+            if (user.username === 'REMOVED_USER') {
                 continue;
             }
 
@@ -92,7 +86,11 @@ export class Contributors {
             let picture;
 
             try {
-                let crowdinMember = await usersApi.getProjectMemberPermissions(this.credentials.projectId, user.user.id);
+                const crowdinMember = await usersApi.getProjectMemberPermissions(
+                    this.credentials.projectId,
+                    user.user.id
+                );
+
                 picture = crowdinMember.data.avatarUrl;
             } catch (e) {
                 //the account might be private, that produces 404 exception
@@ -105,7 +103,7 @@ export class Contributors {
                 name: user.user.fullName,
                 translated: user.translated,
                 approved: user.approved,
-                picture: null,
+                picture: picture,
             });
 
             if (result.length === this.config.maxContributors) {
@@ -116,7 +114,7 @@ export class Contributors {
         await this.renderReport(result);
     }
 
-    private async renderReport(report: any[]) {
+    private renderReport(report: any[]): void {
         var result = [],
             html = "",
             tda = "";
@@ -177,10 +175,10 @@ export class Contributors {
         });
     }
 
-    private validateFiles() {
+    private validateFiles(): void {
         core.info('Validating files...');
 
-        let files = this.config.files.filter((file: string) => {
+        const files = this.config.files.filter((file: string) => {
             if (!fs.existsSync(file)) {
                 core.warning(`The file ${file} does not exist!`);
 
