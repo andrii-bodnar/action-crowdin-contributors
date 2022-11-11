@@ -69,10 +69,10 @@ class Contributors {
             let report;
             try {
                 report = yield reportsApi.generateReport(this.credentials.projectId, {
-                    'name': 'top-members',
-                    'schema': {
-                        'unit': 'words',
-                        'format': 'json',
+                    name: 'top-members',
+                    schema: {
+                        unit: 'words',
+                        format: 'json'
                     }
                 });
             }
@@ -108,8 +108,8 @@ class Contributors {
                 if (user.username === 'REMOVED_USER') {
                     continue;
                 }
-                if (this.config.minWordsContributed !== null
-                    && (user.translated + user.approved) < this.config.minWordsContributed) {
+                if (this.config.minWordsContributed !== null &&
+                    +user.translated + +user.approved < this.config.minWordsContributed) {
                     continue;
                 }
                 let picture;
@@ -119,7 +119,7 @@ class Contributors {
                 }
                 catch (e) {
                     //the account might be private, that produces 404 exception
-                    picture = "https://i2.wp.com/crowdin.com/images/user-picture.png?ssl=1";
+                    picture = 'https://i2.wp.com/crowdin.com/images/user-picture.png?ssl=1';
                 }
                 result.push({
                     id: user.user.id,
@@ -127,59 +127,52 @@ class Contributors {
                     name: user.user.fullName,
                     translated: user.translated,
                     approved: user.approved,
-                    picture: picture,
+                    picture: picture
                 });
                 if (result.length === this.config.maxContributors) {
                     break;
                 }
             }
-            yield this.renderReport(result);
+            this.renderReport(result);
         });
     }
     renderReport(report) {
-        let result = [], html = "", tda = "";
+        let result = [];
+        let html = '';
         for (let i = 0; i < report.length; i += this.config.contributorsPerLine) {
             result.push(report.slice(i, i + this.config.contributorsPerLine));
         }
         html = `<table>`;
         for (let i in result) {
-            html += "<tr>";
+            html += '<tr>';
             for (let j in result[i]) {
+                // TODO: imageSize
+                let tda = `<img alt="logo" style="width: 100px" src="${result[i][j].picture}"/>`;
                 if (!this.credentials.organization) {
-                    tda = `<a href="https://crowdin.com/profile/` + result[i][j].username + `">
-                    <img style="width: 100px" src="` + result[i][j].picture + `"/>
-                   </a>`;
+                    tda = `<a href="https://crowdin.com/profile/${result[i][j].username}">${tda}</a>`;
                 }
-                else {
-                    tda = `<img style="width: 100px" src="` + result[i][j].picture + `"/>`;
-                }
-                html += `
-              <td style="text-align:center; vertical-align: top;">
-                  ` + tda + `
+                html += `<td style="text-align:center; vertical-align: top;">
+                  ${tda}
                   <br />
-                  <sub>
-                      <b>` + result[i][j].name + `</b>
-                  </sub>
+                  <sub><b>${result[i][j].name}</b></sub>
                   <br />
-                  <sub>
-                      <b>` + (result[i][j].translated + result[i][j].approved) + ` words</b>
-                  </sub>
+                  <sub><b>${+result[i][j].translated + +result[i][j].approved} words</b></sub>
               </td>`;
             }
-            html += "</tr>";
+            html += '</tr>';
         }
-        html += "</table>";
-        core.info('Writing result to ' + this.config.files.join(', '));
+        html += '</table>';
+        core.info(`Writing result to ${this.config.files.join(', ')}`);
         this.config.files.map((file) => {
             let fileContents = fs.readFileSync(file).toString();
-            if (fileContents.indexOf(this.config.placeholderStart) === -1
-                || fileContents.indexOf(this.config.placeholderEnd) === -1) {
+            if (!fileContents.includes(this.config.placeholderStart) ||
+                !fileContents.includes(this.config.placeholderEnd)) {
                 core.warning(`Unable to locate start or end tag in ${file}`);
                 return;
             }
             const sliceFrom = fileContents.indexOf(this.config.placeholderStart) + this.config.placeholderStart.length;
             const sliceTo = fileContents.indexOf(this.config.placeholderEnd);
-            fileContents = fileContents.slice(0, sliceFrom) + "\n" + html + "\n" + fileContents.slice(sliceTo);
+            fileContents = fileContents.slice(0, sliceFrom) + '\n' + html + '\n' + fileContents.slice(sliceTo);
             fs.writeFileSync(file, fileContents);
         });
     }
@@ -242,8 +235,9 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 const core = __importStar(__nccwpck_require__(2186));
+const dotenv = __importStar(__nccwpck_require__(2437));
 const contributors_1 = __nccwpck_require__(4184);
-(__nccwpck_require__(2437).config)();
+dotenv.config();
 function run() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
@@ -255,9 +249,13 @@ function run() {
                 imageSize: +core.getInput('image_size'),
                 files: core.getMultilineInput('files'),
                 placeholderStart: core.getInput('placeholder_start'),
-                placeholderEnd: core.getInput('placeholder_end'),
+                placeholderEnd: core.getInput('placeholder_end')
             };
-            let credentialsConfig = { projectId: 0, token: '', organization: '' };
+            let credentialsConfig = {
+                projectId: 0,
+                token: '',
+                organization: ''
+            };
             if (process.env.CROWDIN_PROJECT_ID) {
                 credentialsConfig.projectId = +process.env.CROWDIN_PROJECT_ID;
                 core.setSecret(String(credentialsConfig.projectId));

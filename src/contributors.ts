@@ -2,8 +2,17 @@ import crowdin from '@crowdin/crowdin-api-client';
 import axios from 'axios';
 import * as fs from 'fs';
 import * as core from '@actions/core';
-import {ContributorsTableConfig, CredentialsConfig} from "./config";
-import {wait} from "./wait";
+import {ContributorsTableConfig, CredentialsConfig} from './config';
+import {wait} from './wait';
+
+export interface User {
+    id: number;
+    username: string;
+    name: string;
+    translated: string;
+    approved: string;
+    picture: string;
+}
 
 export class Contributors {
     private credentials: CredentialsConfig;
@@ -31,10 +40,10 @@ export class Contributors {
         let report;
         try {
             report = await reportsApi.generateReport(this.credentials.projectId, {
-                'name': 'top-members',
-                'schema': {
-                    'unit': 'words',
-                    'format': 'json',
+                name: 'top-members',
+                schema: {
+                    unit: 'words',
+                    format: 'json'
                 }
             });
         } catch (e) {
@@ -49,7 +58,10 @@ export class Contributors {
                 );
 
                 if (reportStatus.data.status === 'finished') {
-                    const reportJSON = await reportsApi.downloadReport(this.credentials.projectId, report.data.identifier);
+                    const reportJSON = await reportsApi.downloadReport(
+                        this.credentials.projectId,
+                        report.data.identifier
+                    );
 
                     const results = await axios.get(reportJSON.data.url);
 
@@ -66,12 +78,12 @@ export class Contributors {
     }
 
     private async prepareData(report: any): Promise<void> {
-        const { usersApi } = new crowdin({
+        const {usersApi} = new crowdin({
             token: this.credentials.token,
             organization: this.credentials.organization
         });
 
-        let result = [];
+        let result: User[] = [];
 
         for (let i in report.data.data) {
             const user = report.data.data[i];
@@ -81,8 +93,8 @@ export class Contributors {
             }
 
             if (
-                this.config.minWordsContributed !== null
-                && (user.translated + user.approved) < this.config.minWordsContributed
+                this.config.minWordsContributed !== null &&
+                +user.translated + +user.approved < this.config.minWordsContributed
             ) {
                 continue;
             }
@@ -98,7 +110,7 @@ export class Contributors {
                 picture = crowdinMember.data.avatarUrl;
             } catch (e) {
                 //the account might be private, that produces 404 exception
-                picture = "https://i2.wp.com/crowdin.com/images/user-picture.png?ssl=1";
+                picture = 'https://i2.wp.com/crowdin.com/images/user-picture.png?ssl=1';
             }
 
             result.push({
@@ -107,7 +119,7 @@ export class Contributors {
                 name: user.user.fullName,
                 translated: user.translated,
                 approved: user.approved,
-                picture: picture,
+                picture: picture
             });
 
             if (result.length === this.config.maxContributors) {
@@ -115,13 +127,12 @@ export class Contributors {
             }
         }
 
-        await this.renderReport(result);
+        this.renderReport(result);
     }
 
     private renderReport(report: any[]): void {
-        let result = [],
-            html = "",
-            tda = "";
+        let result = [];
+        let html = '';
 
         for (let i = 0; i < report.length; i += this.config.contributorsPerLine) {
             result.push(report.slice(i, i + this.config.contributorsPerLine));
@@ -130,41 +141,35 @@ export class Contributors {
         html = `<table>`;
 
         for (let i in result) {
-            html += "<tr>";
+            html += '<tr>';
             for (let j in result[i]) {
-                if(!this.credentials.organization) {
-                    tda = `<a href="https://crowdin.com/profile/` + result[i][j].username + `">
-                    <img style="width: 100px" src="` + result[i][j].picture + `"/>
-                   </a>`;
-                } else {
-                    tda = `<img style="width: 100px" src="` + result[i][j].picture + `"/>`;
+                // TODO: imageSize
+                let tda = `<img alt="logo" style="width: 100px" src="${result[i][j].picture}"/>`;
+
+                if (!this.credentials.organization) {
+                    tda = `<a href="https://crowdin.com/profile/${result[i][j].username}">${tda}</a>`;
                 }
 
-                html += `
-              <td style="text-align:center; vertical-align: top;">
-                  ` + tda + `
+                html += `<td style="text-align:center; vertical-align: top;">
+                  ${tda}
                   <br />
-                  <sub>
-                      <b>` + result[i][j].name + `</b>
-                  </sub>
+                  <sub><b>${result[i][j].name}</b></sub>
                   <br />
-                  <sub>
-                      <b>` + (result[i][j].translated + result[i][j].approved) + ` words</b>
-                  </sub>
+                  <sub><b>${+result[i][j].translated + +result[i][j].approved} words</b></sub>
               </td>`;
             }
-            html += "</tr>";
+            html += '</tr>';
         }
-        html += "</table>";
+        html += '</table>';
 
-        core.info('Writing result to ' + this.config.files.join(', '));
+        core.info(`Writing result to ${this.config.files.join(', ')}`);
 
         this.config.files.map((file: string) => {
             let fileContents = fs.readFileSync(file).toString();
 
-            if(
-                fileContents.indexOf(this.config.placeholderStart) === -1
-                || fileContents.indexOf(this.config.placeholderEnd) === -1
+            if (
+                !fileContents.includes(this.config.placeholderStart) ||
+                !fileContents.includes(this.config.placeholderEnd)
             ) {
                 core.warning(`Unable to locate start or end tag in ${file}`);
                 return;
@@ -173,7 +178,7 @@ export class Contributors {
             const sliceFrom = fileContents.indexOf(this.config.placeholderStart) + this.config.placeholderStart.length;
             const sliceTo = fileContents.indexOf(this.config.placeholderEnd);
 
-            fileContents = fileContents.slice(0, sliceFrom) + "\n" + html + "\n" + fileContents.slice(sliceTo);
+            fileContents = fileContents.slice(0, sliceFrom) + '\n' + html + '\n' + fileContents.slice(sliceTo);
 
             fs.writeFileSync(file, fileContents);
         });

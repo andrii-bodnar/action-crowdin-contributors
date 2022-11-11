@@ -35,7 +35,6 @@ jobs:
         min_words_contributed: 256
 
       env:
-        GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
         CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
         CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
         CROWDIN_ORGANIZATION: ${{ secrets.CROWDIN_ORGANIZATION }}
