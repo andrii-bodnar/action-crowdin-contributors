@@ -28,8 +28,9 @@ export class Contributors {
             organization: this.credentials.organization
         });
 
+        let report;
         try {
-            var report = await reportsApi.generateReport(this.credentials.projectId, {
+            report = await reportsApi.generateReport(this.credentials.projectId, {
                 'name': 'top-members',
                 'schema': {
                     'unit': 'words',
@@ -42,10 +43,13 @@ export class Contributors {
 
         while (true) {
             try {
-                var reportStatus = await reportsApi.checkReportStatus(this.credentials.projectId, report.data.identifier);
+                const reportStatus = await reportsApi.checkReportStatus(
+                    this.credentials.projectId,
+                    report.data.identifier
+                );
 
                 if (reportStatus.data.status === 'finished') {
-                    var reportJSON = await reportsApi.downloadReport(this.credentials.projectId, report.data.identifier);
+                    const reportJSON = await reportsApi.downloadReport(this.credentials.projectId, report.data.identifier);
 
                     const results = await axios.get(reportJSON.data.url);
 
@@ -67,10 +71,10 @@ export class Contributors {
             organization: this.credentials.organization
         });
 
-        var result = []; // TODO: interface
+        let result = [];
 
         for (let i in report.data.data) {
-            var user = report.data.data[i];
+            const user = report.data.data[i];
 
             if (user.username === 'REMOVED_USER') {
                 continue;
@@ -115,7 +119,7 @@ export class Contributors {
     }
 
     private renderReport(report: any[]): void {
-        var result = [],
+        let result = [],
             html = "",
             tda = "";
 
@@ -125,9 +129,9 @@ export class Contributors {
 
         html = `<table>`;
 
-        for (var i in result) {
+        for (let i in result) {
             html += "<tr>";
-            for (var j in result[i]) {
+            for (let j in result[i]) {
                 if(!this.credentials.organization) {
                     tda = `<a href="https://crowdin.com/profile/` + result[i][j].username + `">
                     <img style="width: 100px" src="` + result[i][j].picture + `"/>
@@ -166,8 +170,8 @@ export class Contributors {
                 return;
             }
 
-            var sliceFrom = fileContents.indexOf(this.config.placeholderStart) + this.config.placeholderStart.length;
-            var sliceTo = fileContents.indexOf(this.config.placeholderEnd);
+            const sliceFrom = fileContents.indexOf(this.config.placeholderStart) + this.config.placeholderStart.length;
+            const sliceTo = fileContents.indexOf(this.config.placeholderEnd);
 
             fileContents = fileContents.slice(0, sliceFrom) + "\n" + html + "\n" + fileContents.slice(sliceTo);
 

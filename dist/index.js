@@ -47,6 +47,7 @@ const crowdin_api_client_1 = __importDefault(__nccwpck_require__(4296));
 const axios_1 = __importDefault(__nccwpck_require__(8757));
 const fs = __importStar(__nccwpck_require__(7147));
 const core = __importStar(__nccwpck_require__(2186));
+const wait_1 = __nccwpck_require__(5817);
 class Contributors {
     constructor(credentials, config) {
         this.credentials = credentials;
@@ -55,6 +56,7 @@ class Contributors {
     generate() {
         return __awaiter(this, void 0, void 0, function* () {
             this.validateFiles();
+            yield this.getReport();
         });
     }
     getReport() {
@@ -64,8 +66,9 @@ class Contributors {
                 token: this.credentials.token,
                 organization: this.credentials.organization
             });
+            let report;
             try {
-                var report = yield reportsApi.generateReport(this.credentials.projectId, {
+                report = yield reportsApi.generateReport(this.credentials.projectId, {
                     'name': 'top-members',
                     'schema': {
                         'unit': 'words',
@@ -74,22 +77,22 @@ class Contributors {
                 });
             }
             catch (e) {
-                throw Error((__nccwpck_require__(3837).inspect)(e, true, 8));
+                throw Error('Cannot generate report!');
             }
             while (true) {
                 try {
-                    var reportStatus = yield reportsApi.checkReportStatus(this.credentials.projectId, report.data.identifier);
-                    if (reportStatus.data.status == 'finished') {
-                        var reportJSON = yield reportsApi.downloadReport(this.credentials.projectId, report.data.identifier);
-                        let results = yield axios_1.default.get(reportJSON.data.url);
+                    const reportStatus = yield reportsApi.checkReportStatus(this.credentials.projectId, report.data.identifier);
+                    if (reportStatus.data.status === 'finished') {
+                        const reportJSON = yield reportsApi.downloadReport(this.credentials.projectId, report.data.identifier);
+                        const results = yield axios_1.default.get(reportJSON.data.url);
                         yield this.prepareData(results);
                         break;
                     }
                 }
                 catch (e) {
-                    throw Error((__nccwpck_require__(3837).inspect)(e, true, 8));
+                    throw Error('Cannot generate report');
                 }
-                yield new Promise(resolve => setTimeout(resolve, 2000));
+                yield (0, wait_1.wait)(2000);
             }
         });
     }
@@ -99,10 +102,10 @@ class Contributors {
                 token: this.credentials.token,
                 organization: this.credentials.organization
             });
-            var result = []; // TODO: interface
+            let result = [];
             for (let i in report.data.data) {
-                var user = report.data.data[i];
-                if (user.username == 'REMOVED_USER') {
+                const user = report.data.data[i];
+                if (user.username === 'REMOVED_USER') {
                     continue;
                 }
                 if (this.config.minWordsContributed !== null
@@ -111,7 +114,7 @@ class Contributors {
                 }
                 let picture;
                 try {
-                    let crowdinMember = yield usersApi.getProjectMemberPermissions(this.credentials.projectId, user.user.id);
+                    const crowdinMember = yield usersApi.getProjectMemberPermissions(this.credentials.projectId, user.user.id);
                     picture = crowdinMember.data.avatarUrl;
                 }
                 catch (e) {
@@ -124,7 +127,7 @@ class Contributors {
                     name: user.user.fullName,
                     translated: user.translated,
                     approved: user.approved,
-                    picture: null,
+                    picture: picture,
                 });
                 if (result.length === this.config.maxContributors) {
                     break;
@@ -134,24 +137,23 @@ class Contributors {
         });
     }
     renderReport(report) {
-        return __awaiter(this, void 0, void 0, function* () {
-            var result = [], html = "", tda = "";
-            for (let i = 0; i < report.length; i += this.config.contributorsPerLine) {
-                result.push(report.slice(i, i + this.config.contributorsPerLine));
-            }
-            html = `<table>`;
-            for (var i in result) {
-                html += "<tr>";
-                for (var j in result[i]) {
-                    if (!this.credentials.organization) {
-                        tda = `<a href="https://crowdin.com/profile/` + result[i][j].username + `">
+        let result = [], html = "", tda = "";
+        for (let i = 0; i < report.length; i += this.config.contributorsPerLine) {
+            result.push(report.slice(i, i + this.config.contributorsPerLine));
+        }
+        html = `<table>`;
+        for (let i in result) {
+            html += "<tr>";
+            for (let j in result[i]) {
+                if (!this.credentials.organization) {
+                    tda = `<a href="https://crowdin.com/profile/` + result[i][j].username + `">
                     <img style="width: 100px" src="` + result[i][j].picture + `"/>
                    </a>`;
-                    }
-                    else {
-                        tda = `<img style="width: 100px" src="` + result[i][j].picture + `"/>`;
-                    }
-                    html += `
+                }
+                else {
+                    tda = `<img style="width: 100px" src="` + result[i][j].picture + `"/>`;
+                }
+                html += `
               <td style="text-align:center; vertical-align: top;">
                   ` + tda + `
                   <br />
@@ -163,28 +165,27 @@ class Contributors {
                       <b>` + (result[i][j].translated + result[i][j].approved) + ` words</b>
                   </sub>
               </td>`;
-                }
-                html += "</tr>";
             }
-            html += "</table>";
-            core.info('Writing result to ' + this.config.files.join(', '));
-            this.config.files.map((file) => {
-                let fileContents = fs.readFileSync(file).toString();
-                if (fileContents.indexOf(this.config.placeholderStart) === -1
-                    || fileContents.indexOf(this.config.placeholderEnd) === -1) {
-                    core.warning(`Unable to locate start or end tag in ${file}`);
-                    return;
-                }
-                var sliceFrom = fileContents.indexOf(this.config.placeholderStart) + this.config.placeholderStart.length;
-                var sliceTo = fileContents.indexOf(this.config.placeholderEnd);
-                fileContents = fileContents.slice(0, sliceFrom) + "\n" + html + "\n" + fileContents.slice(sliceTo);
-                fs.writeFileSync(file, fileContents);
-            });
+            html += "</tr>";
+        }
+        html += "</table>";
+        core.info('Writing result to ' + this.config.files.join(', '));
+        this.config.files.map((file) => {
+            let fileContents = fs.readFileSync(file).toString();
+            if (fileContents.indexOf(this.config.placeholderStart) === -1
+                || fileContents.indexOf(this.config.placeholderEnd) === -1) {
+                core.warning(`Unable to locate start or end tag in ${file}`);
+                return;
+            }
+            const sliceFrom = fileContents.indexOf(this.config.placeholderStart) + this.config.placeholderStart.length;
+            const sliceTo = fileContents.indexOf(this.config.placeholderEnd);
+            fileContents = fileContents.slice(0, sliceFrom) + "\n" + html + "\n" + fileContents.slice(sliceTo);
+            fs.writeFileSync(file, fileContents);
         });
     }
     validateFiles() {
         core.info('Validating files...');
-        let files = this.config.files.filter((file) => {
+        const files = this.config.files.filter((file) => {
             if (!fs.existsSync(file)) {
                 core.warning(`The file ${file} does not exist!`);
                 return false;
@@ -283,6 +284,37 @@ function run() {
     });
 }
 run();
+
+
+/***/ }),
+
+/***/ 5817:
+/***/ (function(__unused_webpack_module, exports) {
+
+"use strict";
+
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.wait = void 0;
+function wait(milliseconds) {
+    return __awaiter(this, void 0, void 0, function* () {
+        return new Promise(resolve => {
+            if (isNaN(milliseconds)) {
+                throw new Error('milliseconds not a number');
+            }
+            setTimeout(() => resolve('done!'), milliseconds);
+        });
+    });
+}
+exports.wait = wait;
 
 
 /***/ }),
