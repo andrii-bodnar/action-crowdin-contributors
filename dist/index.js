@@ -362,6 +362,7 @@ class Writer {
                 if (!this.credentials.organization) {
                     tda = `<a href="https://crowdin.com/profile/${result[i][j].username}">${tda}</a>`;
                 }
+                // TODO: style for name width
                 html += `<td style="text-align:center; vertical-align: top;">
                   ${tda}
                   <br />
