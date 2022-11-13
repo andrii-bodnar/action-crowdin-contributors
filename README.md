@@ -1,9 +1,10 @@
 # Crowdin Contributors
 
-A GitHub action to automate acknowledging translators and proofreaders to your open-source projects in Crowdin ✨
+A GitHub action to automate acknowledging translators and proofreaders to your projects in Crowdin ✨
 
 [![Check dist](https://github.com/andrii-bodnar/action-crowdin-contributors/actions/workflows/check-dist.yml/badge.svg)](https://github.com/andrii-bodnar/action-crowdin-contributors/actions/workflows/check-dist.yml)
 [![build-test](https://github.com/andrii-bodnar/action-crowdin-contributors/actions/workflows/test.yml/badge.svg)](https://github.com/andrii-bodnar/action-crowdin-contributors/actions/workflows/test.yml)
+[![e2e-test](https://github.com/andrii-bodnar/action-crowdin-contributors/actions/workflows/e2eTest.yml/badge.svg)](https://github.com/andrii-bodnar/action-crowdin-contributors/actions/workflows/e2eTest.yml)
 
 ## What does this action do?
 
