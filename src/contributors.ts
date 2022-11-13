@@ -47,7 +47,7 @@ export class Contributors {
                 }
             });
         } catch (e) {
-            Contributors.throwError('Cannot generate report!', e);
+            Contributors.throwError('Cannot generate report', e);
         }
 
         while (true) {
@@ -70,7 +70,7 @@ export class Contributors {
                     break;
                 }
             } catch (e) {
-                Contributors.throwError('Cannot download report!', e);
+                Contributors.throwError('Cannot download report', e);
             }
 
             await wait(2000);

@@ -40,9 +40,7 @@ async function run(): Promise<void> {
             core.setSecret(credentialsConfig.token);
         }
 
-        if (!credentialsConfig.projectId || !credentialsConfig.token) {
-            core.setFailed('Missing environment variable CROWDIN_PROJECT_ID or CROWDIN_ORGANIZATION');
-        }
+        validateCredentials(credentialsConfig);
 
         const contributors = new Contributors(credentialsConfig, tableConfig);
 
@@ -52,6 +50,24 @@ async function run(): Promise<void> {
     } catch (error) {
         if (error instanceof Error) core.setFailed(error.message);
     }
+}
+
+function validateCredentials(credentialsConfig: CredentialsConfig): void {
+    if (credentialsConfig.projectId && credentialsConfig.token) {
+        return;
+    }
+
+    let missingVariables = [];
+
+    if (!credentialsConfig.projectId) {
+        missingVariables.push('CROWDIN_PROJECT_ID');
+    }
+
+    if (!credentialsConfig.token) {
+        missingVariables.push('CROWDIN_PERSONAL_TOKEN');
+    }
+
+    throw Error('Missing environment variable(s): ' + missingVariables.join(', '));
 }
 
 run();
