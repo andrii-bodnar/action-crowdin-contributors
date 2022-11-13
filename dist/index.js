@@ -49,18 +49,23 @@ const fs = __importStar(__nccwpck_require__(7147));
 const util = __importStar(__nccwpck_require__(3837));
 const core = __importStar(__nccwpck_require__(2186));
 const wait_1 = __nccwpck_require__(5817);
+const writer_1 = __nccwpck_require__(5829);
 class Contributors {
     constructor(credentials, config) {
         this.credentials = credentials;
         this.config = config;
+        this.writer = new writer_1.Writer(credentials, config);
     }
     generate() {
         return __awaiter(this, void 0, void 0, function* () {
             this.validateFiles();
-            yield this.getReport();
+            const reportResults = yield this.downloadReport();
+            core.info(`Found ${reportResults.length} user(s), preparing the data...`);
+            const preparedData = yield this.prepareData(reportResults);
+            this.writer.updateContributorsTable(preparedData);
         });
     }
-    getReport() {
+    downloadReport() {
         return __awaiter(this, void 0, void 0, function* () {
             core.info('Downloading the report...');
             const { reportsApi } = new crowdin_api_client_1.default({
@@ -91,8 +96,7 @@ class Contributors {
                         const reportJSON = yield reportsApi.downloadReport(this.credentials.projectId, report.data.identifier);
                         const results = yield axios_1.default.get(reportJSON.data.url);
                         core.info('Successfully downloaded!');
-                        yield this.prepareData(results);
-                        break;
+                        return results.data.data;
                     }
                 }
                 catch (e) {
@@ -104,14 +108,13 @@ class Contributors {
     }
     prepareData(report) {
         return __awaiter(this, void 0, void 0, function* () {
-            core.info(`Found ${report.data.data.length} user(s), preparing the data...`);
             const { usersApi } = new crowdin_api_client_1.default({
                 token: this.credentials.token,
                 organization: this.credentials.organization
             });
             let result = [];
-            for (let i in report.data.data) {
-                const user = report.data.data[i];
+            for (let i in report) {
+                const user = report[i];
                 if (user.username === 'REMOVED_USER') {
                     continue;
                 }
@@ -140,51 +143,8 @@ class Contributors {
                     break;
                 }
             }
-            this.renderReport(result);
+            return result;
         });
-    }
-    renderReport(report) {
-        core.info(`Rendering table with ${report.length} contributor(s)...`);
-        let result = [];
-        let html = '';
-        for (let i = 0; i < report.length; i += this.config.contributorsPerLine) {
-            result.push(report.slice(i, i + this.config.contributorsPerLine));
-        }
-        html = `<table>`;
-        for (let i in result) {
-            html += '<tr>';
-            for (let j in result[i]) {
-                // TODO: imageSize
-                let tda = `<img alt="logo" style="width: 100px" src="${result[i][j].picture}"/>`;
-                if (!this.credentials.organization) {
-                    tda = `<a href="https://crowdin.com/profile/${result[i][j].username}">${tda}</a>`;
-                }
-                html += `<td style="text-align:center; vertical-align: top;">
-                  ${tda}
-                  <br />
-                  <sub><b>${result[i][j].name}</b></sub>
-                  <br />
-                  <sub><b>${+result[i][j].translated + +result[i][j].approved} words</b></sub>
-              </td>`;
-            }
-            html += '</tr>';
-        }
-        html += '</table>';
-        this.config.files.map((file) => {
-            core.info(`Writing result to ${file}`);
-            let fileContents = fs.readFileSync(file).toString();
-            if (!fileContents.includes(this.config.placeholderStart) ||
-                !fileContents.includes(this.config.placeholderEnd)) {
-                core.warning(`Unable to locate start or end tag in ${file}`);
-                return;
-            }
-            const sliceFrom = fileContents.indexOf(this.config.placeholderStart) + this.config.placeholderStart.length;
-            const sliceTo = fileContents.indexOf(this.config.placeholderEnd);
-            fileContents = fileContents.slice(0, sliceFrom) + '\n' + html + '\n' + fileContents.slice(sliceTo);
-            core.info(fileContents);
-            fs.writeFileSync(file, fileContents);
-        });
-        core.info('The contributors table successfully updated!');
     }
     validateFiles() {
         core.info('Validating files...');
@@ -339,6 +299,100 @@ function wait(milliseconds) {
     });
 }
 exports.wait = wait;
+
+
+/***/ }),
+
+/***/ 5829:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.Writer = void 0;
+const core = __importStar(__nccwpck_require__(2186));
+const fs_1 = __importDefault(__nccwpck_require__(7147));
+class Writer {
+    constructor(credentials, config) {
+        this.credentials = credentials;
+        this.config = config;
+    }
+    updateContributorsTable(report) {
+        core.info(`Rendering table with ${report.length} contributor(s)...`);
+        const tableContent = this.renderReport(report);
+        this.writeFiles(tableContent);
+        core.info('The contributors table successfully updated!');
+    }
+    renderReport(report) {
+        let result = [];
+        let html = '<table>';
+        for (let i = 0; i < report.length; i += this.config.contributorsPerLine) {
+            result.push(report.slice(i, i + this.config.contributorsPerLine));
+        }
+        for (let i in result) {
+            html += '<tr>';
+            for (let j in result[i]) {
+                let tda = `<img alt="logo" style="width: ${this.config.imageSize}px" src="${result[i][j].picture}"/>`;
+                if (!this.credentials.organization) {
+                    tda = `<a href="https://crowdin.com/profile/${result[i][j].username}">${tda}</a>`;
+                }
+                html += `<td style="text-align:center; vertical-align: top;">
+                  ${tda}
+                  <br />
+                  <sub><b>${result[i][j].name}</b></sub>
+                  <br />
+                  <sub><b>${+result[i][j].translated + +result[i][j].approved} words</b></sub>
+              </td>`;
+            }
+            html += '</tr>';
+        }
+        html += '</table>';
+        return html;
+    }
+    writeFiles(tableContent) {
+        this.config.files.map((file) => {
+            core.info(`Writing result to ${file}`);
+            let fileContents = fs_1.default.readFileSync(file).toString();
+            if (!fileContents.includes(this.config.placeholderStart) ||
+                !fileContents.includes(this.config.placeholderEnd)) {
+                core.warning(`Unable to locate start or end tag in ${file}`);
+                return;
+            }
+            const sliceFrom = fileContents.indexOf(this.config.placeholderStart) + this.config.placeholderStart.length;
+            const sliceTo = fileContents.indexOf(this.config.placeholderEnd);
+            fileContents = `${fileContents.slice(0, sliceFrom)}\n${tableContent}\n${fileContents.slice(sliceTo)}`;
+            core.debug(fileContents);
+            fs_1.default.writeFileSync(file, fileContents);
+        });
+    }
+}
+exports.Writer = Writer;
 
 
 /***/ }),

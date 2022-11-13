@@ -5,6 +5,7 @@ import * as util from 'util';
 import * as core from '@actions/core';
 import {ContributorsTableConfig, CredentialsConfig} from './config';
 import {wait} from './wait';
+import {Writer} from './writer';
 
 export interface User {
     id: number;
@@ -18,19 +19,28 @@ export interface User {
 export class Contributors {
     private credentials: CredentialsConfig;
     private config: ContributorsTableConfig;
+    private writer: Writer;
 
     constructor(credentials: CredentialsConfig, config: ContributorsTableConfig) {
         this.credentials = credentials;
         this.config = config;
+
+        this.writer = new Writer(credentials, config);
     }
 
     public async generate(): Promise<void> {
         this.validateFiles();
 
-        await this.getReport();
+        const reportResults = await this.downloadReport();
+
+        core.info(`Found ${reportResults.length} user(s), preparing the data...`);
+
+        const preparedData = await this.prepareData(reportResults);
+
+        this.writer.updateContributorsTable(preparedData);
     }
 
-    private async getReport(): Promise<void> {
+    private async downloadReport(): Promise<any[]> {
         core.info('Downloading the report...');
 
         const {reportsApi} = new crowdin({
@@ -75,9 +85,7 @@ export class Contributors {
 
                     core.info('Successfully downloaded!');
 
-                    await this.prepareData(results);
-
-                    break;
+                    return results.data.data;
                 }
             } catch (e) {
                 Contributors.throwError('Cannot download report', e);
@@ -87,9 +95,7 @@ export class Contributors {
         }
     }
 
-    private async prepareData(report: any): Promise<void> {
-        core.info(`Found ${report.data.data.length} user(s), preparing the data...`);
-
+    private async prepareData(report: any[]): Promise<User[]> {
         const {usersApi} = new crowdin({
             token: this.credentials.token,
             organization: this.credentials.organization
@@ -97,8 +103,8 @@ export class Contributors {
 
         let result: User[] = [];
 
-        for (let i in report.data.data) {
-            const user = report.data.data[i];
+        for (let i in report) {
+            const user = report[i];
 
             if (user.username === 'REMOVED_USER') {
                 continue;
@@ -139,66 +145,7 @@ export class Contributors {
             }
         }
 
-        this.renderReport(result);
-    }
-
-    private renderReport(report: any[]): void {
-        core.info(`Rendering table with ${report.length} contributor(s)...`);
-
-        let result = [];
-        let html = '';
-
-        for (let i = 0; i < report.length; i += this.config.contributorsPerLine) {
-            result.push(report.slice(i, i + this.config.contributorsPerLine));
-        }
-
-        html = `<table>`;
-
-        for (let i in result) {
-            html += '<tr>';
-            for (let j in result[i]) {
-                // TODO: imageSize
-                let tda = `<img alt="logo" style="width: 100px" src="${result[i][j].picture}"/>`;
-
-                if (!this.credentials.organization) {
-                    tda = `<a href="https://crowdin.com/profile/${result[i][j].username}">${tda}</a>`;
-                }
-
-                html += `<td style="text-align:center; vertical-align: top;">
-                  ${tda}
-                  <br />
-                  <sub><b>${result[i][j].name}</b></sub>
-                  <br />
-                  <sub><b>${+result[i][j].translated + +result[i][j].approved} words</b></sub>
-              </td>`;
-            }
-            html += '</tr>';
-        }
-        html += '</table>';
-
-        this.config.files.map((file: string) => {
-            core.info(`Writing result to ${file}`);
-
-            let fileContents = fs.readFileSync(file).toString();
-
-            if (
-                !fileContents.includes(this.config.placeholderStart) ||
-                !fileContents.includes(this.config.placeholderEnd)
-            ) {
-                core.warning(`Unable to locate start or end tag in ${file}`);
-                return;
-            }
-
-            const sliceFrom = fileContents.indexOf(this.config.placeholderStart) + this.config.placeholderStart.length;
-            const sliceTo = fileContents.indexOf(this.config.placeholderEnd);
-
-            fileContents = fileContents.slice(0, sliceFrom) + '\n' + html + '\n' + fileContents.slice(sliceTo);
-
-            core.info(fileContents);
-            fs.writeFileSync(file, fileContents);
-        });
-
-        core.info('The contributors table successfully updated!');
+        return result;
     }
 
     private validateFiles(): void {
