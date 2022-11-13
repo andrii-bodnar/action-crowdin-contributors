@@ -30,5 +30,5 @@ test('test runs', () => {
         env: process.env
     };
 
-    console.log(cp.execFileSync(np, [ip], options).toString());
+    // console.log(cp.execFileSync(np, [ip], options).toString());
 });

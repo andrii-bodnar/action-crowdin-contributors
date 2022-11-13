@@ -1,6 +1,7 @@
 import crowdin from '@crowdin/crowdin-api-client';
 import axios from 'axios';
 import * as fs from 'fs';
+import * as util from 'util';
 import * as core from '@actions/core';
 import {ContributorsTableConfig, CredentialsConfig} from './config';
 import {wait} from './wait';
@@ -50,20 +51,29 @@ export class Contributors {
             Contributors.throwError('Cannot generate report', e);
         }
 
+        let progress = 0;
         while (true) {
             try {
+                core.info(`Checking report generation status ${progress}%...`);
+
                 const reportStatus = await reportsApi.checkReportStatus(
                     this.credentials.projectId,
                     report.data.identifier
                 );
 
+                progress = +reportStatus.data.progress;
+
                 if (reportStatus.data.status === 'finished') {
+                    core.info('Downloading report...');
+
                     const reportJSON = await reportsApi.downloadReport(
                         this.credentials.projectId,
                         report.data.identifier
                     );
 
                     const results = await axios.get(reportJSON.data.url);
+
+                    core.info('Successfully downloaded!');
 
                     await this.prepareData(results);
 
@@ -78,6 +88,8 @@ export class Contributors {
     }
 
     private async prepareData(report: any): Promise<void> {
+        core.info(`Found ${report.data.data.length} user(s), preparing the data...`);
+
         const {usersApi} = new crowdin({
             token: this.credentials.token,
             organization: this.credentials.organization
@@ -131,6 +143,8 @@ export class Contributors {
     }
 
     private renderReport(report: any[]): void {
+        core.info(`Rendering table with ${report.length} contributor(s)...`);
+
         let result = [];
         let html = '';
 
@@ -162,9 +176,9 @@ export class Contributors {
         }
         html += '</table>';
 
-        core.info(`Writing result to ${this.config.files.join(', ')}`);
-
         this.config.files.map((file: string) => {
+            core.info(`Writing result to ${file}`);
+
             let fileContents = fs.readFileSync(file).toString();
 
             if (
@@ -182,6 +196,8 @@ export class Contributors {
 
             fs.writeFileSync(file, fileContents);
         });
+
+        core.info('The contributors table successfully updated!');
     }
 
     private validateFiles(): void {
@@ -208,7 +224,7 @@ export class Contributors {
         let finalMessage = message;
 
         if (core.isDebug() && e.message) {
-            finalMessage += `. Message: ${e.message}`;
+            finalMessage += `. Message: ${util.inspect(e, true, 8)}`;
         }
 
         throw new Error(finalMessage);

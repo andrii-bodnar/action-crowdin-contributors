@@ -7,8 +7,6 @@ dotenv.config();
 
 async function run(): Promise<void> {
     try {
-        core.setOutput('time', new Date().toTimeString());
-
         const tableConfig: ContributorsTableConfig = {
             maxContributors: +core.getInput('max_contributors'),
             minWordsContributed: +core.getInput('min_words_contributed'),
@@ -45,8 +43,6 @@ async function run(): Promise<void> {
         const contributors = new Contributors(credentialsConfig, tableConfig);
 
         await contributors.generate();
-
-        core.info('Hello world');
     } catch (error) {
         if (error instanceof Error) core.setFailed(error.message);
     }

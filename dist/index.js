@@ -46,6 +46,7 @@ exports.Contributors = void 0;
 const crowdin_api_client_1 = __importDefault(__nccwpck_require__(4296));
 const axios_1 = __importDefault(__nccwpck_require__(8757));
 const fs = __importStar(__nccwpck_require__(7147));
+const util = __importStar(__nccwpck_require__(3837));
 const core = __importStar(__nccwpck_require__(2186));
 const wait_1 = __nccwpck_require__(5817);
 class Contributors {
@@ -79,12 +80,17 @@ class Contributors {
             catch (e) {
                 Contributors.throwError('Cannot generate report', e);
             }
+            let progress = 0;
             while (true) {
                 try {
+                    core.info(`Checking report generation status ${progress}%...`);
                     const reportStatus = yield reportsApi.checkReportStatus(this.credentials.projectId, report.data.identifier);
+                    progress = +reportStatus.data.progress;
                     if (reportStatus.data.status === 'finished') {
+                        core.info('Downloading report...');
                         const reportJSON = yield reportsApi.downloadReport(this.credentials.projectId, report.data.identifier);
                         const results = yield axios_1.default.get(reportJSON.data.url);
+                        core.info('Successfully downloaded!');
                         yield this.prepareData(results);
                         break;
                     }
@@ -98,6 +104,7 @@ class Contributors {
     }
     prepareData(report) {
         return __awaiter(this, void 0, void 0, function* () {
+            core.info(`Found ${report.data.data.length} user(s), preparing the data...`);
             const { usersApi } = new crowdin_api_client_1.default({
                 token: this.credentials.token,
                 organization: this.credentials.organization
@@ -137,6 +144,7 @@ class Contributors {
         });
     }
     renderReport(report) {
+        core.info(`Rendering table with ${report.length} contributor(s)...`);
         let result = [];
         let html = '';
         for (let i = 0; i < report.length; i += this.config.contributorsPerLine) {
@@ -162,8 +170,8 @@ class Contributors {
             html += '</tr>';
         }
         html += '</table>';
-        core.info(`Writing result to ${this.config.files.join(', ')}`);
         this.config.files.map((file) => {
+            core.info(`Writing result to ${file}`);
             let fileContents = fs.readFileSync(file).toString();
             if (!fileContents.includes(this.config.placeholderStart) ||
                 !fileContents.includes(this.config.placeholderEnd)) {
@@ -175,6 +183,7 @@ class Contributors {
             fileContents = fileContents.slice(0, sliceFrom) + '\n' + html + '\n' + fileContents.slice(sliceTo);
             fs.writeFileSync(file, fileContents);
         });
+        core.info('The contributors table successfully updated!');
     }
     validateFiles() {
         core.info('Validating files...');
@@ -193,7 +202,7 @@ class Contributors {
     static throwError(message, e) {
         let finalMessage = message;
         if (core.isDebug() && e.message) {
-            finalMessage += `. Message: ${e.message}`;
+            finalMessage += `. Message: ${util.inspect(e, true, 8)}`;
         }
         throw new Error(finalMessage);
     }
@@ -248,7 +257,6 @@ dotenv.config();
 function run() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
-            core.setOutput('time', new Date().toTimeString());
             const tableConfig = {
                 maxContributors: +core.getInput('max_contributors'),
                 minWordsContributed: +core.getInput('min_words_contributed'),
@@ -278,7 +286,6 @@ function run() {
             validateCredentials(credentialsConfig);
             const contributors = new contributors_1.Contributors(credentialsConfig, tableConfig);
             yield contributors.generate();
-            core.info('Hello world');
         }
         catch (error) {
             if (error instanceof Error)

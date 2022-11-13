@@ -15,6 +15,7 @@ jobs:
           npm install
       - run: |
           npm run all
+
   test: # make sure the action works on a clean machine without building
     runs-on: ubuntu-latest
     steps:
@@ -22,3 +23,10 @@ jobs:
       - uses: ./
         with:
           max_contributors: 10
+          min_words_contributed: 0
+          placeholder_start: '<!-- TEST-CONTRIBUTORS-START -->'
+          placeholder_end: '<!-- TEST-CONTRIBUTORS-END -->'
+          files: ./__tests__/files/contributors.md
+        env:
+          CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
+          CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
