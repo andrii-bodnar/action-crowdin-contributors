@@ -1,0 +1,28 @@
+name: 'e2e-test'
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: ./
+        with:
+          max_contributors: 10
+          min_words_contributed: 0
+          placeholder_start: '<!-- TEST-CONTRIBUTORS-START -->'
+          placeholder_end: '<!-- TEST-CONTRIBUTORS-END -->'
+          files: ./__tests__/files/contributors.md
+        env:
+          CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
+          CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
+
+      - name: Test the Readme
+        run: |
+          cat ./__tests__/files/contributors.md
+          git diff
