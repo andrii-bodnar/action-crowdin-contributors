@@ -181,6 +181,7 @@ class Contributors {
             const sliceFrom = fileContents.indexOf(this.config.placeholderStart) + this.config.placeholderStart.length;
             const sliceTo = fileContents.indexOf(this.config.placeholderEnd);
             fileContents = fileContents.slice(0, sliceFrom) + '\n' + html + '\n' + fileContents.slice(sliceTo);
+            core.info(fileContents);
             fs.writeFileSync(file, fileContents);
         });
         core.info('The contributors table successfully updated!');

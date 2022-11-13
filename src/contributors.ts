@@ -194,6 +194,7 @@ export class Contributors {
 
             fileContents = fileContents.slice(0, sliceFrom) + '\n' + html + '\n' + fileContents.slice(sliceTo);
 
+            core.info(fileContents);
             fs.writeFileSync(file, fileContents);
         });
 
