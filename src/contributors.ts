@@ -47,7 +47,7 @@ export class Contributors {
                 }
             });
         } catch (e) {
-            throw Error('Cannot generate report!');
+            Contributors.throwError('Cannot generate report!', e);
         }
 
         while (true) {
@@ -70,7 +70,7 @@ export class Contributors {
                     break;
                 }
             } catch (e) {
-                throw Error('Cannot generate report');
+                Contributors.throwError('Cannot download report!', e);
             }
 
             await wait(2000);
@@ -202,5 +202,15 @@ export class Contributors {
         }
 
         this.config.files = files;
+    }
+
+    private static throwError(message: string, e: any): never {
+        let finalMessage = message;
+
+        if (core.isDebug() && e.message) {
+            finalMessage += `. Message: ${e.message}`;
+        }
+
+        throw new Error(finalMessage);
     }
 }

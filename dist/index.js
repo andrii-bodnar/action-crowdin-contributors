@@ -77,7 +77,7 @@ class Contributors {
                 });
             }
             catch (e) {
-                throw Error('Cannot generate report!');
+                Contributors.throwError('Cannot generate report!', e);
             }
             while (true) {
                 try {
@@ -90,7 +90,7 @@ class Contributors {
                     }
                 }
                 catch (e) {
-                    throw Error('Cannot generate report');
+                    Contributors.throwError('Cannot download report!', e);
                 }
                 yield (0, wait_1.wait)(2000);
             }
@@ -189,6 +189,13 @@ class Contributors {
             throw Error("Can't find any acceptable file!");
         }
         this.config.files = files;
+    }
+    static throwError(message, e) {
+        let finalMessage = message;
+        if (core.isDebug() && e.message) {
+            finalMessage += `. Message: ${e.message}`;
+        }
+        throw new Error(finalMessage);
     }
 }
 exports.Contributors = Contributors;
