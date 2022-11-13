@@ -117,7 +117,7 @@ export class Contributors {
                 continue;
             }
 
-            let picture;
+            let picture = 'https://i2.wp.com/crowdin.com/images/user-picture.png?ssl=1';
 
             try {
                 const crowdinMember = await usersApi.getProjectMemberPermissions(
@@ -125,10 +125,11 @@ export class Contributors {
                     user.user.id
                 );
 
-                picture = crowdinMember.data.avatarUrl;
+                if (crowdinMember.data.avatarUrl) {
+                    picture = crowdinMember.data.avatarUrl;
+                }
             } catch (e) {
                 //the account might be private, that produces 404 exception
-                picture = 'https://i2.wp.com/crowdin.com/images/user-picture.png?ssl=1';
             }
 
             result.push({

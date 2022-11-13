@@ -13,15 +13,25 @@ jobs:
       - uses: ./
         with:
           max_contributors: 10
-          min_words_contributed: 0
+          min_words_contributed: 1
           placeholder_start: '<!-- TEST-CONTRIBUTORS-START -->'
           placeholder_end: '<!-- TEST-CONTRIBUTORS-END -->'
           files: ./__tests__/files/contributors.md
         env:
           CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
           CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
+          CROWDIN_ORGANIZATION: ${{ secrets.CROWDIN_ORGANIZATION }}
 
       - name: Test the Readme
         run: |
           cat ./__tests__/files/contributors.md
           git diff
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v4
+        with:
+          title: Update Crowdin Contributors table
+          body: By [action-crowdin-contributors](https://github.com/andrii-bodnar/action-crowdin-contributors) GitHub action
+          commit-message: Update Crowdin Contributors table
+          committer: Crowdin Bot <support+bot@crowdin.com>
+          branch: crowdin-contributors/patch

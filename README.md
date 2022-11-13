@@ -79,9 +79,9 @@ jobs:
       uses: peter-evans/create-pull-request@v4
       with:
         title: Update Crowdin Contributors table
-        body: By [action-crowdin-contributors](andrii-bodnar/action-crowdin-contributors) GitHub action
+        body: By [action-crowdin-contributors](https://github.com/andrii-bodnar/action-crowdin-contributors) GitHub action
         commit-message: Update Crowdin Contributors table
-        committer: Crowdin Bot <support@crowdin.com>
+        committer: Crowdin Bot <support+bot@crowdin.com>
         branch: crowdin-contributors/patch
 ```
 
@@ -96,6 +96,16 @@ jobs:
 | `files`                 | README.md                             | Array of files to update                                   |
 | `placeholder_start`     | `<!-- CROWDIN-CONTRIBUTORS-START -->` | Placeholder that marks the start of the contributors table |
 | `placeholder_end`       | `<!-- CROWDIN-CONTRIBUTORS-END -->`   | Placeholder that marks the end of the contributors table   |
+
+## Demo
+
+The resulting table will look like this:
+
+[![Check dist](./demo.png)](https://github.com/andrii-bodnar/action-crowdin-contributors/pull/6)
+
+**Note:** it's just a test, in real use, it will display actual user's avatars.
+
+Example PR - [#6](https://github.com/andrii-bodnar/action-crowdin-contributors/pull/6)
 
 ## Contributing
 

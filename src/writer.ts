@@ -1,5 +1,6 @@
 import * as core from '@actions/core';
 import fs from 'fs';
+import pretty from 'pretty';
 import {ContributorsTableConfig, CredentialsConfig} from './config';
 
 export class Writer {
@@ -53,7 +54,7 @@ export class Writer {
 
         html += '</table>';
 
-        return html;
+        return pretty(html);
     }
 
     private writeFiles(tableContent: string): void {

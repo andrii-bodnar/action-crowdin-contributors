@@ -30,12 +30,12 @@ async function run(): Promise<void> {
 
         if (process.env.CROWDIN_PERSONAL_TOKEN) {
             credentialsConfig.token = process.env.CROWDIN_PERSONAL_TOKEN;
-            core.setSecret(credentialsConfig.token);
+            core.setSecret(String(credentialsConfig.token));
         }
 
         if (process.env.CROWDIN_ORGANIZATION) {
-            credentialsConfig.token = process.env.CROWDIN_ORGANIZATION;
-            core.setSecret(credentialsConfig.token);
+            credentialsConfig.organization = process.env.CROWDIN_ORGANIZATION;
+            core.setSecret(String(credentialsConfig.organization));
         }
 
         validateCredentials(credentialsConfig);
