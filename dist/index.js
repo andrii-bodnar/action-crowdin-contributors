@@ -115,7 +115,7 @@ class Contributors {
             let result = [];
             for (let i in report) {
                 const user = report[i];
-                if (user.username === 'REMOVED_USER') {
+                if (user.user.username === 'REMOVED_USER') {
                     continue;
                 }
                 if (this.config.minWordsContributed !== null &&
