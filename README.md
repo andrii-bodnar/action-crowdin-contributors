@@ -1,3 +1,5 @@
+[<p align='center'><img src='/docs/logo.png' width='150' height='150' align='center'/></p>](https://github.com/andrii-bodnar/action-crowdin-contributors)
+
 # Crowdin Contributors
 
 A GitHub action to automate acknowledging translators and proofreaders to your projects in Crowdin ✨
@@ -20,8 +22,14 @@ Read the [Configuring a workflow](https://help.github.com/en/articles/configurin
 name: Crowdin Contributors Action
 
 on:
+  # When you push to the `main` branch
   push:
     branches: [ main ]
+  # And optionally, once every 12 hours
+  schedule:
+    - cron: '0 */12 * * *' # https://crontab.guru/#0_*/12_*_*_*
+  # To manually run this workflow
+  workflow_dispatch:
 
 jobs:
   crowdin-contributors:
@@ -52,8 +60,14 @@ To create a PR with the updated table, we recommend usage of the [Create Pull Re
 name: Crowdin Contributors Action
 
 on:
+  # When you push to the `main` branch
   push:
     branches: [ main ]
+  # And optionally, once every 12 hours
+  schedule:
+    - cron: '0 */12 * * *' # https://crontab.guru/#0_*/12_*_*_*
+  # To manually run this workflow
+  workflow_dispatch:
 
 jobs:
   crowdin-contributors:
@@ -101,7 +115,7 @@ jobs:
 
 The resulting table will look like this:
 
-[![Check dist](./demo.png)](https://github.com/andrii-bodnar/action-crowdin-contributors/pull/6)
+[![Check dist](docs/demo.png)](https://github.com/andrii-bodnar/action-crowdin-contributors/pull/6)
 
 **Note:** it's just a test, in real use, it will display actual user's avatars.
 
