@@ -26,7 +26,19 @@ jobs:
             ${{ runner.os }}-build-
             ${{ runner.os }}-
 
-      - run: |
+      - name: Install dependencies
+        run: |
           npm install
-      - run: |
+
+      - name: Test
+        run: |
           npm run all
+
+      - name: Generate code coverage report
+        run: |
+          npm run test-coverage
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
