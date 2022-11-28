@@ -1,8 +1,6 @@
-name: 'e2e-test'
+name: 'e2e-pr-test'
+
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 jobs:
@@ -22,6 +20,11 @@ jobs:
           CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
           CROWDIN_ORGANIZATION: ${{ secrets.CROWDIN_ORGANIZATION }}
 
-      - name: Test the Readme
-        run: |
-          cat ./__tests__/files/contributors.md
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v4
+        with:
+          title: Update Crowdin Contributors table
+          body: By [action-crowdin-contributors](https://github.com/andrii-bodnar/action-crowdin-contributors) GitHub action
+          commit-message: Update Crowdin Contributors table
+          committer: Crowdin Bot <support+bot@crowdin.com>
+          branch: crowdin-contributors/patch

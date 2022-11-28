@@ -38,6 +38,8 @@ export class Contributors {
         const preparedData = await this.prepareData(reportResults);
 
         this.writer.updateContributorsTable(preparedData);
+
+        core.setOutput('contributors_table', this.writer.getTableContent());
     }
 
     private async downloadReport(): Promise<any[]> {
