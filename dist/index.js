@@ -372,7 +372,7 @@ class Writer {
                 if (!this.credentials.organization) {
                     userData = `<a href="https://crowdin.com/profile/${result[i][j].username}">${userData}</a>`;
                 }
-                html += `<td style="text-align:center; vertical-align: top;">
+                html += `<td align="center" valign="top">
                   ${userData}
                   <br />
                   <sub><b>${+result[i][j].translated + +result[i][j].approved} words</b></sub>
