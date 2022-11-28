@@ -41,7 +41,7 @@ jobs:
       uses: actions/checkout@v3
 
     - name: Generate Crowdin Contributors table
-      uses: andrii-bodnar/action-crowdin-contributors@0.0.1
+      uses: andrii-bodnar/action-crowdin-contributors@0.1.0
       with:
         contributors_per_line: 8
         max_contributors: 32
@@ -79,7 +79,7 @@ jobs:
       uses: actions/checkout@v3
 
     - name: Generate Crowdin Contributors table
-      uses: andrii-bodnar/action-crowdin-contributors@0.0.1
+      uses: andrii-bodnar/action-crowdin-contributors@0.1.0
       with:
         contributors_per_line: 8
         max_contributors: 32
@@ -111,6 +111,14 @@ jobs:
 | `files`                 | README.md                             | Array of files to update                                   |
 | `placeholder_start`     | `<!-- CROWDIN-CONTRIBUTORS-START -->` | Placeholder that marks the start of the contributors table |
 | `placeholder_end`       | `<!-- CROWDIN-CONTRIBUTORS-END -->`   | Placeholder that marks the end of the contributors table   |
+
+## Outputs
+
+This actions provides the following outputs that can be used by other steps in your workflow:
+
+| Output               | Description                       |
+|----------------------|-----------------------------------|
+| `contributors_table` | Generated table with contributors |
 
 ## Demo
 
