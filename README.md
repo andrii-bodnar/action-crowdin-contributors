@@ -112,6 +112,14 @@ jobs:
 | `placeholder_start`     | `<!-- CROWDIN-CONTRIBUTORS-START -->` | Placeholder that marks the start of the contributors table |
 | `placeholder_end`       | `<!-- CROWDIN-CONTRIBUTORS-END -->`   | Placeholder that marks the end of the contributors table   |
 
+## Outputs
+
+This actions provides the following outputs that can be used by other steps in your workflow:
+
+| Output               | Description                       |
+|----------------------|-----------------------------------|
+| `contributors_table` | Generated table with contributors |
+
 ## Demo
 
 The resulting table will look like this:

@@ -6,10 +6,15 @@ import {ContributorsTableConfig, CredentialsConfig} from './config';
 export class Writer {
     private credentials: CredentialsConfig;
     private config: ContributorsTableConfig;
+    private tableContent = '';
 
     constructor(credentials: CredentialsConfig, config: ContributorsTableConfig) {
         this.credentials = credentials;
         this.config = config;
+    }
+
+    public getTableContent(): string {
+        return this.tableContent;
     }
 
     public updateContributorsTable(report: any[]): void {
@@ -17,6 +22,8 @@ export class Writer {
 
         const tableContent = this.renderReport(report);
         this.writeFiles(tableContent);
+
+        this.tableContent = tableContent;
 
         core.info('The contributors table successfully updated!');
     }
@@ -33,17 +40,20 @@ export class Writer {
             html += '<tr>';
 
             for (let j in result[i]) {
-                let tda = `<img alt="logo" style="width: ${this.config.imageSize}px" src="${result[i][j].picture}"/>`;
+                let userData = `
+                    <img alt="logo" style="width: ${this.config.imageSize}px" src="${result[i][j].picture}"/>
+                    <br />
+                    <sub>
+                        <b>${result[i][j].name}</b>
+                    </sub>
+                `;
 
                 if (!this.credentials.organization) {
-                    tda = `<a href="https://crowdin.com/profile/${result[i][j].username}">${tda}</a>`;
+                    userData = `<a href="https://crowdin.com/profile/${result[i][j].username}">${userData}</a>`;
                 }
 
-                // TODO: style for name width
                 html += `<td style="text-align:center; vertical-align: top;">
-                  ${tda}
-                  <br />
-                  <sub><b>${result[i][j].name}</b></sub>
+                  ${userData}
                   <br />
                   <sub><b>${+result[i][j].translated + +result[i][j].approved} words</b></sub>
               </td>`;

@@ -38,6 +38,10 @@ inputs:
     default: '<!-- CROWDIN-CONTRIBUTORS-END -->'
     required: false
 
+outputs:
+  contributors_table:
+    description: 'Generated table with contributors'
+
 runs:
   using: 'node16'
   main: 'dist/index.js'

@@ -63,6 +63,7 @@ class Contributors {
             core.info(`Found ${reportResults.length} user(s), preparing the data...`);
             const preparedData = yield this.prepareData(reportResults);
             this.writer.updateContributorsTable(preparedData);
+            core.setOutput('contributors_table', this.writer.getTableContent());
         });
     }
     downloadReport() {
@@ -342,13 +343,18 @@ const fs_1 = __importDefault(__nccwpck_require__(7147));
 const pretty_1 = __importDefault(__nccwpck_require__(4257));
 class Writer {
     constructor(credentials, config) {
+        this.tableContent = '';
         this.credentials = credentials;
         this.config = config;
+    }
+    getTableContent() {
+        return this.tableContent;
     }
     updateContributorsTable(report) {
         core.info(`Rendering table with ${report.length} contributor(s)...`);
         const tableContent = this.renderReport(report);
         this.writeFiles(tableContent);
+        this.tableContent = tableContent;
         core.info('The contributors table successfully updated!');
     }
     renderReport(report) {
@@ -360,15 +366,18 @@ class Writer {
         for (let i in result) {
             html += '<tr>';
             for (let j in result[i]) {
-                let tda = `<img alt="logo" style="width: ${this.config.imageSize}px" src="${result[i][j].picture}"/>`;
+                let userData = `
+                    <img alt="logo" style="width: ${this.config.imageSize}px" src="${result[i][j].picture}"/>
+                    <br />
+                    <sub>
+                        <b>${result[i][j].name}</b>
+                    </sub>
+                `;
                 if (!this.credentials.organization) {
-                    tda = `<a href="https://crowdin.com/profile/${result[i][j].username}">${tda}</a>`;
+                    userData = `<a href="https://crowdin.com/profile/${result[i][j].username}">${userData}</a>`;
                 }
-                // TODO: style for name width
                 html += `<td style="text-align:center; vertical-align: top;">
-                  ${tda}
-                  <br />
-                  <sub><b>${result[i][j].name}</b></sub>
+                  ${userData}
                   <br />
                   <sub><b>${+result[i][j].translated + +result[i][j].approved} words</b></sub>
               </td>`;
