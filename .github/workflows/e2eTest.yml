@@ -18,7 +18,7 @@ jobs:
           placeholder_end: '<!-- TEST-CONTRIBUTORS-END -->'
           files: ./__tests__/files/contributors.md
         env:
-          CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
+          CROWDIN_PROJECT_ID: 2
           CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
           CROWDIN_ORGANIZATION: ${{ secrets.CROWDIN_ORGANIZATION }}
 

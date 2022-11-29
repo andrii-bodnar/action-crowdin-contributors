@@ -25,7 +25,6 @@ async function run(): Promise<void> {
 
         if (process.env.CROWDIN_PROJECT_ID) {
             credentialsConfig.projectId = +process.env.CROWDIN_PROJECT_ID;
-            core.setSecret(String(credentialsConfig.projectId));
         }
 
         if (process.env.CROWDIN_PERSONAL_TOKEN) {
