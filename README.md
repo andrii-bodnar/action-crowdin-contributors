@@ -130,6 +130,8 @@ The resulting table will look like this:
 
 Example PR - [#6](https://github.com/andrii-bodnar/action-crowdin-contributors/pull/6)
 
+In addition, the contributors' table will be added as a summary to the workflow job run.
+
 ## Contributing
 
 If you want to contribute please read the [Contributing](/CONTRIBUTING.md) guidelines.

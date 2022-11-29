@@ -64,6 +64,7 @@ class Contributors {
             const preparedData = yield this.prepareData(reportResults);
             this.writer.updateContributorsTable(preparedData);
             core.setOutput('contributors_table', this.writer.getTableContent());
+            yield core.summary.addHeading('Crowdin Contributors').addRaw(this.writer.getTableContent()).write();
         });
     }
     downloadReport() {
