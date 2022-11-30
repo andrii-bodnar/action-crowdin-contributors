@@ -125,7 +125,7 @@ This actions provides the following outputs that can be used by other steps in y
 
 The resulting table will look like this:
 
-[![Check dist](docs/demo.png)](https://github.com/andrii-bodnar/action-crowdin-contributors/pull/6)
+![demo](docs/demo.png)
 
 **Note:** it's just a test, in real use, it will display actual user's avatars.
 
