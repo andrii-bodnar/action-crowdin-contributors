@@ -64,6 +64,7 @@ class Contributors {
             const preparedData = yield this.prepareData(reportResults);
             this.writer.updateContributorsTable(preparedData);
             core.setOutput('contributors_table', this.writer.getTableContent());
+            yield core.summary.addHeading('Crowdin Contributors').addRaw(this.writer.getTableContent()).write();
         });
     }
     downloadReport() {
@@ -236,7 +237,6 @@ function run() {
             };
             if (process.env.CROWDIN_PROJECT_ID) {
                 credentialsConfig.projectId = +process.env.CROWDIN_PROJECT_ID;
-                core.setSecret(String(credentialsConfig.projectId));
             }
             if (process.env.CROWDIN_PERSONAL_TOKEN) {
                 credentialsConfig.token = process.env.CROWDIN_PERSONAL_TOKEN;
