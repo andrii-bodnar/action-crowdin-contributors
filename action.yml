@@ -25,6 +25,9 @@ inputs:
     description: "Size (in px) of the user's avatar"
     default: '100'
     required: false
+  crowdin_project_link:
+    description: "Crowdin project link will be added after the contributors' table"
+    required: false
   files:
     description: 'Array of files to update'
     default: 'README.md'

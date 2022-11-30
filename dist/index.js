@@ -64,7 +64,6 @@ class Contributors {
             const preparedData = yield this.prepareData(reportResults);
             this.writer.updateContributorsTable(preparedData);
             core.setOutput('contributors_table', this.writer.getTableContent());
-            yield core.summary.addHeading('Crowdin Contributors').addRaw(this.writer.getTableContent()).write();
         });
     }
     downloadReport() {
@@ -226,6 +225,7 @@ function run() {
                 minWordsContributed: +core.getInput('min_words_contributed'),
                 contributorsPerLine: +core.getInput('contributors_per_line'),
                 imageSize: +core.getInput('image_size'),
+                crowdinProjectLink: core.getInput('crowdin_project_link').trim(),
                 files: core.getMultilineInput('files'),
                 placeholderStart: core.getInput('placeholder_start'),
                 placeholderEnd: core.getInput('placeholder_end')
@@ -333,6 +333,15 @@ var __importStar = (this && this.__importStar) || function (mod) {
     __setModuleDefault(result, mod);
     return result;
 };
+var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
+    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
+    return new (P || (P = Promise))(function (resolve, reject) {
+        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
+        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
+        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
+        step((generator = generator.apply(thisArg, _arguments || [])).next());
+    });
+};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
@@ -344,6 +353,7 @@ const pretty_1 = __importDefault(__nccwpck_require__(4257));
 class Writer {
     constructor(credentials, config) {
         this.tableContent = '';
+        this.PROJECT_LINK_TEXT = 'Translate in Crowdin 🚀';
         this.credentials = credentials;
         this.config = config;
     }
@@ -355,6 +365,7 @@ class Writer {
         const tableContent = this.renderReport(report);
         this.writeFiles(tableContent);
         this.tableContent = tableContent;
+        this.addJobSummary();
         core.info('The contributors table successfully updated!');
     }
     renderReport(report) {
@@ -381,6 +392,9 @@ class Writer {
             html += '</tr>';
         }
         html += '</table>';
+        if (this.config.crowdinProjectLink.length > 0) {
+            html += `<a href="${this.config.crowdinProjectLink}" target="_blank">${this.PROJECT_LINK_TEXT}</a>`;
+        }
         return (0, pretty_1.default)(html);
     }
     writeFiles(tableContent) {
@@ -397,6 +411,12 @@ class Writer {
             fileContents = `${fileContents.slice(0, sliceFrom)}\n${tableContent}\n${fileContents.slice(sliceTo)}`;
             core.debug(fileContents);
             fs_1.default.writeFileSync(file, fileContents);
+        });
+    }
+    addJobSummary() {
+        return __awaiter(this, void 0, void 0, function* () {
+            core.info('Writing summary...');
+            yield core.summary.addHeading('Crowdin Contributors ✨').addRaw(this.tableContent).write();
         });
     }
 }
