@@ -41,7 +41,7 @@ jobs:
       uses: actions/checkout@v3
 
     - name: Generate Crowdin Contributors table
-      uses: andrii-bodnar/action-crowdin-contributors@0.1.0
+      uses: andrii-bodnar/action-crowdin-contributors@0.2.0
       with:
         contributors_per_line: 8
         max_contributors: 32
@@ -79,7 +79,7 @@ jobs:
       uses: actions/checkout@v3
 
     - name: Generate Crowdin Contributors table
-      uses: andrii-bodnar/action-crowdin-contributors@0.1.0
+      uses: andrii-bodnar/action-crowdin-contributors@0.2.0
       with:
         contributors_per_line: 8
         max_contributors: 32
