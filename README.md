@@ -102,15 +102,16 @@ jobs:
 
 ## Options
 
-| Option                  | Default value                         | Description                                                |
-|-------------------------|---------------------------------------|------------------------------------------------------------|
-| `max_contributors`      | 30                                    | Only the specified amount of contributors will be shown    |
-| `min_words_contributed` | 100                                   | Minimum words contributed (both translated and approved)   |
-| `contributors_per_line` | 7                                     | Maximum number of columns for the contributors table       |
-| `image_size`            | 100                                   | Size (in px) of the user's avatar                          |
-| `files`                 | README.md                             | Array of files to update                                   |
-| `placeholder_start`     | `<!-- CROWDIN-CONTRIBUTORS-START -->` | Placeholder that marks the start of the contributors table |
-| `placeholder_end`       | `<!-- CROWDIN-CONTRIBUTORS-END -->`   | Placeholder that marks the end of the contributors table   |
+| Option                  | Default value                         | Description                                                      |
+|-------------------------|---------------------------------------|------------------------------------------------------------------|
+| `max_contributors`      | 30                                    | Only the specified amount of contributors will be shown          |
+| `min_words_contributed` | 100                                   | Minimum words contributed (both translated and approved)         |
+| `contributors_per_line` | 7                                     | Maximum number of columns for the contributors table             |
+| `image_size`            | 100                                   | Size (in px) of the user's avatar                                |
+| `files`                 | README.md                             | Array of files to update                                         |
+| `crowdin_project_link`  |                                       | Crowdin project link will be added after the contributors' table |
+| `placeholder_start`     | `<!-- CROWDIN-CONTRIBUTORS-START -->` | Placeholder that marks the start of the contributors table       |
+| `placeholder_end`       | `<!-- CROWDIN-CONTRIBUTORS-END -->`   | Placeholder that marks the end of the contributors table         |
 
 ## Outputs
 

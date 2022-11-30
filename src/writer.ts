@@ -8,6 +8,8 @@ export class Writer {
     private config: ContributorsTableConfig;
     private tableContent = '';
 
+    private PROJECT_LINK_TEXT = 'Translate in Crowdin 🚀';
+
     constructor(credentials: CredentialsConfig, config: ContributorsTableConfig) {
         this.credentials = credentials;
         this.config = config;
@@ -24,6 +26,8 @@ export class Writer {
         this.writeFiles(tableContent);
 
         this.tableContent = tableContent;
+
+        this.addJobSummary();
 
         core.info('The contributors table successfully updated!');
     }
@@ -60,6 +64,10 @@ export class Writer {
 
         html += '</table>';
 
+        if (this.config.crowdinProjectLink.length > 0) {
+            html += `<a href="${this.config.crowdinProjectLink}" target="_blank">${this.PROJECT_LINK_TEXT}</a>`;
+        }
+
         return pretty(html);
     }
 
@@ -85,5 +93,11 @@ export class Writer {
             core.debug(fileContents);
             fs.writeFileSync(file, fileContents);
         });
+    }
+
+    private async addJobSummary(): Promise<void> {
+        core.info('Writing summary...');
+
+        await core.summary.addHeading('Crowdin Contributors ✨').addRaw(this.tableContent).write();
     }
 }

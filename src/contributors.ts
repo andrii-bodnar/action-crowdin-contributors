@@ -40,8 +40,6 @@ export class Contributors {
         this.writer.updateContributorsTable(preparedData);
 
         core.setOutput('contributors_table', this.writer.getTableContent());
-
-        await core.summary.addHeading('Crowdin Contributors').addRaw(this.writer.getTableContent()).write();
     }
 
     private async downloadReport(): Promise<any[]> {

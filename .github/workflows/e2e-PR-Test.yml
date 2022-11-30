@@ -15,6 +15,7 @@ jobs:
           placeholder_start: '<!-- TEST-CONTRIBUTORS-START -->'
           placeholder_end: '<!-- TEST-CONTRIBUTORS-END -->'
           files: ./__tests__/files/contributors.md
+          crowdin_project_link: 'https://crowdin.com/project/crowdin'
         env:
           CROWDIN_PROJECT_ID: 2
           CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
