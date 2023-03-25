@@ -127,7 +127,7 @@ export class Contributors {
                     user.user.id
                 );
 
-                if (crowdinMember.data.avatarUrl) {
+                if ("avatarUrl" in crowdinMember.data && crowdinMember.data.avatarUrl) {
                     picture = crowdinMember.data.avatarUrl;
                 }
             } catch (e) {

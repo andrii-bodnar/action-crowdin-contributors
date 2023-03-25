@@ -126,7 +126,7 @@ class Contributors {
                 let picture = 'https://i2.wp.com/crowdin.com/images/user-picture.png?ssl=1';
                 try {
                     const crowdinMember = yield usersApi.getProjectMemberPermissions(this.credentials.projectId, user.user.id);
-                    if (crowdinMember.data.avatarUrl) {
+                    if ("avatarUrl" in crowdinMember.data && crowdinMember.data.avatarUrl) {
                         picture = crowdinMember.data.avatarUrl;
                     }
                 }
@@ -2186,2298 +2186,6 @@ exports.checkBypass = checkBypass;
 
 /***/ }),
 
-/***/ 8630:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-module.exports = __nccwpck_require__(5460);
-
-/***/ }),
-
-/***/ 6041:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-"use strict";
-
-
-var utils = __nccwpck_require__(5103);
-var settle = __nccwpck_require__(3895);
-var buildFullPath = __nccwpck_require__(8489);
-var buildURL = __nccwpck_require__(3370);
-var http = __nccwpck_require__(3685);
-var https = __nccwpck_require__(5687);
-var httpFollow = (__nccwpck_require__(7707).http);
-var httpsFollow = (__nccwpck_require__(7707).https);
-var url = __nccwpck_require__(7310);
-var zlib = __nccwpck_require__(9796);
-var pkg = __nccwpck_require__(2210);
-var createError = __nccwpck_require__(8531);
-var enhanceError = __nccwpck_require__(5682);
-
-var isHttps = /https:?/;
-
-/**
- *
- * @param {http.ClientRequestArgs} options
- * @param {AxiosProxyConfig} proxy
- * @param {string} location
- */
-function setProxy(options, proxy, location) {
-  options.hostname = proxy.host;
-  options.host = proxy.host;
-  options.port = proxy.port;
-  options.path = location;
-
-  // Basic proxy authorization
-  if (proxy.auth) {
-    var base64 = Buffer.from(proxy.auth.username + ':' + proxy.auth.password, 'utf8').toString('base64');
-    options.headers['Proxy-Authorization'] = 'Basic ' + base64;
-  }
-
-  // If a proxy is used, any redirects must also pass through the proxy
-  options.beforeRedirect = function beforeRedirect(redirection) {
-    redirection.headers.host = redirection.host;
-    setProxy(redirection, proxy, redirection.href);
-  };
-}
-
-/*eslint consistent-return:0*/
-module.exports = function httpAdapter(config) {
-  return new Promise(function dispatchHttpRequest(resolvePromise, rejectPromise) {
-    var resolve = function resolve(value) {
-      resolvePromise(value);
-    };
-    var reject = function reject(value) {
-      rejectPromise(value);
-    };
-    var data = config.data;
-    var headers = config.headers;
-
-    // Set User-Agent (required by some servers)
-    // See https://github.com/axios/axios/issues/69
-    if ('User-Agent' in headers || 'user-agent' in headers) {
-      // User-Agent is specified; handle case where no UA header is desired
-      if (!headers['User-Agent'] && !headers['user-agent']) {
-        delete headers['User-Agent'];
-        delete headers['user-agent'];
-      }
-      // Otherwise, use specified value
-    } else {
-      // Only set header if it hasn't been set in config
-      headers['User-Agent'] = 'axios/' + pkg.version;
-    }
-
-    if (data && !utils.isStream(data)) {
-      if (Buffer.isBuffer(data)) {
-        // Nothing to do...
-      } else if (utils.isArrayBuffer(data)) {
-        data = Buffer.from(new Uint8Array(data));
-      } else if (utils.isString(data)) {
-        data = Buffer.from(data, 'utf-8');
-      } else {
-        return reject(createError(
-          'Data after transformation must be a string, an ArrayBuffer, a Buffer, or a Stream',
-          config
-        ));
-      }
-
-      // Add Content-Length header if data exists
-      headers['Content-Length'] = data.length;
-    }
-
-    // HTTP basic authentication
-    var auth = undefined;
-    if (config.auth) {
-      var username = config.auth.username || '';
-      var password = config.auth.password || '';
-      auth = username + ':' + password;
-    }
-
-    // Parse url
-    var fullPath = buildFullPath(config.baseURL, config.url);
-    var parsed = url.parse(fullPath);
-    var protocol = parsed.protocol || 'http:';
-
-    if (!auth && parsed.auth) {
-      var urlAuth = parsed.auth.split(':');
-      var urlUsername = urlAuth[0] || '';
-      var urlPassword = urlAuth[1] || '';
-      auth = urlUsername + ':' + urlPassword;
-    }
-
-    if (auth) {
-      delete headers.Authorization;
-    }
-
-    var isHttpsRequest = isHttps.test(protocol);
-    var agent = isHttpsRequest ? config.httpsAgent : config.httpAgent;
-
-    var options = {
-      path: buildURL(parsed.path, config.params, config.paramsSerializer).replace(/^\?/, ''),
-      method: config.method.toUpperCase(),
-      headers: headers,
-      agent: agent,
-      agents: { http: config.httpAgent, https: config.httpsAgent },
-      auth: auth
-    };
-
-    if (config.socketPath) {
-      options.socketPath = config.socketPath;
-    } else {
-      options.hostname = parsed.hostname;
-      options.port = parsed.port;
-    }
-
-    var proxy = config.proxy;
-    if (!proxy && proxy !== false) {
-      var proxyEnv = protocol.slice(0, -1) + '_proxy';
-      var proxyUrl = process.env[proxyEnv] || process.env[proxyEnv.toUpperCase()];
-      if (proxyUrl) {
-        var parsedProxyUrl = url.parse(proxyUrl);
-        var noProxyEnv = process.env.no_proxy || process.env.NO_PROXY;
-        var shouldProxy = true;
-
-        if (noProxyEnv) {
-          var noProxy = noProxyEnv.split(',').map(function trim(s) {
-            return s.trim();
-          });
-
-          shouldProxy = !noProxy.some(function proxyMatch(proxyElement) {
-            if (!proxyElement) {
-              return false;
-            }
-            if (proxyElement === '*') {
-              return true;
-            }
-            if (proxyElement[0] === '.' &&
-                parsed.hostname.substr(parsed.hostname.length - proxyElement.length) === proxyElement) {
-              return true;
-            }
-
-            return parsed.hostname === proxyElement;
-          });
-        }
-
-        if (shouldProxy) {
-          proxy = {
-            host: parsedProxyUrl.hostname,
-            port: parsedProxyUrl.port,
-            protocol: parsedProxyUrl.protocol
-          };
-
-          if (parsedProxyUrl.auth) {
-            var proxyUrlAuth = parsedProxyUrl.auth.split(':');
-            proxy.auth = {
-              username: proxyUrlAuth[0],
-              password: proxyUrlAuth[1]
-            };
-          }
-        }
-      }
-    }
-
-    if (proxy) {
-      options.headers.host = parsed.hostname + (parsed.port ? ':' + parsed.port : '');
-      setProxy(options, proxy, protocol + '//' + parsed.hostname + (parsed.port ? ':' + parsed.port : '') + options.path);
-    }
-
-    var transport;
-    var isHttpsProxy = isHttpsRequest && (proxy ? isHttps.test(proxy.protocol) : true);
-    if (config.transport) {
-      transport = config.transport;
-    } else if (config.maxRedirects === 0) {
-      transport = isHttpsProxy ? https : http;
-    } else {
-      if (config.maxRedirects) {
-        options.maxRedirects = config.maxRedirects;
-      }
-      transport = isHttpsProxy ? httpsFollow : httpFollow;
-    }
-
-    if (config.maxBodyLength > -1) {
-      options.maxBodyLength = config.maxBodyLength;
-    }
-
-    // Create the request
-    var req = transport.request(options, function handleResponse(res) {
-      if (req.aborted) return;
-
-      // uncompress the response body transparently if required
-      var stream = res;
-
-      // return the last request in case of redirects
-      var lastRequest = res.req || req;
-
-
-      // if no content, is HEAD request or decompress disabled we should not decompress
-      if (res.statusCode !== 204 && lastRequest.method !== 'HEAD' && config.decompress !== false) {
-        switch (res.headers['content-encoding']) {
-        /*eslint default-case:0*/
-        case 'gzip':
-        case 'compress':
-        case 'deflate':
-        // add the unzipper to the body stream processing pipeline
-          stream = stream.pipe(zlib.createUnzip());
-
-          // remove the content-encoding in order to not confuse downstream operations
-          delete res.headers['content-encoding'];
-          break;
-        }
-      }
-
-      var response = {
-        status: res.statusCode,
-        statusText: res.statusMessage,
-        headers: res.headers,
-        config: config,
-        request: lastRequest
-      };
-
-      if (config.responseType === 'stream') {
-        response.data = stream;
-        settle(resolve, reject, response);
-      } else {
-        var responseBuffer = [];
-        var totalResponseBytes = 0;
-        stream.on('data', function handleStreamData(chunk) {
-          responseBuffer.push(chunk);
-          totalResponseBytes += chunk.length;
-
-          // make sure the content length is not over the maxContentLength if specified
-          if (config.maxContentLength > -1 && totalResponseBytes > config.maxContentLength) {
-            stream.destroy();
-            reject(createError('maxContentLength size of ' + config.maxContentLength + ' exceeded',
-              config, null, lastRequest));
-          }
-        });
-
-        stream.on('error', function handleStreamError(err) {
-          if (req.aborted) return;
-          reject(enhanceError(err, config, null, lastRequest));
-        });
-
-        stream.on('end', function handleStreamEnd() {
-          var responseData = Buffer.concat(responseBuffer);
-          if (config.responseType !== 'arraybuffer') {
-            responseData = responseData.toString(config.responseEncoding);
-            if (!config.responseEncoding || config.responseEncoding === 'utf8') {
-              responseData = utils.stripBOM(responseData);
-            }
-          }
-
-          response.data = responseData;
-          settle(resolve, reject, response);
-        });
-      }
-    });
-
-    // Handle errors
-    req.on('error', function handleRequestError(err) {
-      if (req.aborted && err.code !== 'ERR_FR_TOO_MANY_REDIRECTS') return;
-      reject(enhanceError(err, config, null, req));
-    });
-
-    // Handle request timeout
-    if (config.timeout) {
-      // This is forcing a int timeout to avoid problems if the `req` interface doesn't handle other types.
-      var timeout = parseInt(config.timeout, 10);
-
-      if (isNaN(timeout)) {
-        reject(createError(
-          'error trying to parse `config.timeout` to int',
-          config,
-          'ERR_PARSE_TIMEOUT',
-          req
-        ));
-
-        return;
-      }
-
-      // Sometime, the response will be very slow, and does not respond, the connect event will be block by event loop system.
-      // And timer callback will be fired, and abort() will be invoked before connection, then get "socket hang up" and code ECONNRESET.
-      // At this time, if we have a large number of request, nodejs will hang up some socket on background. and the number will up and up.
-      // And then these socket which be hang up will devoring CPU little by little.
-      // ClientRequest.setTimeout will be fired on the specify milliseconds, and can make sure that abort() will be fired after connect.
-      req.setTimeout(timeout, function handleRequestTimeout() {
-        req.abort();
-        reject(createError(
-          'timeout of ' + timeout + 'ms exceeded',
-          config,
-          config.transitional && config.transitional.clarifyTimeoutError ? 'ETIMEDOUT' : 'ECONNABORTED',
-          req
-        ));
-      });
-    }
-
-    if (config.cancelToken) {
-      // Handle cancellation
-      config.cancelToken.promise.then(function onCanceled(cancel) {
-        if (req.aborted) return;
-
-        req.abort();
-        reject(cancel);
-      });
-    }
-
-    // Send the request
-    if (utils.isStream(data)) {
-      data.on('error', function handleStreamError(err) {
-        reject(enhanceError(err, config, null, req));
-      }).pipe(req);
-    } else {
-      req.end(data);
-    }
-  });
-};
-
-
-/***/ }),
-
-/***/ 4771:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-"use strict";
-
-
-var utils = __nccwpck_require__(5103);
-var settle = __nccwpck_require__(3895);
-var cookies = __nccwpck_require__(7100);
-var buildURL = __nccwpck_require__(3370);
-var buildFullPath = __nccwpck_require__(8489);
-var parseHeaders = __nccwpck_require__(8417);
-var isURLSameOrigin = __nccwpck_require__(4393);
-var createError = __nccwpck_require__(8531);
-
-module.exports = function xhrAdapter(config) {
-  return new Promise(function dispatchXhrRequest(resolve, reject) {
-    var requestData = config.data;
-    var requestHeaders = config.headers;
-    var responseType = config.responseType;
-
-    if (utils.isFormData(requestData)) {
-      delete requestHeaders['Content-Type']; // Let the browser set it
-    }
-
-    var request = new XMLHttpRequest();
-
-    // HTTP basic authentication
-    if (config.auth) {
-      var username = config.auth.username || '';
-      var password = config.auth.password ? unescape(encodeURIComponent(config.auth.password)) : '';
-      requestHeaders.Authorization = 'Basic ' + btoa(username + ':' + password);
-    }
-
-    var fullPath = buildFullPath(config.baseURL, config.url);
-    request.open(config.method.toUpperCase(), buildURL(fullPath, config.params, config.paramsSerializer), true);
-
-    // Set the request timeout in MS
-    request.timeout = config.timeout;
-
-    function onloadend() {
-      if (!request) {
-        return;
-      }
-      // Prepare the response
-      var responseHeaders = 'getAllResponseHeaders' in request ? parseHeaders(request.getAllResponseHeaders()) : null;
-      var responseData = !responseType || responseType === 'text' ||  responseType === 'json' ?
-        request.responseText : request.response;
-      var response = {
-        data: responseData,
-        status: request.status,
-        statusText: request.statusText,
-        headers: responseHeaders,
-        config: config,
-        request: request
-      };
-
-      settle(resolve, reject, response);
-
-      // Clean up request
-      request = null;
-    }
-
-    if ('onloadend' in request) {
-      // Use onloadend if available
-      request.onloadend = onloadend;
-    } else {
-      // Listen for ready state to emulate onloadend
-      request.onreadystatechange = function handleLoad() {
-        if (!request || request.readyState !== 4) {
-          return;
-        }
-
-        // The request errored out and we didn't get a response, this will be
-        // handled by onerror instead
-        // With one exception: request that using file: protocol, most browsers
-        // will return status as 0 even though it's a successful request
-        if (request.status === 0 && !(request.responseURL && request.responseURL.indexOf('file:') === 0)) {
-          return;
-        }
-        // readystate handler is calling before onerror or ontimeout handlers,
-        // so we should call onloadend on the next 'tick'
-        setTimeout(onloadend);
-      };
-    }
-
-    // Handle browser request cancellation (as opposed to a manual cancellation)
-    request.onabort = function handleAbort() {
-      if (!request) {
-        return;
-      }
-
-      reject(createError('Request aborted', config, 'ECONNABORTED', request));
-
-      // Clean up request
-      request = null;
-    };
-
-    // Handle low level network errors
-    request.onerror = function handleError() {
-      // Real errors are hidden from us by the browser
-      // onerror should only fire if it's a network error
-      reject(createError('Network Error', config, null, request));
-
-      // Clean up request
-      request = null;
-    };
-
-    // Handle timeout
-    request.ontimeout = function handleTimeout() {
-      var timeoutErrorMessage = 'timeout of ' + config.timeout + 'ms exceeded';
-      if (config.timeoutErrorMessage) {
-        timeoutErrorMessage = config.timeoutErrorMessage;
-      }
-      reject(createError(
-        timeoutErrorMessage,
-        config,
-        config.transitional && config.transitional.clarifyTimeoutError ? 'ETIMEDOUT' : 'ECONNABORTED',
-        request));
-
-      // Clean up request
-      request = null;
-    };
-
-    // Add xsrf header
-    // This is only done if running in a standard browser environment.
-    // Specifically not if we're in a web worker, or react-native.
-    if (utils.isStandardBrowserEnv()) {
-      // Add xsrf header
-      var xsrfValue = (config.withCredentials || isURLSameOrigin(fullPath)) && config.xsrfCookieName ?
-        cookies.read(config.xsrfCookieName) :
-        undefined;
-
-      if (xsrfValue) {
-        requestHeaders[config.xsrfHeaderName] = xsrfValue;
-      }
-    }
-
-    // Add headers to the request
-    if ('setRequestHeader' in request) {
-      utils.forEach(requestHeaders, function setRequestHeader(val, key) {
-        if (typeof requestData === 'undefined' && key.toLowerCase() === 'content-type') {
-          // Remove Content-Type if data is undefined
-          delete requestHeaders[key];
-        } else {
-          // Otherwise add header to the request
-          request.setRequestHeader(key, val);
-        }
-      });
-    }
-
-    // Add withCredentials to request if needed
-    if (!utils.isUndefined(config.withCredentials)) {
-      request.withCredentials = !!config.withCredentials;
-    }
-
-    // Add responseType to request if needed
-    if (responseType && responseType !== 'json') {
-      request.responseType = config.responseType;
-    }
-
-    // Handle progress if needed
-    if (typeof config.onDownloadProgress === 'function') {
-      request.addEventListener('progress', config.onDownloadProgress);
-    }
-
-    // Not all browsers support upload events
-    if (typeof config.onUploadProgress === 'function' && request.upload) {
-      request.upload.addEventListener('progress', config.onUploadProgress);
-    }
-
-    if (config.cancelToken) {
-      // Handle cancellation
-      config.cancelToken.promise.then(function onCanceled(cancel) {
-        if (!request) {
-          return;
-        }
-
-        request.abort();
-        reject(cancel);
-        // Clean up request
-        request = null;
-      });
-    }
-
-    if (!requestData) {
-      requestData = null;
-    }
-
-    // Send the request
-    request.send(requestData);
-  });
-};
-
-
-/***/ }),
-
-/***/ 5460:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-"use strict";
-
-
-var utils = __nccwpck_require__(5103);
-var bind = __nccwpck_require__(5630);
-var Axios = __nccwpck_require__(4934);
-var mergeConfig = __nccwpck_require__(7815);
-var defaults = __nccwpck_require__(875);
-
-/**
- * Create an instance of Axios
- *
- * @param {Object} defaultConfig The default config for the instance
- * @return {Axios} A new instance of Axios
- */
-function createInstance(defaultConfig) {
-  var context = new Axios(defaultConfig);
-  var instance = bind(Axios.prototype.request, context);
-
-  // Copy axios.prototype to instance
-  utils.extend(instance, Axios.prototype, context);
-
-  // Copy context to instance
-  utils.extend(instance, context);
-
-  return instance;
-}
-
-// Create the default instance to be exported
-var axios = createInstance(defaults);
-
-// Expose Axios class to allow class inheritance
-axios.Axios = Axios;
-
-// Factory for creating new instances
-axios.create = function create(instanceConfig) {
-  return createInstance(mergeConfig(axios.defaults, instanceConfig));
-};
-
-// Expose Cancel & CancelToken
-axios.Cancel = __nccwpck_require__(3810);
-axios.CancelToken = __nccwpck_require__(5056);
-axios.isCancel = __nccwpck_require__(1059);
-
-// Expose all/spread
-axios.all = function all(promises) {
-  return Promise.all(promises);
-};
-axios.spread = __nccwpck_require__(52);
-
-// Expose isAxiosError
-axios.isAxiosError = __nccwpck_require__(7128);
-
-module.exports = axios;
-
-// Allow use of default import syntax in TypeScript
-module.exports["default"] = axios;
-
-
-/***/ }),
-
-/***/ 3810:
-/***/ ((module) => {
-
-"use strict";
-
-
-/**
- * A `Cancel` is an object that is thrown when an operation is canceled.
- *
- * @class
- * @param {string=} message The message.
- */
-function Cancel(message) {
-  this.message = message;
-}
-
-Cancel.prototype.toString = function toString() {
-  return 'Cancel' + (this.message ? ': ' + this.message : '');
-};
-
-Cancel.prototype.__CANCEL__ = true;
-
-module.exports = Cancel;
-
-
-/***/ }),
-
-/***/ 5056:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-"use strict";
-
-
-var Cancel = __nccwpck_require__(3810);
-
-/**
- * A `CancelToken` is an object that can be used to request cancellation of an operation.
- *
- * @class
- * @param {Function} executor The executor function.
- */
-function CancelToken(executor) {
-  if (typeof executor !== 'function') {
-    throw new TypeError('executor must be a function.');
-  }
-
-  var resolvePromise;
-  this.promise = new Promise(function promiseExecutor(resolve) {
-    resolvePromise = resolve;
-  });
-
-  var token = this;
-  executor(function cancel(message) {
-    if (token.reason) {
-      // Cancellation has already been requested
-      return;
-    }
-
-    token.reason = new Cancel(message);
-    resolvePromise(token.reason);
-  });
-}
-
-/**
- * Throws a `Cancel` if cancellation has been requested.
- */
-CancelToken.prototype.throwIfRequested = function throwIfRequested() {
-  if (this.reason) {
-    throw this.reason;
-  }
-};
-
-/**
- * Returns an object that contains a new `CancelToken` and a function that, when called,
- * cancels the `CancelToken`.
- */
-CancelToken.source = function source() {
-  var cancel;
-  var token = new CancelToken(function executor(c) {
-    cancel = c;
-  });
-  return {
-    token: token,
-    cancel: cancel
-  };
-};
-
-module.exports = CancelToken;
-
-
-/***/ }),
-
-/***/ 1059:
-/***/ ((module) => {
-
-"use strict";
-
-
-module.exports = function isCancel(value) {
-  return !!(value && value.__CANCEL__);
-};
-
-
-/***/ }),
-
-/***/ 4934:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-"use strict";
-
-
-var utils = __nccwpck_require__(5103);
-var buildURL = __nccwpck_require__(3370);
-var InterceptorManager = __nccwpck_require__(8431);
-var dispatchRequest = __nccwpck_require__(1835);
-var mergeConfig = __nccwpck_require__(7815);
-var validator = __nccwpck_require__(1877);
-
-var validators = validator.validators;
-/**
- * Create a new instance of Axios
- *
- * @param {Object} instanceConfig The default config for the instance
- */
-function Axios(instanceConfig) {
-  this.defaults = instanceConfig;
-  this.interceptors = {
-    request: new InterceptorManager(),
-    response: new InterceptorManager()
-  };
-}
-
-/**
- * Dispatch a request
- *
- * @param {Object} config The config specific for this request (merged with this.defaults)
- */
-Axios.prototype.request = function request(config) {
-  /*eslint no-param-reassign:0*/
-  // Allow for axios('example/url'[, config]) a la fetch API
-  if (typeof config === 'string') {
-    config = arguments[1] || {};
-    config.url = arguments[0];
-  } else {
-    config = config || {};
-  }
-
-  config = mergeConfig(this.defaults, config);
-
-  // Set config.method
-  if (config.method) {
-    config.method = config.method.toLowerCase();
-  } else if (this.defaults.method) {
-    config.method = this.defaults.method.toLowerCase();
-  } else {
-    config.method = 'get';
-  }
-
-  var transitional = config.transitional;
-
-  if (transitional !== undefined) {
-    validator.assertOptions(transitional, {
-      silentJSONParsing: validators.transitional(validators.boolean, '1.0.0'),
-      forcedJSONParsing: validators.transitional(validators.boolean, '1.0.0'),
-      clarifyTimeoutError: validators.transitional(validators.boolean, '1.0.0')
-    }, false);
-  }
-
-  // filter out skipped interceptors
-  var requestInterceptorChain = [];
-  var synchronousRequestInterceptors = true;
-  this.interceptors.request.forEach(function unshiftRequestInterceptors(interceptor) {
-    if (typeof interceptor.runWhen === 'function' && interceptor.runWhen(config) === false) {
-      return;
-    }
-
-    synchronousRequestInterceptors = synchronousRequestInterceptors && interceptor.synchronous;
-
-    requestInterceptorChain.unshift(interceptor.fulfilled, interceptor.rejected);
-  });
-
-  var responseInterceptorChain = [];
-  this.interceptors.response.forEach(function pushResponseInterceptors(interceptor) {
-    responseInterceptorChain.push(interceptor.fulfilled, interceptor.rejected);
-  });
-
-  var promise;
-
-  if (!synchronousRequestInterceptors) {
-    var chain = [dispatchRequest, undefined];
-
-    Array.prototype.unshift.apply(chain, requestInterceptorChain);
-    chain = chain.concat(responseInterceptorChain);
-
-    promise = Promise.resolve(config);
-    while (chain.length) {
-      promise = promise.then(chain.shift(), chain.shift());
-    }
-
-    return promise;
-  }
-
-
-  var newConfig = config;
-  while (requestInterceptorChain.length) {
-    var onFulfilled = requestInterceptorChain.shift();
-    var onRejected = requestInterceptorChain.shift();
-    try {
-      newConfig = onFulfilled(newConfig);
-    } catch (error) {
-      onRejected(error);
-      break;
-    }
-  }
-
-  try {
-    promise = dispatchRequest(newConfig);
-  } catch (error) {
-    return Promise.reject(error);
-  }
-
-  while (responseInterceptorChain.length) {
-    promise = promise.then(responseInterceptorChain.shift(), responseInterceptorChain.shift());
-  }
-
-  return promise;
-};
-
-Axios.prototype.getUri = function getUri(config) {
-  config = mergeConfig(this.defaults, config);
-  return buildURL(config.url, config.params, config.paramsSerializer).replace(/^\?/, '');
-};
-
-// Provide aliases for supported request methods
-utils.forEach(['delete', 'get', 'head', 'options'], function forEachMethodNoData(method) {
-  /*eslint func-names:0*/
-  Axios.prototype[method] = function(url, config) {
-    return this.request(mergeConfig(config || {}, {
-      method: method,
-      url: url,
-      data: (config || {}).data
-    }));
-  };
-});
-
-utils.forEach(['post', 'put', 'patch'], function forEachMethodWithData(method) {
-  /*eslint func-names:0*/
-  Axios.prototype[method] = function(url, data, config) {
-    return this.request(mergeConfig(config || {}, {
-      method: method,
-      url: url,
-      data: data
-    }));
-  };
-});
-
-module.exports = Axios;
-
-
-/***/ }),
-
-/***/ 8431:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-"use strict";
-
-
-var utils = __nccwpck_require__(5103);
-
-function InterceptorManager() {
-  this.handlers = [];
-}
-
-/**
- * Add a new interceptor to the stack
- *
- * @param {Function} fulfilled The function to handle `then` for a `Promise`
- * @param {Function} rejected The function to handle `reject` for a `Promise`
- *
- * @return {Number} An ID used to remove interceptor later
- */
-InterceptorManager.prototype.use = function use(fulfilled, rejected, options) {
-  this.handlers.push({
-    fulfilled: fulfilled,
-    rejected: rejected,
-    synchronous: options ? options.synchronous : false,
-    runWhen: options ? options.runWhen : null
-  });
-  return this.handlers.length - 1;
-};
-
-/**
- * Remove an interceptor from the stack
- *
- * @param {Number} id The ID that was returned by `use`
- */
-InterceptorManager.prototype.eject = function eject(id) {
-  if (this.handlers[id]) {
-    this.handlers[id] = null;
-  }
-};
-
-/**
- * Iterate over all the registered interceptors
- *
- * This method is particularly useful for skipping over any
- * interceptors that may have become `null` calling `eject`.
- *
- * @param {Function} fn The function to call for each interceptor
- */
-InterceptorManager.prototype.forEach = function forEach(fn) {
-  utils.forEach(this.handlers, function forEachHandler(h) {
-    if (h !== null) {
-      fn(h);
-    }
-  });
-};
-
-module.exports = InterceptorManager;
-
-
-/***/ }),
-
-/***/ 8489:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-"use strict";
-
-
-var isAbsoluteURL = __nccwpck_require__(1678);
-var combineURLs = __nccwpck_require__(37);
-
-/**
- * Creates a new URL by combining the baseURL with the requestedURL,
- * only when the requestedURL is not already an absolute URL.
- * If the requestURL is absolute, this function returns the requestedURL untouched.
- *
- * @param {string} baseURL The base URL
- * @param {string} requestedURL Absolute or relative URL to combine
- * @returns {string} The combined full path
- */
-module.exports = function buildFullPath(baseURL, requestedURL) {
-  if (baseURL && !isAbsoluteURL(requestedURL)) {
-    return combineURLs(baseURL, requestedURL);
-  }
-  return requestedURL;
-};
-
-
-/***/ }),
-
-/***/ 8531:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-"use strict";
-
-
-var enhanceError = __nccwpck_require__(5682);
-
-/**
- * Create an Error with the specified message, config, error code, request and response.
- *
- * @param {string} message The error message.
- * @param {Object} config The config.
- * @param {string} [code] The error code (for example, 'ECONNABORTED').
- * @param {Object} [request] The request.
- * @param {Object} [response] The response.
- * @returns {Error} The created error.
- */
-module.exports = function createError(message, config, code, request, response) {
-  var error = new Error(message);
-  return enhanceError(error, config, code, request, response);
-};
-
-
-/***/ }),
-
-/***/ 1835:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-"use strict";
-
-
-var utils = __nccwpck_require__(5103);
-var transformData = __nccwpck_require__(9643);
-var isCancel = __nccwpck_require__(1059);
-var defaults = __nccwpck_require__(875);
-
-/**
- * Throws a `Cancel` if cancellation has been requested.
- */
-function throwIfCancellationRequested(config) {
-  if (config.cancelToken) {
-    config.cancelToken.throwIfRequested();
-  }
-}
-
-/**
- * Dispatch a request to the server using the configured adapter.
- *
- * @param {object} config The config that is to be used for the request
- * @returns {Promise} The Promise to be fulfilled
- */
-module.exports = function dispatchRequest(config) {
-  throwIfCancellationRequested(config);
-
-  // Ensure headers exist
-  config.headers = config.headers || {};
-
-  // Transform request data
-  config.data = transformData.call(
-    config,
-    config.data,
-    config.headers,
-    config.transformRequest
-  );
-
-  // Flatten headers
-  config.headers = utils.merge(
-    config.headers.common || {},
-    config.headers[config.method] || {},
-    config.headers
-  );
-
-  utils.forEach(
-    ['delete', 'get', 'head', 'post', 'put', 'patch', 'common'],
-    function cleanHeaderConfig(method) {
-      delete config.headers[method];
-    }
-  );
-
-  var adapter = config.adapter || defaults.adapter;
-
-  return adapter(config).then(function onAdapterResolution(response) {
-    throwIfCancellationRequested(config);
-
-    // Transform response data
-    response.data = transformData.call(
-      config,
-      response.data,
-      response.headers,
-      config.transformResponse
-    );
-
-    return response;
-  }, function onAdapterRejection(reason) {
-    if (!isCancel(reason)) {
-      throwIfCancellationRequested(config);
-
-      // Transform response data
-      if (reason && reason.response) {
-        reason.response.data = transformData.call(
-          config,
-          reason.response.data,
-          reason.response.headers,
-          config.transformResponse
-        );
-      }
-    }
-
-    return Promise.reject(reason);
-  });
-};
-
-
-/***/ }),
-
-/***/ 5682:
-/***/ ((module) => {
-
-"use strict";
-
-
-/**
- * Update an Error with the specified config, error code, and response.
- *
- * @param {Error} error The error to update.
- * @param {Object} config The config.
- * @param {string} [code] The error code (for example, 'ECONNABORTED').
- * @param {Object} [request] The request.
- * @param {Object} [response] The response.
- * @returns {Error} The error.
- */
-module.exports = function enhanceError(error, config, code, request, response) {
-  error.config = config;
-  if (code) {
-    error.code = code;
-  }
-
-  error.request = request;
-  error.response = response;
-  error.isAxiosError = true;
-
-  error.toJSON = function toJSON() {
-    return {
-      // Standard
-      message: this.message,
-      name: this.name,
-      // Microsoft
-      description: this.description,
-      number: this.number,
-      // Mozilla
-      fileName: this.fileName,
-      lineNumber: this.lineNumber,
-      columnNumber: this.columnNumber,
-      stack: this.stack,
-      // Axios
-      config: this.config,
-      code: this.code
-    };
-  };
-  return error;
-};
-
-
-/***/ }),
-
-/***/ 7815:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-"use strict";
-
-
-var utils = __nccwpck_require__(5103);
-
-/**
- * Config-specific merge-function which creates a new config-object
- * by merging two configuration objects together.
- *
- * @param {Object} config1
- * @param {Object} config2
- * @returns {Object} New object resulting from merging config2 to config1
- */
-module.exports = function mergeConfig(config1, config2) {
-  // eslint-disable-next-line no-param-reassign
-  config2 = config2 || {};
-  var config = {};
-
-  var valueFromConfig2Keys = ['url', 'method', 'data'];
-  var mergeDeepPropertiesKeys = ['headers', 'auth', 'proxy', 'params'];
-  var defaultToConfig2Keys = [
-    'baseURL', 'transformRequest', 'transformResponse', 'paramsSerializer',
-    'timeout', 'timeoutMessage', 'withCredentials', 'adapter', 'responseType', 'xsrfCookieName',
-    'xsrfHeaderName', 'onUploadProgress', 'onDownloadProgress', 'decompress',
-    'maxContentLength', 'maxBodyLength', 'maxRedirects', 'transport', 'httpAgent',
-    'httpsAgent', 'cancelToken', 'socketPath', 'responseEncoding'
-  ];
-  var directMergeKeys = ['validateStatus'];
-
-  function getMergedValue(target, source) {
-    if (utils.isPlainObject(target) && utils.isPlainObject(source)) {
-      return utils.merge(target, source);
-    } else if (utils.isPlainObject(source)) {
-      return utils.merge({}, source);
-    } else if (utils.isArray(source)) {
-      return source.slice();
-    }
-    return source;
-  }
-
-  function mergeDeepProperties(prop) {
-    if (!utils.isUndefined(config2[prop])) {
-      config[prop] = getMergedValue(config1[prop], config2[prop]);
-    } else if (!utils.isUndefined(config1[prop])) {
-      config[prop] = getMergedValue(undefined, config1[prop]);
-    }
-  }
-
-  utils.forEach(valueFromConfig2Keys, function valueFromConfig2(prop) {
-    if (!utils.isUndefined(config2[prop])) {
-      config[prop] = getMergedValue(undefined, config2[prop]);
-    }
-  });
-
-  utils.forEach(mergeDeepPropertiesKeys, mergeDeepProperties);
-
-  utils.forEach(defaultToConfig2Keys, function defaultToConfig2(prop) {
-    if (!utils.isUndefined(config2[prop])) {
-      config[prop] = getMergedValue(undefined, config2[prop]);
-    } else if (!utils.isUndefined(config1[prop])) {
-      config[prop] = getMergedValue(undefined, config1[prop]);
-    }
-  });
-
-  utils.forEach(directMergeKeys, function merge(prop) {
-    if (prop in config2) {
-      config[prop] = getMergedValue(config1[prop], config2[prop]);
-    } else if (prop in config1) {
-      config[prop] = getMergedValue(undefined, config1[prop]);
-    }
-  });
-
-  var axiosKeys = valueFromConfig2Keys
-    .concat(mergeDeepPropertiesKeys)
-    .concat(defaultToConfig2Keys)
-    .concat(directMergeKeys);
-
-  var otherKeys = Object
-    .keys(config1)
-    .concat(Object.keys(config2))
-    .filter(function filterAxiosKeys(key) {
-      return axiosKeys.indexOf(key) === -1;
-    });
-
-  utils.forEach(otherKeys, mergeDeepProperties);
-
-  return config;
-};
-
-
-/***/ }),
-
-/***/ 3895:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-"use strict";
-
-
-var createError = __nccwpck_require__(8531);
-
-/**
- * Resolve or reject a Promise based on response status.
- *
- * @param {Function} resolve A function that resolves the promise.
- * @param {Function} reject A function that rejects the promise.
- * @param {object} response The response.
- */
-module.exports = function settle(resolve, reject, response) {
-  var validateStatus = response.config.validateStatus;
-  if (!response.status || !validateStatus || validateStatus(response.status)) {
-    resolve(response);
-  } else {
-    reject(createError(
-      'Request failed with status code ' + response.status,
-      response.config,
-      null,
-      response.request,
-      response
-    ));
-  }
-};
-
-
-/***/ }),
-
-/***/ 9643:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-"use strict";
-
-
-var utils = __nccwpck_require__(5103);
-var defaults = __nccwpck_require__(875);
-
-/**
- * Transform the data for a request or a response
- *
- * @param {Object|String} data The data to be transformed
- * @param {Array} headers The headers for the request or response
- * @param {Array|Function} fns A single function or Array of functions
- * @returns {*} The resulting transformed data
- */
-module.exports = function transformData(data, headers, fns) {
-  var context = this || defaults;
-  /*eslint no-param-reassign:0*/
-  utils.forEach(fns, function transform(fn) {
-    data = fn.call(context, data, headers);
-  });
-
-  return data;
-};
-
-
-/***/ }),
-
-/***/ 875:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-"use strict";
-
-
-var utils = __nccwpck_require__(5103);
-var normalizeHeaderName = __nccwpck_require__(6261);
-var enhanceError = __nccwpck_require__(5682);
-
-var DEFAULT_CONTENT_TYPE = {
-  'Content-Type': 'application/x-www-form-urlencoded'
-};
-
-function setContentTypeIfUnset(headers, value) {
-  if (!utils.isUndefined(headers) && utils.isUndefined(headers['Content-Type'])) {
-    headers['Content-Type'] = value;
-  }
-}
-
-function getDefaultAdapter() {
-  var adapter;
-  if (typeof XMLHttpRequest !== 'undefined') {
-    // For browsers use XHR adapter
-    adapter = __nccwpck_require__(4771);
-  } else if (typeof process !== 'undefined' && Object.prototype.toString.call(process) === '[object process]') {
-    // For node use HTTP adapter
-    adapter = __nccwpck_require__(6041);
-  }
-  return adapter;
-}
-
-var defaults = {
-
-  transitional: {
-    silentJSONParsing: true,
-    forcedJSONParsing: true,
-    clarifyTimeoutError: false
-  },
-
-  adapter: getDefaultAdapter(),
-
-  transformRequest: [function transformRequest(data, headers) {
-    normalizeHeaderName(headers, 'Accept');
-    normalizeHeaderName(headers, 'Content-Type');
-
-    if (utils.isFormData(data) ||
-      utils.isArrayBuffer(data) ||
-      utils.isBuffer(data) ||
-      utils.isStream(data) ||
-      utils.isFile(data) ||
-      utils.isBlob(data)
-    ) {
-      return data;
-    }
-    if (utils.isArrayBufferView(data)) {
-      return data.buffer;
-    }
-    if (utils.isURLSearchParams(data)) {
-      setContentTypeIfUnset(headers, 'application/x-www-form-urlencoded;charset=utf-8');
-      return data.toString();
-    }
-    if (utils.isObject(data) || (headers && headers['Content-Type'] === 'application/json')) {
-      setContentTypeIfUnset(headers, 'application/json');
-      return JSON.stringify(data);
-    }
-    return data;
-  }],
-
-  transformResponse: [function transformResponse(data) {
-    var transitional = this.transitional;
-    var silentJSONParsing = transitional && transitional.silentJSONParsing;
-    var forcedJSONParsing = transitional && transitional.forcedJSONParsing;
-    var strictJSONParsing = !silentJSONParsing && this.responseType === 'json';
-
-    if (strictJSONParsing || (forcedJSONParsing && utils.isString(data) && data.length)) {
-      try {
-        return JSON.parse(data);
-      } catch (e) {
-        if (strictJSONParsing) {
-          if (e.name === 'SyntaxError') {
-            throw enhanceError(e, this, 'E_JSON_PARSE');
-          }
-          throw e;
-        }
-      }
-    }
-
-    return data;
-  }],
-
-  /**
-   * A timeout in milliseconds to abort a request. If set to 0 (default) a
-   * timeout is not created.
-   */
-  timeout: 0,
-
-  xsrfCookieName: 'XSRF-TOKEN',
-  xsrfHeaderName: 'X-XSRF-TOKEN',
-
-  maxContentLength: -1,
-  maxBodyLength: -1,
-
-  validateStatus: function validateStatus(status) {
-    return status >= 200 && status < 300;
-  }
-};
-
-defaults.headers = {
-  common: {
-    'Accept': 'application/json, text/plain, */*'
-  }
-};
-
-utils.forEach(['delete', 'get', 'head'], function forEachMethodNoData(method) {
-  defaults.headers[method] = {};
-});
-
-utils.forEach(['post', 'put', 'patch'], function forEachMethodWithData(method) {
-  defaults.headers[method] = utils.merge(DEFAULT_CONTENT_TYPE);
-});
-
-module.exports = defaults;
-
-
-/***/ }),
-
-/***/ 5630:
-/***/ ((module) => {
-
-"use strict";
-
-
-module.exports = function bind(fn, thisArg) {
-  return function wrap() {
-    var args = new Array(arguments.length);
-    for (var i = 0; i < args.length; i++) {
-      args[i] = arguments[i];
-    }
-    return fn.apply(thisArg, args);
-  };
-};
-
-
-/***/ }),
-
-/***/ 3370:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-"use strict";
-
-
-var utils = __nccwpck_require__(5103);
-
-function encode(val) {
-  return encodeURIComponent(val).
-    replace(/%3A/gi, ':').
-    replace(/%24/g, '$').
-    replace(/%2C/gi, ',').
-    replace(/%20/g, '+').
-    replace(/%5B/gi, '[').
-    replace(/%5D/gi, ']');
-}
-
-/**
- * Build a URL by appending params to the end
- *
- * @param {string} url The base of the url (e.g., http://www.google.com)
- * @param {object} [params] The params to be appended
- * @returns {string} The formatted url
- */
-module.exports = function buildURL(url, params, paramsSerializer) {
-  /*eslint no-param-reassign:0*/
-  if (!params) {
-    return url;
-  }
-
-  var serializedParams;
-  if (paramsSerializer) {
-    serializedParams = paramsSerializer(params);
-  } else if (utils.isURLSearchParams(params)) {
-    serializedParams = params.toString();
-  } else {
-    var parts = [];
-
-    utils.forEach(params, function serialize(val, key) {
-      if (val === null || typeof val === 'undefined') {
-        return;
-      }
-
-      if (utils.isArray(val)) {
-        key = key + '[]';
-      } else {
-        val = [val];
-      }
-
-      utils.forEach(val, function parseValue(v) {
-        if (utils.isDate(v)) {
-          v = v.toISOString();
-        } else if (utils.isObject(v)) {
-          v = JSON.stringify(v);
-        }
-        parts.push(encode(key) + '=' + encode(v));
-      });
-    });
-
-    serializedParams = parts.join('&');
-  }
-
-  if (serializedParams) {
-    var hashmarkIndex = url.indexOf('#');
-    if (hashmarkIndex !== -1) {
-      url = url.slice(0, hashmarkIndex);
-    }
-
-    url += (url.indexOf('?') === -1 ? '?' : '&') + serializedParams;
-  }
-
-  return url;
-};
-
-
-/***/ }),
-
-/***/ 37:
-/***/ ((module) => {
-
-"use strict";
-
-
-/**
- * Creates a new URL by combining the specified URLs
- *
- * @param {string} baseURL The base URL
- * @param {string} relativeURL The relative URL
- * @returns {string} The combined URL
- */
-module.exports = function combineURLs(baseURL, relativeURL) {
-  return relativeURL
-    ? baseURL.replace(/\/+$/, '') + '/' + relativeURL.replace(/^\/+/, '')
-    : baseURL;
-};
-
-
-/***/ }),
-
-/***/ 7100:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-"use strict";
-
-
-var utils = __nccwpck_require__(5103);
-
-module.exports = (
-  utils.isStandardBrowserEnv() ?
-
-  // Standard browser envs support document.cookie
-    (function standardBrowserEnv() {
-      return {
-        write: function write(name, value, expires, path, domain, secure) {
-          var cookie = [];
-          cookie.push(name + '=' + encodeURIComponent(value));
-
-          if (utils.isNumber(expires)) {
-            cookie.push('expires=' + new Date(expires).toGMTString());
-          }
-
-          if (utils.isString(path)) {
-            cookie.push('path=' + path);
-          }
-
-          if (utils.isString(domain)) {
-            cookie.push('domain=' + domain);
-          }
-
-          if (secure === true) {
-            cookie.push('secure');
-          }
-
-          document.cookie = cookie.join('; ');
-        },
-
-        read: function read(name) {
-          var match = document.cookie.match(new RegExp('(^|;\\s*)(' + name + ')=([^;]*)'));
-          return (match ? decodeURIComponent(match[3]) : null);
-        },
-
-        remove: function remove(name) {
-          this.write(name, '', Date.now() - 86400000);
-        }
-      };
-    })() :
-
-  // Non standard browser env (web workers, react-native) lack needed support.
-    (function nonStandardBrowserEnv() {
-      return {
-        write: function write() {},
-        read: function read() { return null; },
-        remove: function remove() {}
-      };
-    })()
-);
-
-
-/***/ }),
-
-/***/ 1678:
-/***/ ((module) => {
-
-"use strict";
-
-
-/**
- * Determines whether the specified URL is absolute
- *
- * @param {string} url The URL to test
- * @returns {boolean} True if the specified URL is absolute, otherwise false
- */
-module.exports = function isAbsoluteURL(url) {
-  // A URL is considered absolute if it begins with "<scheme>://" or "//" (protocol-relative URL).
-  // RFC 3986 defines scheme name as a sequence of characters beginning with a letter and followed
-  // by any combination of letters, digits, plus, period, or hyphen.
-  return /^([a-z][a-z\d\+\-\.]*:)?\/\//i.test(url);
-};
-
-
-/***/ }),
-
-/***/ 7128:
-/***/ ((module) => {
-
-"use strict";
-
-
-/**
- * Determines whether the payload is an error thrown by Axios
- *
- * @param {*} payload The value to test
- * @returns {boolean} True if the payload is an error thrown by Axios, otherwise false
- */
-module.exports = function isAxiosError(payload) {
-  return (typeof payload === 'object') && (payload.isAxiosError === true);
-};
-
-
-/***/ }),
-
-/***/ 4393:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-"use strict";
-
-
-var utils = __nccwpck_require__(5103);
-
-module.exports = (
-  utils.isStandardBrowserEnv() ?
-
-  // Standard browser envs have full support of the APIs needed to test
-  // whether the request URL is of the same origin as current location.
-    (function standardBrowserEnv() {
-      var msie = /(msie|trident)/i.test(navigator.userAgent);
-      var urlParsingNode = document.createElement('a');
-      var originURL;
-
-      /**
-    * Parse a URL to discover it's components
-    *
-    * @param {String} url The URL to be parsed
-    * @returns {Object}
-    */
-      function resolveURL(url) {
-        var href = url;
-
-        if (msie) {
-        // IE needs attribute set twice to normalize properties
-          urlParsingNode.setAttribute('href', href);
-          href = urlParsingNode.href;
-        }
-
-        urlParsingNode.setAttribute('href', href);
-
-        // urlParsingNode provides the UrlUtils interface - http://url.spec.whatwg.org/#urlutils
-        return {
-          href: urlParsingNode.href,
-          protocol: urlParsingNode.protocol ? urlParsingNode.protocol.replace(/:$/, '') : '',
-          host: urlParsingNode.host,
-          search: urlParsingNode.search ? urlParsingNode.search.replace(/^\?/, '') : '',
-          hash: urlParsingNode.hash ? urlParsingNode.hash.replace(/^#/, '') : '',
-          hostname: urlParsingNode.hostname,
-          port: urlParsingNode.port,
-          pathname: (urlParsingNode.pathname.charAt(0) === '/') ?
-            urlParsingNode.pathname :
-            '/' + urlParsingNode.pathname
-        };
-      }
-
-      originURL = resolveURL(window.location.href);
-
-      /**
-    * Determine if a URL shares the same origin as the current location
-    *
-    * @param {String} requestURL The URL to test
-    * @returns {boolean} True if URL shares the same origin, otherwise false
-    */
-      return function isURLSameOrigin(requestURL) {
-        var parsed = (utils.isString(requestURL)) ? resolveURL(requestURL) : requestURL;
-        return (parsed.protocol === originURL.protocol &&
-            parsed.host === originURL.host);
-      };
-    })() :
-
-  // Non standard browser envs (web workers, react-native) lack needed support.
-    (function nonStandardBrowserEnv() {
-      return function isURLSameOrigin() {
-        return true;
-      };
-    })()
-);
-
-
-/***/ }),
-
-/***/ 6261:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-"use strict";
-
-
-var utils = __nccwpck_require__(5103);
-
-module.exports = function normalizeHeaderName(headers, normalizedName) {
-  utils.forEach(headers, function processHeader(value, name) {
-    if (name !== normalizedName && name.toUpperCase() === normalizedName.toUpperCase()) {
-      headers[normalizedName] = value;
-      delete headers[name];
-    }
-  });
-};
-
-
-/***/ }),
-
-/***/ 8417:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-"use strict";
-
-
-var utils = __nccwpck_require__(5103);
-
-// Headers whose duplicates are ignored by node
-// c.f. https://nodejs.org/api/http.html#http_message_headers
-var ignoreDuplicateOf = [
-  'age', 'authorization', 'content-length', 'content-type', 'etag',
-  'expires', 'from', 'host', 'if-modified-since', 'if-unmodified-since',
-  'last-modified', 'location', 'max-forwards', 'proxy-authorization',
-  'referer', 'retry-after', 'user-agent'
-];
-
-/**
- * Parse headers into an object
- *
- * ```
- * Date: Wed, 27 Aug 2014 08:58:49 GMT
- * Content-Type: application/json
- * Connection: keep-alive
- * Transfer-Encoding: chunked
- * ```
- *
- * @param {String} headers Headers needing to be parsed
- * @returns {Object} Headers parsed into an object
- */
-module.exports = function parseHeaders(headers) {
-  var parsed = {};
-  var key;
-  var val;
-  var i;
-
-  if (!headers) { return parsed; }
-
-  utils.forEach(headers.split('\n'), function parser(line) {
-    i = line.indexOf(':');
-    key = utils.trim(line.substr(0, i)).toLowerCase();
-    val = utils.trim(line.substr(i + 1));
-
-    if (key) {
-      if (parsed[key] && ignoreDuplicateOf.indexOf(key) >= 0) {
-        return;
-      }
-      if (key === 'set-cookie') {
-        parsed[key] = (parsed[key] ? parsed[key] : []).concat([val]);
-      } else {
-        parsed[key] = parsed[key] ? parsed[key] + ', ' + val : val;
-      }
-    }
-  });
-
-  return parsed;
-};
-
-
-/***/ }),
-
-/***/ 52:
-/***/ ((module) => {
-
-"use strict";
-
-
-/**
- * Syntactic sugar for invoking a function and expanding an array for arguments.
- *
- * Common use case would be to use `Function.prototype.apply`.
- *
- *  ```js
- *  function f(x, y, z) {}
- *  var args = [1, 2, 3];
- *  f.apply(null, args);
- *  ```
- *
- * With `spread` this example can be re-written.
- *
- *  ```js
- *  spread(function(x, y, z) {})([1, 2, 3]);
- *  ```
- *
- * @param {Function} callback
- * @returns {Function}
- */
-module.exports = function spread(callback) {
-  return function wrap(arr) {
-    return callback.apply(null, arr);
-  };
-};
-
-
-/***/ }),
-
-/***/ 1877:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-"use strict";
-
-
-var pkg = __nccwpck_require__(2210);
-
-var validators = {};
-
-// eslint-disable-next-line func-names
-['object', 'boolean', 'number', 'function', 'string', 'symbol'].forEach(function(type, i) {
-  validators[type] = function validator(thing) {
-    return typeof thing === type || 'a' + (i < 1 ? 'n ' : ' ') + type;
-  };
-});
-
-var deprecatedWarnings = {};
-var currentVerArr = pkg.version.split('.');
-
-/**
- * Compare package versions
- * @param {string} version
- * @param {string?} thanVersion
- * @returns {boolean}
- */
-function isOlderVersion(version, thanVersion) {
-  var pkgVersionArr = thanVersion ? thanVersion.split('.') : currentVerArr;
-  var destVer = version.split('.');
-  for (var i = 0; i < 3; i++) {
-    if (pkgVersionArr[i] > destVer[i]) {
-      return true;
-    } else if (pkgVersionArr[i] < destVer[i]) {
-      return false;
-    }
-  }
-  return false;
-}
-
-/**
- * Transitional option validator
- * @param {function|boolean?} validator
- * @param {string?} version
- * @param {string} message
- * @returns {function}
- */
-validators.transitional = function transitional(validator, version, message) {
-  var isDeprecated = version && isOlderVersion(version);
-
-  function formatMessage(opt, desc) {
-    return '[Axios v' + pkg.version + '] Transitional option \'' + opt + '\'' + desc + (message ? '. ' + message : '');
-  }
-
-  // eslint-disable-next-line func-names
-  return function(value, opt, opts) {
-    if (validator === false) {
-      throw new Error(formatMessage(opt, ' has been removed in ' + version));
-    }
-
-    if (isDeprecated && !deprecatedWarnings[opt]) {
-      deprecatedWarnings[opt] = true;
-      // eslint-disable-next-line no-console
-      console.warn(
-        formatMessage(
-          opt,
-          ' has been deprecated since v' + version + ' and will be removed in the near future'
-        )
-      );
-    }
-
-    return validator ? validator(value, opt, opts) : true;
-  };
-};
-
-/**
- * Assert object's properties type
- * @param {object} options
- * @param {object} schema
- * @param {boolean?} allowUnknown
- */
-
-function assertOptions(options, schema, allowUnknown) {
-  if (typeof options !== 'object') {
-    throw new TypeError('options must be an object');
-  }
-  var keys = Object.keys(options);
-  var i = keys.length;
-  while (i-- > 0) {
-    var opt = keys[i];
-    var validator = schema[opt];
-    if (validator) {
-      var value = options[opt];
-      var result = value === undefined || validator(value, opt, options);
-      if (result !== true) {
-        throw new TypeError('option ' + opt + ' must be ' + result);
-      }
-      continue;
-    }
-    if (allowUnknown !== true) {
-      throw Error('Unknown option ' + opt);
-    }
-  }
-}
-
-module.exports = {
-  isOlderVersion: isOlderVersion,
-  assertOptions: assertOptions,
-  validators: validators
-};
-
-
-/***/ }),
-
-/***/ 5103:
-/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
-
-"use strict";
-
-
-var bind = __nccwpck_require__(5630);
-
-// utils is a library of generic helper functions non-specific to axios
-
-var toString = Object.prototype.toString;
-
-/**
- * Determine if a value is an Array
- *
- * @param {Object} val The value to test
- * @returns {boolean} True if value is an Array, otherwise false
- */
-function isArray(val) {
-  return toString.call(val) === '[object Array]';
-}
-
-/**
- * Determine if a value is undefined
- *
- * @param {Object} val The value to test
- * @returns {boolean} True if the value is undefined, otherwise false
- */
-function isUndefined(val) {
-  return typeof val === 'undefined';
-}
-
-/**
- * Determine if a value is a Buffer
- *
- * @param {Object} val The value to test
- * @returns {boolean} True if value is a Buffer, otherwise false
- */
-function isBuffer(val) {
-  return val !== null && !isUndefined(val) && val.constructor !== null && !isUndefined(val.constructor)
-    && typeof val.constructor.isBuffer === 'function' && val.constructor.isBuffer(val);
-}
-
-/**
- * Determine if a value is an ArrayBuffer
- *
- * @param {Object} val The value to test
- * @returns {boolean} True if value is an ArrayBuffer, otherwise false
- */
-function isArrayBuffer(val) {
-  return toString.call(val) === '[object ArrayBuffer]';
-}
-
-/**
- * Determine if a value is a FormData
- *
- * @param {Object} val The value to test
- * @returns {boolean} True if value is an FormData, otherwise false
- */
-function isFormData(val) {
-  return (typeof FormData !== 'undefined') && (val instanceof FormData);
-}
-
-/**
- * Determine if a value is a view on an ArrayBuffer
- *
- * @param {Object} val The value to test
- * @returns {boolean} True if value is a view on an ArrayBuffer, otherwise false
- */
-function isArrayBufferView(val) {
-  var result;
-  if ((typeof ArrayBuffer !== 'undefined') && (ArrayBuffer.isView)) {
-    result = ArrayBuffer.isView(val);
-  } else {
-    result = (val) && (val.buffer) && (val.buffer instanceof ArrayBuffer);
-  }
-  return result;
-}
-
-/**
- * Determine if a value is a String
- *
- * @param {Object} val The value to test
- * @returns {boolean} True if value is a String, otherwise false
- */
-function isString(val) {
-  return typeof val === 'string';
-}
-
-/**
- * Determine if a value is a Number
- *
- * @param {Object} val The value to test
- * @returns {boolean} True if value is a Number, otherwise false
- */
-function isNumber(val) {
-  return typeof val === 'number';
-}
-
-/**
- * Determine if a value is an Object
- *
- * @param {Object} val The value to test
- * @returns {boolean} True if value is an Object, otherwise false
- */
-function isObject(val) {
-  return val !== null && typeof val === 'object';
-}
-
-/**
- * Determine if a value is a plain Object
- *
- * @param {Object} val The value to test
- * @return {boolean} True if value is a plain Object, otherwise false
- */
-function isPlainObject(val) {
-  if (toString.call(val) !== '[object Object]') {
-    return false;
-  }
-
-  var prototype = Object.getPrototypeOf(val);
-  return prototype === null || prototype === Object.prototype;
-}
-
-/**
- * Determine if a value is a Date
- *
- * @param {Object} val The value to test
- * @returns {boolean} True if value is a Date, otherwise false
- */
-function isDate(val) {
-  return toString.call(val) === '[object Date]';
-}
-
-/**
- * Determine if a value is a File
- *
- * @param {Object} val The value to test
- * @returns {boolean} True if value is a File, otherwise false
- */
-function isFile(val) {
-  return toString.call(val) === '[object File]';
-}
-
-/**
- * Determine if a value is a Blob
- *
- * @param {Object} val The value to test
- * @returns {boolean} True if value is a Blob, otherwise false
- */
-function isBlob(val) {
-  return toString.call(val) === '[object Blob]';
-}
-
-/**
- * Determine if a value is a Function
- *
- * @param {Object} val The value to test
- * @returns {boolean} True if value is a Function, otherwise false
- */
-function isFunction(val) {
-  return toString.call(val) === '[object Function]';
-}
-
-/**
- * Determine if a value is a Stream
- *
- * @param {Object} val The value to test
- * @returns {boolean} True if value is a Stream, otherwise false
- */
-function isStream(val) {
-  return isObject(val) && isFunction(val.pipe);
-}
-
-/**
- * Determine if a value is a URLSearchParams object
- *
- * @param {Object} val The value to test
- * @returns {boolean} True if value is a URLSearchParams object, otherwise false
- */
-function isURLSearchParams(val) {
-  return typeof URLSearchParams !== 'undefined' && val instanceof URLSearchParams;
-}
-
-/**
- * Trim excess whitespace off the beginning and end of a string
- *
- * @param {String} str The String to trim
- * @returns {String} The String freed of excess whitespace
- */
-function trim(str) {
-  return str.trim ? str.trim() : str.replace(/^\s+|\s+$/g, '');
-}
-
-/**
- * Determine if we're running in a standard browser environment
- *
- * This allows axios to run in a web worker, and react-native.
- * Both environments support XMLHttpRequest, but not fully standard globals.
- *
- * web workers:
- *  typeof window -> undefined
- *  typeof document -> undefined
- *
- * react-native:
- *  navigator.product -> 'ReactNative'
- * nativescript
- *  navigator.product -> 'NativeScript' or 'NS'
- */
-function isStandardBrowserEnv() {
-  if (typeof navigator !== 'undefined' && (navigator.product === 'ReactNative' ||
-                                           navigator.product === 'NativeScript' ||
-                                           navigator.product === 'NS')) {
-    return false;
-  }
-  return (
-    typeof window !== 'undefined' &&
-    typeof document !== 'undefined'
-  );
-}
-
-/**
- * Iterate over an Array or an Object invoking a function for each item.
- *
- * If `obj` is an Array callback will be called passing
- * the value, index, and complete array for each item.
- *
- * If 'obj' is an Object callback will be called passing
- * the value, key, and complete object for each property.
- *
- * @param {Object|Array} obj The object to iterate
- * @param {Function} fn The callback to invoke for each item
- */
-function forEach(obj, fn) {
-  // Don't bother if no value provided
-  if (obj === null || typeof obj === 'undefined') {
-    return;
-  }
-
-  // Force an array if not already something iterable
-  if (typeof obj !== 'object') {
-    /*eslint no-param-reassign:0*/
-    obj = [obj];
-  }
-
-  if (isArray(obj)) {
-    // Iterate over array values
-    for (var i = 0, l = obj.length; i < l; i++) {
-      fn.call(null, obj[i], i, obj);
-    }
-  } else {
-    // Iterate over object keys
-    for (var key in obj) {
-      if (Object.prototype.hasOwnProperty.call(obj, key)) {
-        fn.call(null, obj[key], key, obj);
-      }
-    }
-  }
-}
-
-/**
- * Accepts varargs expecting each argument to be an object, then
- * immutably merges the properties of each object and returns result.
- *
- * When multiple objects contain the same key the later object in
- * the arguments list will take precedence.
- *
- * Example:
- *
- * ```js
- * var result = merge({foo: 123}, {foo: 456});
- * console.log(result.foo); // outputs 456
- * ```
- *
- * @param {Object} obj1 Object to merge
- * @returns {Object} Result of all merge properties
- */
-function merge(/* obj1, obj2, obj3, ... */) {
-  var result = {};
-  function assignValue(val, key) {
-    if (isPlainObject(result[key]) && isPlainObject(val)) {
-      result[key] = merge(result[key], val);
-    } else if (isPlainObject(val)) {
-      result[key] = merge({}, val);
-    } else if (isArray(val)) {
-      result[key] = val.slice();
-    } else {
-      result[key] = val;
-    }
-  }
-
-  for (var i = 0, l = arguments.length; i < l; i++) {
-    forEach(arguments[i], assignValue);
-  }
-  return result;
-}
-
-/**
- * Extends object a by mutably adding to it the properties of object b.
- *
- * @param {Object} a The object to be extended
- * @param {Object} b The object to copy properties from
- * @param {Object} thisArg The object to bind function to
- * @return {Object} The resulting value of object a
- */
-function extend(a, b, thisArg) {
-  forEach(b, function assignValue(val, key) {
-    if (thisArg && typeof val === 'function') {
-      a[key] = bind(val, thisArg);
-    } else {
-      a[key] = val;
-    }
-  });
-  return a;
-}
-
-/**
- * Remove byte order marker. This catches EF BB BF (the UTF-8 BOM)
- *
- * @param {string} content with BOM
- * @return {string} content value without BOM
- */
-function stripBOM(content) {
-  if (content.charCodeAt(0) === 0xFEFF) {
-    content = content.slice(1);
-  }
-  return content;
-}
-
-module.exports = {
-  isArray: isArray,
-  isArrayBuffer: isArrayBuffer,
-  isBuffer: isBuffer,
-  isFormData: isFormData,
-  isArrayBufferView: isArrayBufferView,
-  isString: isString,
-  isNumber: isNumber,
-  isObject: isObject,
-  isPlainObject: isPlainObject,
-  isUndefined: isUndefined,
-  isDate: isDate,
-  isFile: isFile,
-  isBlob: isBlob,
-  isFunction: isFunction,
-  isStream: isStream,
-  isURLSearchParams: isURLSearchParams,
-  isStandardBrowserEnv: isStandardBrowserEnv,
-  forEach: forEach,
-  merge: merge,
-  extend: extend,
-  trim: trim,
-  stripBOM: stripBOM
-};
-
-
-/***/ }),
-
 /***/ 3436:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
@@ -4549,15 +2257,35 @@ exports.Bundles = Bundles;
 
 /***/ }),
 
+/***/ 5741:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.toHttpClientError = void 0;
+const axios_1 = __nccwpck_require__(8757);
+const fetchClientError_1 = __nccwpck_require__(3593);
+const toHttpClientError = (error) => error instanceof axios_1.AxiosError || error instanceof fetchClientError_1.FetchClientJsonPayloadError || error instanceof Error
+    ? error
+    : new Error(`unknown http client error: ${error}`);
+exports.toHttpClientError = toHttpClientError;
+
+
+/***/ }),
+
 /***/ 4275:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.isOptionalNumber = exports.isOptionalString = exports.CrowdinApi = exports.CrowdinValidationError = exports.CrowdinError = exports.BooleanInt = void 0;
+exports.isOptionalNumber = exports.isOptionalString = exports.CrowdinApi = exports.handleHttpClientError = exports.CrowdinValidationError = exports.CrowdinError = exports.BooleanInt = void 0;
+const axios_1 = __nccwpck_require__(8757);
+const http_client_error_1 = __nccwpck_require__(5741);
 const axiosProvider_1 = __nccwpck_require__(5937);
 const fetchClient_1 = __nccwpck_require__(2385);
+const fetchClientError_1 = __nccwpck_require__(3593);
 const retry_1 = __nccwpck_require__(4138);
 /**
  * @internal
@@ -4590,12 +2318,19 @@ exports.CrowdinValidationError = CrowdinValidationError;
 /**
  * @internal
  */
-function handleError(error = {}) {
-    var _a, _b;
-    if (Array.isArray(error.errors)) {
+function handleHttpClientError(error) {
+    var _a, _b, _c, _d;
+    const crowdinResponseErrors = error instanceof axios_1.AxiosError
+        ? (_b = (_a = error.response) === null || _a === void 0 ? void 0 : _a.data) === null || _b === void 0 ? void 0 : _b.errors
+        : error instanceof fetchClientError_1.FetchClientJsonPayloadError
+            ? error.jsonPayload && typeof error.jsonPayload === 'object' && 'errors' in error.jsonPayload
+                ? error.jsonPayload.errors
+                : null
+            : null;
+    if (Array.isArray(crowdinResponseErrors)) {
         const validationCodes = [];
         const validationMessages = [];
-        error.errors.forEach((e) => {
+        crowdinResponseErrors.forEach((e) => {
             var _a;
             if (e.error.key && Array.isArray((_a = e.error) === null || _a === void 0 ? void 0 : _a.errors)) {
                 const codes = [];
@@ -4611,10 +2346,17 @@ function handleError(error = {}) {
         const message = validationMessages.length === 0 ? 'Validation error' : validationMessages.join(', ');
         throw new CrowdinValidationError(message, validationCodes);
     }
-    const message = ((_a = error.error) === null || _a === void 0 ? void 0 : _a.message) || 'Error occured';
-    const code = ((_b = error.error) === null || _b === void 0 ? void 0 : _b.code) || 500;
-    throw new CrowdinError(message, code);
+    if (error instanceof Error) {
+        const code = error instanceof axios_1.AxiosError && ((_c = error.response) === null || _c === void 0 ? void 0 : _c.status)
+            ? (_d = error.response) === null || _d === void 0 ? void 0 : _d.status
+            : error instanceof fetchClientError_1.FetchClientJsonPayloadError
+                ? error.statusCode
+                : 500;
+        throw new CrowdinError(error.message, code);
+    }
+    throw new CrowdinError(`unknown http error: ${String(error)}`, 500);
 }
+exports.handleHttpClientError = handleHttpClientError;
 class CrowdinApi {
     /**
      * @param credentials credentials
@@ -4648,6 +2390,12 @@ class CrowdinApi {
         }
         this.retryService = new retry_1.RetryService(retryConfig);
         this.config = config;
+    }
+    graphql(req) {
+        if (!this.organization) {
+            throw new Error('GraphQL API could be used only with Crowdin Enterprise.');
+        }
+        return this.post(`https://${this.organization}.api.crowdin.com/api/graphql`, req, this.defaultConfig());
     }
     addQueryParam(url, name, value) {
         if (value) {
@@ -4744,22 +2492,34 @@ class CrowdinApi {
     }
     //Http overrides
     get(url, config) {
-        return this.retryService.executeAsyncFunc(() => this.httpClient.get(url, config).catch(e => handleError(e)));
+        return this.retryService
+            .executeAsyncFunc(() => this.httpClient.get(url, config))
+            .catch((err) => handleHttpClientError((0, http_client_error_1.toHttpClientError)(err)));
     }
     delete(url, config) {
-        return this.retryService.executeAsyncFunc(() => this.httpClient.delete(url, config).catch(e => handleError(e)));
+        return this.retryService
+            .executeAsyncFunc(() => this.httpClient.delete(url, config))
+            .catch((err) => handleHttpClientError((0, http_client_error_1.toHttpClientError)(err)));
     }
     head(url, config) {
-        return this.retryService.executeAsyncFunc(() => this.httpClient.head(url, config).catch(e => handleError(e)));
+        return this.retryService
+            .executeAsyncFunc(() => this.httpClient.head(url, config))
+            .catch((err) => handleHttpClientError((0, http_client_error_1.toHttpClientError)(err)));
     }
     post(url, data, config) {
-        return this.retryService.executeAsyncFunc(() => this.httpClient.post(url, data, config).catch(e => handleError(e)));
+        return this.retryService
+            .executeAsyncFunc(() => this.httpClient.post(url, data, config))
+            .catch((err) => handleHttpClientError((0, http_client_error_1.toHttpClientError)(err)));
     }
     put(url, data, config) {
-        return this.retryService.executeAsyncFunc(() => this.httpClient.put(url, data, config).catch(e => handleError(e)));
+        return this.retryService
+            .executeAsyncFunc(() => this.httpClient.put(url, data, config))
+            .catch((err) => handleHttpClientError((0, http_client_error_1.toHttpClientError)(err)));
     }
     patch(url, data, config) {
-        return this.retryService.executeAsyncFunc(() => this.httpClient.patch(url, data, config).catch(e => handleError(e)));
+        return this.retryService
+            .executeAsyncFunc(() => this.httpClient.patch(url, data, config))
+            .catch((err) => handleHttpClientError((0, http_client_error_1.toHttpClientError)(err)));
     }
 }
 exports.CrowdinApi = CrowdinApi;
@@ -4819,7 +2579,7 @@ exports.isOptionalNumber = isOptionalNumber;
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.AxiosProvider = void 0;
-const axios_1 = __nccwpck_require__(8630);
+const axios_1 = __nccwpck_require__(8757);
 /**
  * @internal
  */
@@ -4848,9 +2608,9 @@ class AxiosProvider {
         this.axios.interceptors.response.use(response => {
             this.pendingRequests = Math.max(0, this.pendingRequests - 1);
             return Promise.resolve(response.data);
-        }, error => {
+        }, (error) => {
             this.pendingRequests = Math.max(0, this.pendingRequests - 1);
-            return Promise.reject(error.response.data);
+            return Promise.reject(error);
         });
     }
 }
@@ -4862,12 +2622,13 @@ AxiosProvider.CROWDIN_API_REQUESTS_INTERVAL_MS = 10;
 /***/ }),
 
 /***/ 2385:
-/***/ ((__unused_webpack_module, exports) => {
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.FetchClient = void 0;
+const fetchClientError_1 = __nccwpck_require__(3593);
 /**
  * @internal
  */
@@ -4925,7 +2686,7 @@ class FetchClient {
                 return json;
             }
             else {
-                throw json;
+                throw new fetchClientError_1.FetchClientJsonPayloadError(res.statusText, json, res.status);
             }
         })
             .finally(() => (this.pendingRequests = Math.max(0, this.pendingRequests - 1)));
@@ -4954,6 +2715,36 @@ class FetchClient {
     }
 }
 exports.FetchClient = FetchClient;
+
+
+/***/ }),
+
+/***/ 3593:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.FetchClientJsonPayloadError = void 0;
+class FetchClientJsonPayloadError extends Error {
+    constructor(msg, payload, statusCode) {
+        super(msg);
+        this.payload = payload;
+        this.statusCode = statusCode;
+        /**
+         * Support instanceof operator
+         * @see https://www.typescriptlang.org/docs/handbook/release-notes/typescript-2-2.html#support-for-newtarget
+         */
+        Object.setPrototypeOf(this, new.target.prototype);
+    }
+    get jsonPayload() {
+        if (typeof this.payload === 'object' && this.payload) {
+            return this.payload;
+        }
+        return null;
+    }
+}
+exports.FetchClientJsonPayloadError = FetchClientJsonPayloadError;
 
 
 /***/ }),
@@ -5047,7 +2838,7 @@ class Dictionaries extends core_1.CrowdinApi {
      * @param projectId project identifier
      * @param languageId language identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.dictionaries.patch
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.dictionaries.patch
      */
     editDictionary(projectId, languageId, request) {
         const url = `${this.url}/projects/${projectId}/dictionaries/${languageId}`;
@@ -5078,7 +2869,7 @@ class Distributions extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.distributions.post
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.distributions.post
      */
     createDistribution(projectId, request) {
         const url = `${this.url}/projects/${projectId}/distributions`;
@@ -5087,7 +2878,7 @@ class Distributions extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param hash hash
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.distributions.get
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.distributions.get
      */
     getDistribution(projectId, hash) {
         const url = `${this.url}/projects/${projectId}/distributions/${hash}`;
@@ -5096,7 +2887,7 @@ class Distributions extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param hash hash
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.distributions.delete
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.distributions.delete
      */
     deleteDistribution(projectId, hash) {
         const url = `${this.url}/projects/${projectId}/distributions/${hash}`;
@@ -5106,7 +2897,7 @@ class Distributions extends core_1.CrowdinApi {
      * @param projectId project identifier
      * @param hash hash
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.distributions.patch
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.distributions.patch
      */
     editDistribution(projectId, hash, request) {
         const url = `${this.url}/projects/${projectId}/distributions/${hash}`;
@@ -5115,7 +2906,7 @@ class Distributions extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param hash hash
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.distributions.release.get
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.distributions.release.get
      */
     getDistributionRelease(projectId, hash) {
         const url = `${this.url}/projects/${projectId}/distributions/${hash}/release`;
@@ -5125,7 +2916,7 @@ class Distributions extends core_1.CrowdinApi {
      * @param projectId project identifier
      * @param hash hash
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.distributions.release.post
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.distributions.release.post
      */
     createDistributionRelease(projectId, hash) {
         const url = `${this.url}/projects/${projectId}/distributions/${hash}/release`;
@@ -5162,7 +2953,7 @@ class Glossaries extends core_1.CrowdinApi {
     }
     /**
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.glossaries.post
+     * @see https://developer.crowdin.com/api/v2/#operation/api.glossaries.post
      */
     addGlossary(request) {
         const url = `${this.url}/glossaries`;
@@ -5170,7 +2961,7 @@ class Glossaries extends core_1.CrowdinApi {
     }
     /**
      * @param glossaryId glossary identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.glossaries.get
+     * @see https://developer.crowdin.com/api/v2/#operation/api.glossaries.get
      */
     getGlossary(glossaryId) {
         const url = `${this.url}/glossaries/${glossaryId}`;
@@ -5178,7 +2969,7 @@ class Glossaries extends core_1.CrowdinApi {
     }
     /**
      * @param glossaryId glossary identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.glossaries.delete
+     * @see https://developer.crowdin.com/api/v2/#operation/api.glossaries.delete
      */
     deleteGlossary(glossaryId) {
         const url = `${this.url}/glossaries/${glossaryId}`;
@@ -5187,7 +2978,7 @@ class Glossaries extends core_1.CrowdinApi {
     /**
      * @param glossaryId glossary identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.glossaries.patch
+     * @see https://developer.crowdin.com/api/v2/#operation/api.glossaries.patch
      */
     editGlossary(glossaryId, request) {
         const url = `${this.url}/glossaries/${glossaryId}`;
@@ -5196,7 +2987,7 @@ class Glossaries extends core_1.CrowdinApi {
     /**
      * @param glossaryId glossary identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.glossaries.exports.post
+     * @see https://developer.crowdin.com/api/v2/#operation/api.glossaries.exports.post
      */
     exportGlossary(glossaryId, request) {
         const url = `${this.url}/glossaries/${glossaryId}/exports`;
@@ -5205,7 +2996,7 @@ class Glossaries extends core_1.CrowdinApi {
     /**
      * @param glossaryId glossary identifier
      * @param exportId export identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.glossaries.exports.get
+     * @see https://developer.crowdin.com/api/v2/#operation/api.glossaries.exports.get
      */
     checkGlossaryExportStatus(glossaryId, exportId) {
         const url = `${this.url}/glossaries/${glossaryId}/exports/${exportId}`;
@@ -5214,7 +3005,7 @@ class Glossaries extends core_1.CrowdinApi {
     /**
      * @param glossaryId glossary identifier
      * @param exportId export identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.glossaries.exports.download.download
+     * @see https://developer.crowdin.com/api/v2/#operation/api.glossaries.exports.download.download
      */
     downloadGlossary(glossaryId, exportId) {
         const url = `${this.url}/glossaries/${glossaryId}/exports/${exportId}/download`;
@@ -5223,7 +3014,7 @@ class Glossaries extends core_1.CrowdinApi {
     /**
      * @param glossaryId glossary identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.glossaries.imports.post
+     * @see https://developer.crowdin.com/api/v2/#operation/api.glossaries.imports.post
      */
     importGlossaryFile(glossaryId, request) {
         const url = `${this.url}/glossaries/${glossaryId}/imports`;
@@ -5232,13 +3023,13 @@ class Glossaries extends core_1.CrowdinApi {
     /**
      * @param glossaryId glossary identifier
      * @param importId import identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.glossaries.imports.get
+     * @see https://developer.crowdin.com/api/v2/#operation/api.glossaries.imports.get
      */
     checkGlossaryImportStatus(glossaryId, importId) {
         const url = `${this.url}/glossaries/${glossaryId}/imports/${importId}`;
         return this.get(url, this.defaultConfig());
     }
-    listTerms(glossaryId, options, deprecatedLimit, deprecatedOffset, deprecatedLanguageId, deprecatedTranslationOfTermId) {
+    listTerms(glossaryId, options, deprecatedLimit, deprecatedOffset, deprecatedLanguageId, deprecatedTranslationOfTermId, deprecatedConceptId) {
         let url = `${this.url}/glossaries/${glossaryId}/terms`;
         if ((0, core_1.isOptionalNumber)(options, '1' in arguments)) {
             options = {
@@ -5247,35 +3038,42 @@ class Glossaries extends core_1.CrowdinApi {
                 offset: deprecatedOffset,
                 languageId: deprecatedLanguageId,
                 translationOfTermId: deprecatedTranslationOfTermId,
+                conceptId: deprecatedConceptId,
             };
         }
         url = this.addQueryParam(url, 'userId', options.userId);
         url = this.addQueryParam(url, 'languageId', options.languageId);
         url = this.addQueryParam(url, 'translationOfTermId', options.translationOfTermId);
+        url = this.addQueryParam(url, 'conceptId', options.conceptId);
         return this.getList(url, options.limit, options.offset);
     }
     /**
      * @param glossaryId glossary identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.glossaries.terms.post
+     * @see https://developer.crowdin.com/api/v2/#operation/api.glossaries.terms.post
      */
     addTerm(glossaryId, request) {
         const url = `${this.url}/glossaries/${glossaryId}/terms`;
         return this.post(url, request, this.defaultConfig());
     }
-    clearGlossary(glossaryId, options, deprecatedTranslationOfTermId) {
+    clearGlossary(glossaryId, options, deprecatedTranslationOfTermId, deprecatedConceptId) {
         if ((0, core_1.isOptionalNumber)(options, '1' in arguments)) {
-            options = { languageId: options, translationOfTermId: deprecatedTranslationOfTermId };
+            options = {
+                languageId: options,
+                translationOfTermId: deprecatedTranslationOfTermId,
+                conceptId: deprecatedConceptId,
+            };
         }
         let url = `${this.url}/glossaries/${glossaryId}/terms`;
         url = this.addQueryParam(url, 'languageId', options.languageId);
         url = this.addQueryParam(url, 'translationOfTermId', options.translationOfTermId);
+        url = this.addQueryParam(url, 'conceptId', options.conceptId);
         return this.delete(url, this.defaultConfig());
     }
     /**
      * @param glossaryId glossary identifier
      * @param termId term identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.glossaries.terms.get
+     * @see https://developer.crowdin.com/api/v2/#operation/api.glossaries.terms.get
      */
     getTerm(glossaryId, termId) {
         const url = `${this.url}/glossaries/${glossaryId}/terms/${termId}`;
@@ -5284,7 +3082,7 @@ class Glossaries extends core_1.CrowdinApi {
     /**
      * @param glossaryId glossary identifier
      * @param termId term identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.glossaries.terms.delete
+     * @see https://developer.crowdin.com/api/v2/#operation/api.glossaries.terms.delete
      */
     deleteTerm(glossaryId, termId) {
         const url = `${this.url}/glossaries/${glossaryId}/terms/${termId}`;
@@ -5294,11 +3092,57 @@ class Glossaries extends core_1.CrowdinApi {
      * @param glossaryId glossary identifier
      * @param termId term identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.glossaries.terms.patch
+     * @see https://developer.crowdin.com/api/v2/#operation/api.glossaries.terms.patch
      */
     editTerm(glossaryId, termId, request) {
         const url = `${this.url}/glossaries/${glossaryId}/terms/${termId}`;
         return this.patch(url, request, this.defaultConfig());
+    }
+    /**
+     * @param glossaryId glossary identifier
+     * @param options optional parameters for the request
+     * @see https://developer.crowdin.com/api/v2/#operation/api.glossaries.concepts.getMany
+     */
+    listConcepts(glossaryId, options) {
+        const url = `${this.url}/glossaries/${glossaryId}/concepts`;
+        return this.getList(url, options === null || options === void 0 ? void 0 : options.limit, options === null || options === void 0 ? void 0 : options.offset);
+    }
+    /**
+     * @param glossaryId glossary identifier
+     * @param conceptId concept identifier
+     * @see https://developer.crowdin.com/api/v2/#operation/api.glossaries.concepts.get
+     */
+    getConcept(glossaryId, conceptId) {
+        const url = `${this.url}/glossaries/${glossaryId}/concepts/${conceptId}`;
+        return this.get(url, this.defaultConfig());
+    }
+    /**
+     * @param glossaryId glossary identifier
+     * @param conceptId concept identifier
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/#operation/api.glossaries.concepts.put
+     */
+    updateConcept(glossaryId, conceptId, request) {
+        const url = `${this.url}/glossaries/${glossaryId}/concepts/${conceptId}`;
+        return this.put(url, request, this.defaultConfig());
+    }
+    /**
+     * @param glossaryId glossary identifier
+     * @param conceptId concept identifier
+     * @see https://developer.crowdin.com/api/v2/#operation/api.glossaries.concepts.delete
+     */
+    deleteConcept(glossaryId, conceptId) {
+        const url = `${this.url}/glossaries/${glossaryId}/concepts/${conceptId}`;
+        return this.delete(url, this.defaultConfig());
+    }
+    /**
+     * @param projectId project identifier
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.glossaries.concordance.post
+     */
+    concordanceSearch(projectId, request) {
+        const url = `${this.url}/projects/${projectId}/glossaries/concordance`;
+        return this.post(url, request, this.defaultConfig());
     }
 }
 exports.Glossaries = Glossaries;
@@ -5313,7 +3157,11 @@ exports.Glossaries = Glossaries;
 
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
-    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
 }) : (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     o[k2] = m[k];
@@ -5323,6 +3171,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 const bundles_1 = __nccwpck_require__(3436);
+const core_1 = __nccwpck_require__(4275);
 const dictionaries_1 = __nccwpck_require__(8252);
 const distributions_1 = __nccwpck_require__(3146);
 const glossaries_1 = __nccwpck_require__(510);
@@ -5376,8 +3225,9 @@ __exportStar(__nccwpck_require__(6184), exports);
 /**
  * @internal
  */
-class Client {
+class Client extends core_1.CrowdinApi {
     constructor(credentials, config) {
+        super(credentials, config);
         this.sourceFilesApi = new sourceFiles_1.SourceFiles(credentials, config);
         this.glossariesApi = new glossaries_1.Glossaries(credentials, config);
         this.languagesApi = new languages_1.Languages(credentials, config);
@@ -5441,7 +3291,7 @@ class Issues extends core_1.CrowdinApi {
      * @param projectId project identifier
      * @param issueId issue identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.issues.patch
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.issues.patch
      */
     editIssue(projectId, issueId, request) {
         const url = `${this.url}/projects/${projectId}/issues/${issueId}`;
@@ -5472,7 +3322,7 @@ class Labels extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.labels.post
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.labels.post
      */
     addLabel(projectId, request) {
         const url = `${this.url}/projects/${projectId}/labels`;
@@ -5481,7 +3331,7 @@ class Labels extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param labelId label identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.labels.get
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.labels.get
      */
     getLabel(projectId, labelId) {
         const url = `${this.url}/projects/${projectId}/labels/${labelId}`;
@@ -5490,7 +3340,7 @@ class Labels extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param labelId label identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.labels.delete
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.labels.delete
      */
     deleteLabel(projectId, labelId) {
         const url = `${this.url}/projects/${projectId}/labels/${labelId}`;
@@ -5500,7 +3350,7 @@ class Labels extends core_1.CrowdinApi {
      * @param projectId project identifier
      * @param labelId label identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.labels.patch
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.labels.patch
      */
     editLabel(projectId, labelId, request) {
         const url = `${this.url}/projects/${projectId}/labels/${labelId}`;
@@ -5510,7 +3360,7 @@ class Labels extends core_1.CrowdinApi {
      * @param projectId project identifier
      * @param labelId label identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.labels.strings.post
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.labels.strings.post
      */
     assignLabelToString(projectId, labelId, request) {
         const url = `${this.url}/projects/${projectId}/labels/${labelId}/strings`;
@@ -5520,7 +3370,7 @@ class Labels extends core_1.CrowdinApi {
      * @param projectId project identifier
      * @param labelId label identifier
      * @param stringIds string identifiers
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.labels.strings.deleteMany
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.labels.strings.deleteMany
      */
     unassignLabelFromString(projectId, labelId, stringIds) {
         let url = `${this.url}/projects/${projectId}/labels/${labelId}/strings`;
@@ -5556,7 +3406,7 @@ class Languages extends core_1.CrowdinApi {
     }
     /**
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.languages.post
+     * @see https://developer.crowdin.com/api/v2/#operation/api.languages.post
      */
     addCustomLanguage(request) {
         const url = `${this.url}/languages`;
@@ -5564,7 +3414,7 @@ class Languages extends core_1.CrowdinApi {
     }
     /**
      * @param languageId language identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.languages.get
+     * @see https://developer.crowdin.com/api/v2/#operation/api.languages.get
      */
     getLanguage(languageId) {
         const url = `${this.url}/languages/${languageId}`;
@@ -5572,7 +3422,7 @@ class Languages extends core_1.CrowdinApi {
     }
     /**
      * @param languageId language identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.languages.delete
+     * @see https://developer.crowdin.com/api/v2/#operation/api.languages.delete
      */
     deleteCustomLanguage(languageId) {
         const url = `${this.url}/languages/${languageId}`;
@@ -5581,7 +3431,7 @@ class Languages extends core_1.CrowdinApi {
     /**
      * @param languageId language identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.languages.patch
+     * @see https://developer.crowdin.com/api/v2/#operation/api.languages.patch
      */
     editCustomLanguage(languageId, request) {
         const url = `${this.url}/languages/${languageId}`;
@@ -5626,7 +3476,7 @@ class MachineTranslation extends core_1.CrowdinApi {
     }
     /**
      * @param mtId mt identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.mts.getMany
+     * @see https://developer.crowdin.com/api/v2/#operation/api.mts.getMany
      */
     getMt(mtId) {
         const url = `${this.url}/mts/${mtId}`;
@@ -5652,7 +3502,7 @@ class MachineTranslation extends core_1.CrowdinApi {
     /**
      * @param mtId mt identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.mts.translations.post
+     * @see https://developer.crowdin.com/api/v2/#operation/api.mts.translations.post
      */
     translate(mtId, request) {
         const url = `${this.url}/mts/${mtId}/translations`;
@@ -5744,7 +3594,7 @@ class ProjectsGroups extends core_1.CrowdinApi {
     }
     /**
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.post
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.post
      */
     addProject(request) {
         const url = `${this.url}/projects`;
@@ -5752,7 +3602,7 @@ class ProjectsGroups extends core_1.CrowdinApi {
     }
     /**
      * @param projectId project identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.get
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.get
      */
     getProject(projectId) {
         const url = `${this.url}/projects/${projectId}`;
@@ -5760,7 +3610,7 @@ class ProjectsGroups extends core_1.CrowdinApi {
     }
     /**
      * @param projectId project identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.delete
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.delete
      */
     deleteProject(projectId) {
         const url = `${this.url}/projects/${projectId}`;
@@ -5769,10 +3619,74 @@ class ProjectsGroups extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.patch
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.patch
      */
     editProject(projectId, request) {
         const url = `${this.url}/projects/${projectId}`;
+        return this.patch(url, request, this.defaultConfig());
+    }
+    /**
+     * @param projectId project identifier
+     * @param fileFormatSettingsId file format settings identifier
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.file-format-settings.custom-segmentations.get
+     */
+    downloadProjectFileFormatSettingsCustomSegmentation(projectId, fileFormatSettingsId) {
+        const url = `${this.url}/projects/${projectId}/file-format-settings/${fileFormatSettingsId}/custom-segmentations`;
+        return this.get(url, this.defaultConfig());
+    }
+    /**
+     * @param projectId project identifier
+     * @param fileFormatSettingsId file format settings identifier
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.file-format-settings.custom-segmentations.delete
+     */
+    resetProjectFileFormatSettingsCustomSegmentation(projectId, fileFormatSettingsId) {
+        const url = `${this.url}/projects/${projectId}/file-format-settings/${fileFormatSettingsId}/custom-segmentations`;
+        return this.delete(url, this.defaultConfig());
+    }
+    /**
+     * @param projectId project identifier
+     * @param options optional parameters for the request
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.file-format-settings.getMany
+     */
+    listProjectFileFormatSettings(projectId, options) {
+        const url = `${this.url}/projects/${projectId}/file-format-settings`;
+        return this.getList(url, options === null || options === void 0 ? void 0 : options.limit, options === null || options === void 0 ? void 0 : options.offset);
+    }
+    /**
+     * @param projectId project identifier
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.file-format-settings.post
+     */
+    addProjectFileFormatSettings(projectId, request) {
+        const url = `${this.url}/projects/${projectId}/file-format-settings`;
+        return this.post(url, request, this.defaultConfig());
+    }
+    /**
+     * @param projectId project identifier
+     * @param fileFormatSettingsId file format settings identifier
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.file-format-settings.get
+     */
+    getProjectFileFormatSettings(projectId, fileFormatSettingsId) {
+        const url = `${this.url}/projects/${projectId}/file-format-settings/${fileFormatSettingsId}`;
+        return this.get(url, this.defaultConfig());
+    }
+    /**
+     * @param projectId project identifier
+     * @param fileFormatSettingsId file format settings identifier
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.file-format-settings.delete
+     */
+    deleteProjectFileFormatSettings(projectId, fileFormatSettingsId) {
+        const url = `${this.url}/projects/${projectId}/file-format-settings/${fileFormatSettingsId}`;
+        return this.delete(url, this.defaultConfig());
+    }
+    /**
+     * @param projectId project identifier
+     * @param fileFormatSettingsId file format settings identifier
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.file-format-settings.patch
+     */
+    editProjectFileFormatSettings(projectId, fileFormatSettingsId, request) {
+        const url = `${this.url}/projects/${projectId}/file-format-settings/${fileFormatSettingsId}`;
         return this.patch(url, request, this.defaultConfig());
     }
 }
@@ -5868,7 +3782,7 @@ class Reports extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.reports.post
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.reports.post
      */
     generateReport(projectId, request) {
         const url = `${this.url}/projects/${projectId}/reports`;
@@ -5877,7 +3791,7 @@ class Reports extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param reportId report identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.reports.get
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.reports.get
      */
     checkReportStatus(projectId, reportId) {
         const url = `${this.url}/projects/${projectId}/reports/${reportId}`;
@@ -5886,7 +3800,7 @@ class Reports extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param reportId report identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.reports.download.download
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.reports.download.download
      */
     downloadReport(projectId, reportId) {
         const url = `${this.url}/projects/${projectId}/reports/${reportId}/download`;
@@ -5969,7 +3883,7 @@ class Screenshots extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.screenshots.post
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.screenshots.post
      */
     addScreenshot(projectId, request) {
         const url = `${this.url}/projects/${projectId}/screenshots`;
@@ -5978,7 +3892,7 @@ class Screenshots extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param screenshotId screenshot identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.screenshots.get
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.screenshots.get
      */
     getScreenshot(projectId, screenshotId) {
         const url = `${this.url}/projects/${projectId}/screenshots/${screenshotId}`;
@@ -5988,7 +3902,7 @@ class Screenshots extends core_1.CrowdinApi {
      * @param projectId project identifier
      * @param screenshotId screenshot identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.screenshots.put
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.screenshots.put
      */
     updateScreenshot(projectId, screenshotId, request) {
         const url = `${this.url}/projects/${projectId}/screenshots/${screenshotId}`;
@@ -5997,7 +3911,7 @@ class Screenshots extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param screenshotId screenshot identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.screenshots.delete
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.screenshots.delete
      */
     deleteScreenshot(projectId, screenshotId) {
         const url = `${this.url}/projects/${projectId}/screenshots/${screenshotId}`;
@@ -6007,7 +3921,7 @@ class Screenshots extends core_1.CrowdinApi {
      * @param projectId project identifier
      * @param screenshotId screenshot identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.screenshots.patch
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.screenshots.patch
      */
     editScreenshot(projectId, screenshotId, request) {
         const url = `${this.url}/projects/${projectId}/screenshots/${screenshotId}`;
@@ -6024,7 +3938,7 @@ class Screenshots extends core_1.CrowdinApi {
      * @param projectId project identifier
      * @param screenshotId screenshot identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.screenshots.tags.putMany
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.screenshots.tags.putMany
      */
     replaceTags(projectId, screenshotId, request) {
         const url = `${this.url}/projects/${projectId}/screenshots/${screenshotId}/tags`;
@@ -6034,7 +3948,7 @@ class Screenshots extends core_1.CrowdinApi {
      * @param projectId project identifier
      * @param screenshotId screenshot identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.screenshots.tags.post
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.screenshots.tags.post
      */
     addTag(projectId, screenshotId, request) {
         const url = `${this.url}/projects/${projectId}/screenshots/${screenshotId}/tags`;
@@ -6043,7 +3957,7 @@ class Screenshots extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param screenshotId screenshot identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.screenshots.tags.deleteMany
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.screenshots.tags.deleteMany
      */
     clearTags(projectId, screenshotId) {
         const url = `${this.url}/projects/${projectId}/screenshots/${screenshotId}/tags`;
@@ -6053,7 +3967,7 @@ class Screenshots extends core_1.CrowdinApi {
      * @param projectId project identifier
      * @param screenshotId screenshot identifier
      * @param tagId tag identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.screenshots.tags.get
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.screenshots.tags.get
      */
     getTag(projectId, screenshotId, tagId) {
         const url = `${this.url}/projects/${projectId}/screenshots/${screenshotId}/tags/${tagId}`;
@@ -6063,7 +3977,7 @@ class Screenshots extends core_1.CrowdinApi {
      * @param projectId project identifier
      * @param screenshotId screenshot identifier
      * @param tagId tag identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.screenshots.tags.delete
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.screenshots.tags.delete
      */
     deleteTag(projectId, screenshotId, tagId) {
         const url = `${this.url}/projects/${projectId}/screenshots/${screenshotId}/tags/${tagId}`;
@@ -6074,7 +3988,7 @@ class Screenshots extends core_1.CrowdinApi {
      * @param screenshotId screenshot identifier
      * @param tagId tag identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.screenshots.tags.patch
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.screenshots.tags.patch
      */
     updateTag(projectId, screenshotId, tagId, request) {
         const url = `${this.url}/projects/${projectId}/screenshots/${screenshotId}/tags/${tagId}`;
@@ -6112,7 +4026,7 @@ class SourceFiles extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.branches.post
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.branches.post
      */
     createBranch(projectId, request) {
         const url = `${this.url}/projects/${projectId}/branches`;
@@ -6121,7 +4035,7 @@ class SourceFiles extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param branchId branch identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.branches.get
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.branches.get
      */
     getBranch(projectId, branchId) {
         const url = `${this.url}/projects/${projectId}/branches/${branchId}`;
@@ -6130,7 +4044,7 @@ class SourceFiles extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param branchId branch identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.branches.delete
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.branches.delete
      */
     deleteBranch(projectId, branchId) {
         const url = `${this.url}/projects/${projectId}/branches/${branchId}`;
@@ -6140,7 +4054,7 @@ class SourceFiles extends core_1.CrowdinApi {
      * @param projectId project identifier
      * @param branchId branch identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.branches.patch
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.branches.patch
      */
     editBranch(projectId, branchId, request) {
         const url = `${this.url}/projects/${projectId}/branches/${branchId}`;
@@ -6167,7 +4081,7 @@ class SourceFiles extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.directories.post
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.directories.post
      */
     createDirectory(projectId, request) {
         const url = `${this.url}/projects/${projectId}/directories`;
@@ -6176,7 +4090,7 @@ class SourceFiles extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param directoryId directory identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.directories.get
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.directories.get
      */
     getDirectory(projectId, directoryId) {
         const url = `${this.url}/projects/${projectId}/directories/${directoryId}`;
@@ -6185,7 +4099,7 @@ class SourceFiles extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param directoryId directory identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.directories.delete
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.directories.delete
      */
     deleteDirectory(projectId, directoryId) {
         const url = `${this.url}/projects/${projectId}/directories/${directoryId}`;
@@ -6195,7 +4109,7 @@ class SourceFiles extends core_1.CrowdinApi {
      * @param projectId project identifier
      * @param directoryId directory identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.directories.patch
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.directories.patch
      */
     editDirectory(projectId, directoryId, request) {
         const url = `${this.url}/projects/${projectId}/directories/${directoryId}`;
@@ -6222,7 +4136,7 @@ class SourceFiles extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.files.post
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.files.post
      */
     createFile(projectId, request) {
         const url = `${this.url}/projects/${projectId}/files`;
@@ -6231,7 +4145,7 @@ class SourceFiles extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param fileId file identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.files.get
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.files.get
      */
     getFile(projectId, fileId) {
         const url = `${this.url}/projects/${projectId}/files/${fileId}`;
@@ -6241,7 +4155,7 @@ class SourceFiles extends core_1.CrowdinApi {
      * @param projectId project identifier
      * @param fileId file identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.files.put
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.files.put
      */
     updateOrRestoreFile(projectId, fileId, request) {
         const url = `${this.url}/projects/${projectId}/files/${fileId}`;
@@ -6250,7 +4164,7 @@ class SourceFiles extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param fileId file identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.files.delete
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.files.delete
      */
     deleteFile(projectId, fileId) {
         const url = `${this.url}/projects/${projectId}/files/${fileId}`;
@@ -6260,7 +4174,7 @@ class SourceFiles extends core_1.CrowdinApi {
      * @param projectId project identifier
      * @param fileId file identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.files.patch
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.files.patch
      */
     editFile(projectId, fileId, request) {
         const url = `${this.url}/projects/${projectId}/files/${fileId}`;
@@ -6269,7 +4183,7 @@ class SourceFiles extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param fileId file identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.files.download.get
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.files.download.get
      */
     downloadFile(projectId, fileId) {
         const url = `${this.url}/projects/${projectId}/files/${fileId}/download`;
@@ -6286,7 +4200,7 @@ class SourceFiles extends core_1.CrowdinApi {
      * @param projectId project identifier
      * @param fileId file identifier
      * @param revisionId revision identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.files.revisions.get
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.files.revisions.get
      */
     getFileRevision(projectId, fileId, revisionId) {
         const url = `${this.url}/projects/${projectId}/files/${fileId}/revisions/${revisionId}`;
@@ -6386,7 +4300,7 @@ class SourceStrings extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.strings.post
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.strings.post
      */
     addString(projectId, request) {
         const url = `${this.url}/projects/${projectId}/strings`;
@@ -6395,7 +4309,7 @@ class SourceStrings extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param stringId string identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.strings.get
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.strings.get
      */
     getString(projectId, stringId) {
         const url = `${this.url}/projects/${projectId}/strings/${stringId}`;
@@ -6404,7 +4318,7 @@ class SourceStrings extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param stringId string identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.strings.delete
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.strings.delete
      */
     deleteString(projectId, stringId) {
         const url = `${this.url}/projects/${projectId}/strings/${stringId}`;
@@ -6414,7 +4328,7 @@ class SourceStrings extends core_1.CrowdinApi {
      * @param projectId project identifier
      * @param stringId string identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.strings.patch
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.strings.patch
      */
     editString(projectId, stringId, request) {
         const url = `${this.url}/projects/${projectId}/strings/${stringId}`;
@@ -6468,7 +4382,7 @@ class StringComments extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.comments.post
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.comments.post
      */
     addStringComment(projectId, request) {
         const url = `${this.url}/projects/${projectId}/comments`;
@@ -6477,7 +4391,7 @@ class StringComments extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param stringCommentId string comment identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.comments.get
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.comments.get
      */
     getStringComment(projectId, stringCommentId) {
         const url = `${this.url}/projects/${projectId}/comments/${stringCommentId}`;
@@ -6486,7 +4400,7 @@ class StringComments extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param stringCommentId string comment identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.comments.delete
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.comments.delete
      */
     deleteStringComment(projectId, stringCommentId) {
         const url = `${this.url}/projects/${projectId}/comments/${stringCommentId}`;
@@ -6496,7 +4410,7 @@ class StringComments extends core_1.CrowdinApi {
      * @param projectId project identifier
      * @param stringCommentId string comment identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.comments.patch
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.comments.patch
      */
     editStringComment(projectId, stringCommentId, request) {
         const url = `${this.url}/projects/${projectId}/comments/${stringCommentId}`;
@@ -6541,7 +4455,7 @@ class StringTranslations extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.approvals.post
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.approvals.post
      */
     addApproval(projectId, request) {
         const url = `${this.url}/projects/${projectId}/approvals`;
@@ -6550,7 +4464,7 @@ class StringTranslations extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param approvalId approval identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.approvals.get
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.approvals.get
      */
     approvalInfo(projectId, approvalId) {
         const url = `${this.url}/projects/${projectId}/approvals/${approvalId}`;
@@ -6559,7 +4473,7 @@ class StringTranslations extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param approvalId approval identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.approvals.delete
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.approvals.delete
      */
     removeApproval(projectId, approvalId) {
         const url = `${this.url}/projects/${projectId}/approvals/${approvalId}`;
@@ -6585,6 +4499,15 @@ class StringTranslations extends core_1.CrowdinApi {
         url = this.addQueryParam(url, 'croql', options.croql);
         return this.getList(url, options.limit, options.offset);
     }
+    /**
+     * @param projectId project identifier
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.translations.alignment.post
+     */
+    translationAlignment(projectId, request) {
+        const url = `${this.url}/projects/${projectId}/translations/alignment`;
+        return this.post(url, request, this.defaultConfig());
+    }
     listStringTranslations(projectId, stringId, languageId, options, deprecatedOffset, deprecatedDenormalizePlaceholders) {
         if ((0, core_1.isOptionalNumber)(options, '3' in arguments)) {
             options = {
@@ -6602,7 +4525,7 @@ class StringTranslations extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.translations.post
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.translations.post
      */
     addTranslation(projectId, request) {
         const url = `${this.url}/projects/${projectId}/translations`;
@@ -6612,7 +4535,7 @@ class StringTranslations extends core_1.CrowdinApi {
      * @param projectId project identifier
      * @param stringId string identifier
      * @param languageId language identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.translations.deleteMany
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.translations.deleteMany
      */
     deleteAllTranslations(projectId, stringId, languageId) {
         let url = `${this.url}/projects/${projectId}/translations`;
@@ -6623,7 +4546,7 @@ class StringTranslations extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param translationId translation identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.translations.get
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.translations.get
      */
     translationInfo(projectId, translationId) {
         const url = `${this.url}/projects/${projectId}/translations/${translationId}`;
@@ -6632,7 +4555,7 @@ class StringTranslations extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param translation translation identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.translations.put
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.translations.put
      */
     restoreTranslation(projectId, translationId) {
         const url = `${this.url}/projects/${projectId}/translations/${translationId}/restore`;
@@ -6641,7 +4564,7 @@ class StringTranslations extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param translation translation identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.translations.delete
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.translations.delete
      */
     deleteTranslation(projectId, translationId) {
         const url = `${this.url}/projects/${projectId}/translations/${translationId}`;
@@ -6666,7 +4589,7 @@ class StringTranslations extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.votes.post
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.votes.post
      */
     addVote(projectId, request) {
         const url = `${this.url}/projects/${projectId}/votes`;
@@ -6675,7 +4598,7 @@ class StringTranslations extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param voteId vote identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.votes.get
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.votes.get
      */
     voteInfo(projectId, voteId) {
         const url = `${this.url}/projects/${projectId}/votes/${voteId}`;
@@ -6684,7 +4607,7 @@ class StringTranslations extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param voteId vote identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.votes.delete
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.votes.delete
      */
     cancelVote(projectId, voteId) {
         const url = `${this.url}/projects/${projectId}/votes/${voteId}`;
@@ -6723,7 +4646,7 @@ class Tasks extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.tasks.post
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.tasks.post
      */
     addTask(projectId, request) {
         const url = `${this.url}/projects/${projectId}/tasks`;
@@ -6732,7 +4655,7 @@ class Tasks extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param taskId task identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.tasks.exports.post
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.tasks.exports.post
      */
     exportTaskStrings(projectId, taskId) {
         const url = `${this.url}/projects/${projectId}/tasks/${taskId}/exports`;
@@ -6741,7 +4664,7 @@ class Tasks extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param taskId task identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.tasks.get
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.tasks.get
      */
     getTask(projectId, taskId) {
         const url = `${this.url}/projects/${projectId}/tasks/${taskId}`;
@@ -6750,7 +4673,7 @@ class Tasks extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param taskId task identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.tasks.delete
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.tasks.delete
      */
     deleteTask(projectId, taskId) {
         const url = `${this.url}/projects/${projectId}/tasks/${taskId}`;
@@ -6760,7 +4683,7 @@ class Tasks extends core_1.CrowdinApi {
      * @param projectId project identifier
      * @param taskId task identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.tasks.patch
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.tasks.patch
      */
     editTask(projectId, taskId, request) {
         const url = `${this.url}/projects/${projectId}/tasks/${taskId}`;
@@ -6784,11 +4707,57 @@ class Tasks extends core_1.CrowdinApi {
      * @param projectId project identifier
      * @param taskId task identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.user.tasks.patch
+     * @see https://developer.crowdin.com/api/v2/#operation/api.user.tasks.patch
      */
     editTaskArchivedStatus(projectId, taskId, request) {
         let url = `${this.url}/user/tasks/${taskId}`;
         url = this.addQueryParam(url, 'projectId', projectId);
+        return this.patch(url, request, this.defaultConfig());
+    }
+    /**
+     * @param projectId project identifier
+     * @param options optional parameters for the request
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.tasks.settings-templates.getMany
+     */
+    listTaskSettingsTemplates(projectId, options) {
+        const url = `${this.url}/projects/${projectId}/tasks/settings-templates`;
+        return this.getList(url, options === null || options === void 0 ? void 0 : options.limit, options === null || options === void 0 ? void 0 : options.offset);
+    }
+    /**
+     * @param projectId project identifier
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.tasks.settings-templates.post
+     */
+    addTaskSettingsTemplate(projectId, request) {
+        const url = `${this.url}/projects/${projectId}/tasks/settings-templates`;
+        return this.post(url, request, this.defaultConfig());
+    }
+    /**
+     * @param projectId project identifier
+     * @param taskSettingsId task settings identifier
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.tasks.settings-templates.get
+     */
+    getTaskSettingsTemplate(projectId, taskSettingsId) {
+        const url = `${this.url}/projects/${projectId}/tasks/settings-templates/${taskSettingsId}`;
+        return this.get(url, this.defaultConfig());
+    }
+    /**
+     * @param projectId project identifier
+     * @param taskSettingsId task settings identifier
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.tasks.settings-templates.delete
+     */
+    deleteTaskSettingsTemplate(projectId, taskSettingsId) {
+        const url = `${this.url}/projects/${projectId}/tasks/settings-templates/${taskSettingsId}`;
+        return this.delete(url, this.defaultConfig());
+    }
+    /**
+     * @param projectId project identifier
+     * @param taskSettingsId task settings identifier
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.tasks.settings-templates.patch
+     */
+    editTaskSettingsTemplate(projectId, taskSettingsId, request) {
+        const url = `${this.url}/projects/${projectId}/tasks/settings-templates/${taskSettingsId}`;
         return this.patch(url, request, this.defaultConfig());
     }
 }
@@ -6930,7 +4899,7 @@ class TranslationMemory extends core_1.CrowdinApi {
     }
     /**
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.tms.post
+     * @see https://developer.crowdin.com/api/v2/#operation/api.tms.post
      */
     addTm(request) {
         const url = `${this.url}/tms`;
@@ -6938,7 +4907,7 @@ class TranslationMemory extends core_1.CrowdinApi {
     }
     /**
      * @param tmId tm identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.tms.get
+     * @see https://developer.crowdin.com/api/v2/#operation/api.tms.get
      */
     getTm(tmId) {
         const url = `${this.url}/tms/${tmId}`;
@@ -6946,7 +4915,7 @@ class TranslationMemory extends core_1.CrowdinApi {
     }
     /**
      * @param tmId tm identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.tms.delete
+     * @see https://developer.crowdin.com/api/v2/#operation/api.tms.delete
      */
     deleteTm(tmId) {
         const url = `${this.url}/tms/${tmId}`;
@@ -6955,7 +4924,7 @@ class TranslationMemory extends core_1.CrowdinApi {
     /**
      * @param tmId tm identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.tms.patch
+     * @see https://developer.crowdin.com/api/v2/#operation/api.tms.patch
      */
     editTm(tmId, request) {
         const url = `${this.url}/tms/${tmId}`;
@@ -6963,7 +4932,7 @@ class TranslationMemory extends core_1.CrowdinApi {
     }
     /**
      * @param tmId tm identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.tms.segments.clear
+     * @see https://developer.crowdin.com/api/v2/#operation/api.tms.segments.clear
      */
     clearTm(tmId) {
         const url = `${this.url}/tms/${tmId}/segments`;
@@ -6972,7 +4941,7 @@ class TranslationMemory extends core_1.CrowdinApi {
     /**
      * @param tmId tm identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.tms.exports.post
+     * @see https://developer.crowdin.com/api/v2/#operation/api.tms.exports.post
      */
     exportTm(tmId, request = {}) {
         const url = `${this.url}/tms/${tmId}/exports`;
@@ -6981,7 +4950,7 @@ class TranslationMemory extends core_1.CrowdinApi {
     /**
      * @param tmId tm identifier
      * @param exportId export identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.tms.exports.get
+     * @see https://developer.crowdin.com/api/v2/#operation/api.tms.exports.get
      */
     checkExportStatus(tmId, exportId) {
         const url = `${this.url}/tms/${tmId}/exports/${exportId}`;
@@ -6990,16 +4959,25 @@ class TranslationMemory extends core_1.CrowdinApi {
     /**
      * @param tmId tm identifier
      * @param exportId export identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.tms.exports.download.download
+     * @see https://developer.crowdin.com/api/v2/#operation/api.tms.exports.download.download
      */
     downloadTm(tmId, exportId) {
         const url = `${this.url}/tms/${tmId}/exports/${exportId}/download`;
         return this.get(url, this.defaultConfig());
     }
     /**
+     * @param projectId project identifier
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.tms.concordance.post
+     */
+    concordanceSearch(projectId, request) {
+        const url = `${this.url}/projects/${projectId}/tms/concordance`;
+        return this.post(url, request, this.defaultConfig());
+    }
+    /**
      * @param tmId tm identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.tms.imports.post
+     * @see https://developer.crowdin.com/api/v2/#operation/api.tms.imports.post
      */
     importTm(tmId, request) {
         const url = `${this.url}/tms/${tmId}/imports`;
@@ -7008,7 +4986,7 @@ class TranslationMemory extends core_1.CrowdinApi {
     /**
      * @param tmId tm identifier
      * @param importId import identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.tms.imports.get
+     * @see https://developer.crowdin.com/api/v2/#operation/api.tms.imports.get
      */
     checkImportStatus(tmId, importId) {
         const url = `${this.url}/tms/${tmId}/imports/${importId}`;
@@ -7110,7 +5088,7 @@ class Translations extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param preTranslationId pre translation identifier
-     * @see https://support.crowdin.com/api/v2/#tag/Translations/paths/~1projects~1{projectId}~1pre-translations~1{preTranslationId}/get
+     * @see https://developer.crowdin.com/api/v2/#tag/Translations/paths/~1projects~1{projectId}~1pre-translations~1{preTranslationId}/get
      */
     preTranslationStatus(projectId, preTranslationId) {
         const url = `${this.url}/projects/${projectId}/pre-translations/${preTranslationId}`;
@@ -7119,7 +5097,7 @@ class Translations extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.pre-translations.post
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.pre-translations.post
      */
     applyPreTranslation(projectId, request) {
         const url = `${this.url}/projects/${projectId}/pre-translations`;
@@ -7129,7 +5107,7 @@ class Translations extends core_1.CrowdinApi {
      * @param projectId project identifier
      * @param directoryId directory identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.translations.builds.directories.post
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.translations.builds.directories.post
      */
     buildProjectDirectoryTranslation(projectId, directoryId, request = {}) {
         const url = `${this.url}/projects/${projectId}/translations/builds/directories/${directoryId}`;
@@ -7141,7 +5119,7 @@ class Translations extends core_1.CrowdinApi {
      * @param fileId file identifier
      * @param request request body
      * @param eTag 'If-None-Match' header
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.translations.builds.files.post
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.translations.builds.files.post
      */
     buildProjectFileTranslation(projectId, fileId, request, eTag) {
         const url = `${this.url}/projects/${projectId}/translations/builds/files/${fileId}`;
@@ -7162,7 +5140,7 @@ class Translations extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.translations.builds.post
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.translations.builds.post
      */
     buildProject(projectId, request = {}) {
         const url = `${this.url}/projects/${projectId}/translations/builds`;
@@ -7172,7 +5150,7 @@ class Translations extends core_1.CrowdinApi {
      * @param projectId project identifier
      * @param languageId language identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.translations.postOnLanguage
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.translations.postOnLanguage
      */
     uploadTranslation(projectId, languageId, request) {
         const url = `${this.url}/projects/${projectId}/translations/${languageId}`;
@@ -7181,7 +5159,7 @@ class Translations extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param buildId build identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.translations.builds.download.download
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.translations.builds.download.download
      */
     downloadTranslations(projectId, buildId) {
         const url = `${this.url}/projects/${projectId}/translations/builds/${buildId}/download`;
@@ -7190,7 +5168,7 @@ class Translations extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param buildId build identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.translations.builds.get
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.translations.builds.get
      */
     checkBuildStatus(projectId, buildId) {
         const url = `${this.url}/projects/${projectId}/translations/builds/${buildId}`;
@@ -7199,7 +5177,7 @@ class Translations extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param buildId build identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.translations.builds.delete
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.translations.builds.delete
      */
     cancelBuild(projectId, buildId) {
         const url = `${this.url}/projects/${projectId}/translations/builds/${buildId}`;
@@ -7208,7 +5186,7 @@ class Translations extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.translations.exports.post
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.translations.exports.post
      */
     exportProjectTranslation(projectId, request) {
         const url = `${this.url}/projects/${projectId}/translations/exports`;
@@ -8157,7 +6135,7 @@ class UploadStorage extends core_1.CrowdinApi {
      * @param fileName file name
      * @param request binary file data
      * @param contentType content type header
-     * @see https://support.crowdin.com/api/v2/#operation/api.storages.post
+     * @see https://developer.crowdin.com/api/v2/#operation/api.storages.post
      */
     addStorage(fileName, request, contentType) {
         const url = `${this.url}/storages`;
@@ -8165,6 +6143,9 @@ class UploadStorage extends core_1.CrowdinApi {
         config.headers['Crowdin-API-FileName'] = this.encodeUrlParam(fileName);
         if (contentType) {
             config.headers['Content-Type'] = contentType;
+        }
+        else if (typeof request === 'string') {
+            config.headers['Content-Type'] = 'text/plain';
         }
         else {
             const fileNameParts = fileName.split('.');
@@ -8179,7 +6160,7 @@ class UploadStorage extends core_1.CrowdinApi {
     }
     /**
      * @param storageId storage identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.storages.get
+     * @see https://developer.crowdin.com/api/v2/#operation/api.storages.get
      */
     getStorage(storageId) {
         const url = `${this.url}/storages/${storageId}`;
@@ -8187,7 +6168,7 @@ class UploadStorage extends core_1.CrowdinApi {
     }
     /**
      * @param storageId storage identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.storages.delete
+     * @see https://developer.crowdin.com/api/v2/#operation/api.storages.delete
      */
     deleteStorage(storageId) {
         const url = `${this.url}/storages/${storageId}`;
@@ -8242,7 +6223,7 @@ class Users extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param memberId member identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.members.get
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.members.get
      */
     getProjectMemberPermissions(projectId, memberId) {
         const url = `${this.url}/projects/${projectId}/members/${memberId}`;
@@ -8316,7 +6297,7 @@ class Users extends core_1.CrowdinApi {
         return this.patch(url, request, this.defaultConfig());
     }
     /**
-     * @see https://support.crowdin.com/api/v2/#operation/api.user.get
+     * @see https://developer.crowdin.com/api/v2/#operation/api.user.get
      */
     getAuthenticatedUser() {
         const url = `${this.url}/user`;
@@ -8380,7 +6361,7 @@ class Webhooks extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.webhooks.post
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.webhooks.post
      */
     addWebhook(projectId, request) {
         const url = `${this.url}/projects/${projectId}/webhooks`;
@@ -8389,7 +6370,7 @@ class Webhooks extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param webhookId webhook identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.webhooks.get
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.webhooks.get
      */
     getWebhook(projectId, webhookId) {
         const url = `${this.url}/projects/${projectId}/webhooks/${webhookId}`;
@@ -8398,7 +6379,7 @@ class Webhooks extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param webhookId webhook identifier
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.webhooks.delete
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.webhooks.delete
      */
     deleteWebhook(projectId, webhookId) {
         const url = `${this.url}/projects/${projectId}/webhooks/${webhookId}`;
@@ -8408,7 +6389,7 @@ class Webhooks extends core_1.CrowdinApi {
      * @param projectId project identifier
      * @param webhookId webhook identifier
      * @param request request body
-     * @see https://support.crowdin.com/api/v2/#operation/api.projects.webhooks.patch
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.webhooks.patch
      */
     editWebhook(projectId, webhookId, request) {
         const url = `${this.url}/projects/${projectId}/webhooks/${webhookId}`;
@@ -11495,12 +9476,12 @@ module.exports.wrap = wrap;
 
 "use strict";
 
-module.exports = (flag, argv) => {
-	argv = argv || process.argv;
+
+module.exports = (flag, argv = process.argv) => {
 	const prefix = flag.startsWith('-') ? '' : (flag.length === 1 ? '-' : '--');
-	const pos = argv.indexOf(prefix + flag);
-	const terminatorPos = argv.indexOf('--');
-	return pos !== -1 && (terminatorPos === -1 ? true : pos < terminatorPos);
+	const position = argv.indexOf(prefix + flag);
+	const terminatorPosition = argv.indexOf('--');
+	return position !== -1 && (terminatorPosition === -1 || position < terminatorPosition);
 };
 
 
@@ -18335,23 +16316,32 @@ exports.getProxyForUrl = getProxyForUrl;
 "use strict";
 
 const os = __nccwpck_require__(2037);
+const tty = __nccwpck_require__(6224);
 const hasFlag = __nccwpck_require__(1621);
 
-const env = process.env;
+const {env} = process;
 
 let forceColor;
 if (hasFlag('no-color') ||
 	hasFlag('no-colors') ||
-	hasFlag('color=false')) {
-	forceColor = false;
+	hasFlag('color=false') ||
+	hasFlag('color=never')) {
+	forceColor = 0;
 } else if (hasFlag('color') ||
 	hasFlag('colors') ||
 	hasFlag('color=true') ||
 	hasFlag('color=always')) {
-	forceColor = true;
+	forceColor = 1;
 }
+
 if ('FORCE_COLOR' in env) {
-	forceColor = env.FORCE_COLOR.length === 0 || parseInt(env.FORCE_COLOR, 10) !== 0;
+	if (env.FORCE_COLOR === 'true') {
+		forceColor = 1;
+	} else if (env.FORCE_COLOR === 'false') {
+		forceColor = 0;
+	} else {
+		forceColor = env.FORCE_COLOR.length === 0 ? 1 : Math.min(parseInt(env.FORCE_COLOR, 10), 3);
+	}
 }
 
 function translateLevel(level) {
@@ -18367,8 +16357,8 @@ function translateLevel(level) {
 	};
 }
 
-function supportsColor(stream) {
-	if (forceColor === false) {
+function supportsColor(haveStream, streamIsTTY) {
+	if (forceColor === 0) {
 		return 0;
 	}
 
@@ -18382,22 +16372,21 @@ function supportsColor(stream) {
 		return 2;
 	}
 
-	if (stream && !stream.isTTY && forceColor !== true) {
+	if (haveStream && !streamIsTTY && forceColor === undefined) {
 		return 0;
 	}
 
-	const min = forceColor ? 1 : 0;
+	const min = forceColor || 0;
+
+	if (env.TERM === 'dumb') {
+		return min;
+	}
 
 	if (process.platform === 'win32') {
-		// Node.js 7.5.0 is the first version of Node.js to include a patch to
-		// libuv that enables 256 color output on Windows. Anything earlier and it
-		// won't work. However, here we target Node.js 8 at minimum as it is an LTS
-		// release, and Node.js 7 is not. Windows 10 build 10586 is the first Windows
-		// release that supports 256 colors. Windows 10 build 14931 is the first release
-		// that supports 16m/TrueColor.
+		// Windows 10 build 10586 is the first Windows release that supports 256 colors.
+		// Windows 10 build 14931 is the first release that supports 16m/TrueColor.
 		const osRelease = os.release().split('.');
 		if (
-			Number(process.versions.node.split('.')[0]) >= 8 &&
 			Number(osRelease[0]) >= 10 &&
 			Number(osRelease[2]) >= 10586
 		) {
@@ -18408,7 +16397,7 @@ function supportsColor(stream) {
 	}
 
 	if ('CI' in env) {
-		if (['TRAVIS', 'CIRCLECI', 'APPVEYOR', 'GITLAB_CI'].some(sign => sign in env) || env.CI_NAME === 'codeship') {
+		if (['TRAVIS', 'CIRCLECI', 'APPVEYOR', 'GITLAB_CI', 'GITHUB_ACTIONS', 'BUILDKITE'].some(sign => sign in env) || env.CI_NAME === 'codeship') {
 			return 1;
 		}
 
@@ -18447,22 +16436,18 @@ function supportsColor(stream) {
 		return 1;
 	}
 
-	if (env.TERM === 'dumb') {
-		return min;
-	}
-
 	return min;
 }
 
 function getSupportLevel(stream) {
-	const level = supportsColor(stream);
+	const level = supportsColor(stream, stream && stream.isTTY);
 	return translateLevel(level);
 }
 
 module.exports = {
 	supportsColor: getSupportLevel,
-	stdout: getSupportLevel(process.stdout),
-	stderr: getSupportLevel(process.stderr)
+	stdout: translateLevel(supportsColor(true, tty.isatty(1))),
+	stderr: translateLevel(supportsColor(true, tty.isatty(2)))
 };
 
 
@@ -19518,7 +17503,7 @@ module.exports = require("zlib");
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
-// Axios v1.1.3 Copyright (c) 2022 Matt Zabriskie and contributors
+// Axios v1.3.4 Copyright (c) 2023 Matt Zabriskie and contributors
 
 
 const FormData$1 = __nccwpck_require__(1403);
@@ -19526,6 +17511,7 @@ const url = __nccwpck_require__(7310);
 const proxyFromEnv = __nccwpck_require__(3329);
 const http = __nccwpck_require__(3685);
 const https = __nccwpck_require__(5687);
+const util = __nccwpck_require__(3837);
 const followRedirects = __nccwpck_require__(7707);
 const zlib = __nccwpck_require__(9796);
 const stream = __nccwpck_require__(2781);
@@ -19537,6 +17523,7 @@ const FormData__default = /*#__PURE__*/_interopDefaultLegacy(FormData$1);
 const url__default = /*#__PURE__*/_interopDefaultLegacy(url);
 const http__default = /*#__PURE__*/_interopDefaultLegacy(http);
 const https__default = /*#__PURE__*/_interopDefaultLegacy(https);
+const util__default = /*#__PURE__*/_interopDefaultLegacy(util);
 const followRedirects__default = /*#__PURE__*/_interopDefaultLegacy(followRedirects);
 const zlib__default = /*#__PURE__*/_interopDefaultLegacy(zlib);
 const stream__default = /*#__PURE__*/_interopDefaultLegacy(stream);
@@ -19774,7 +17761,7 @@ const trim = (str) => str.trim ?
  * @param {Function} fn The callback to invoke for each item
  *
  * @param {Boolean} [allOwnKeys = false]
- * @returns {void}
+ * @returns {any}
  */
 function forEach(obj, fn, {allOwnKeys = false} = {}) {
   // Don't bother if no value provided
@@ -19809,6 +17796,28 @@ function forEach(obj, fn, {allOwnKeys = false} = {}) {
   }
 }
 
+function findKey(obj, key) {
+  key = key.toLowerCase();
+  const keys = Object.keys(obj);
+  let i = keys.length;
+  let _key;
+  while (i-- > 0) {
+    _key = keys[i];
+    if (key === _key.toLowerCase()) {
+      return _key;
+    }
+  }
+  return null;
+}
+
+const _global = (() => {
+  /*eslint no-undef:0*/
+  if (typeof globalThis !== "undefined") return globalThis;
+  return typeof self !== "undefined" ? self : (typeof window !== 'undefined' ? window : global)
+})();
+
+const isContextDefined = (context) => !isUndefined(context) && context !== _global;
+
 /**
  * Accepts varargs expecting each argument to be an object, then
  * immutably merges the properties of each object and returns result.
@@ -19828,16 +17837,18 @@ function forEach(obj, fn, {allOwnKeys = false} = {}) {
  * @returns {Object} Result of all merge properties
  */
 function merge(/* obj1, obj2, obj3, ... */) {
+  const {caseless} = isContextDefined(this) && this || {};
   const result = {};
   const assignValue = (val, key) => {
-    if (isPlainObject(result[key]) && isPlainObject(val)) {
-      result[key] = merge(result[key], val);
+    const targetKey = caseless && findKey(result, key) || key;
+    if (isPlainObject(result[targetKey]) && isPlainObject(val)) {
+      result[targetKey] = merge(result[targetKey], val);
     } else if (isPlainObject(val)) {
-      result[key] = merge({}, val);
+      result[targetKey] = merge({}, val);
     } else if (isArray(val)) {
-      result[key] = val.slice();
+      result[targetKey] = val.slice();
     } else {
-      result[key] = val;
+      result[targetKey] = val;
     }
   };
 
@@ -20034,7 +18045,7 @@ const matchAll = (regExp, str) => {
 const isHTMLForm = kindOfTest('HTMLFormElement');
 
 const toCamelCase = str => {
-  return str.toLowerCase().replace(/[_-\s]([a-z\d])(\w*)/g,
+  return str.toLowerCase().replace(/[-_\s]([a-z\d])(\w*)/g,
     function replacer(m, p1, p2) {
       return p1.toUpperCase() + p2;
     }
@@ -20073,6 +18084,11 @@ const reduceDescriptors = (obj, reducer) => {
 
 const freezeMethods = (obj) => {
   reduceDescriptors(obj, (descriptor, name) => {
+    // skip restricted props in strict mode
+    if (isFunction(obj) && ['arguments', 'caller', 'callee'].indexOf(name) !== -1) {
+      return false;
+    }
+
     const value = obj[name];
 
     if (!isFunction(value)) return;
@@ -20086,7 +18102,7 @@ const freezeMethods = (obj) => {
 
     if (!descriptor.set) {
       descriptor.set = () => {
-        throw Error('Can not read-only method \'' + name + '\'');
+        throw Error('Can not rewrite read-only method \'' + name + '\'');
       };
     }
   });
@@ -20111,6 +18127,68 @@ const noop = () => {};
 const toFiniteNumber = (value, defaultValue) => {
   value = +value;
   return Number.isFinite(value) ? value : defaultValue;
+};
+
+const ALPHA = 'abcdefghijklmnopqrstuvwxyz';
+
+const DIGIT = '0123456789';
+
+const ALPHABET = {
+  DIGIT,
+  ALPHA,
+  ALPHA_DIGIT: ALPHA + ALPHA.toUpperCase() + DIGIT
+};
+
+const generateString = (size = 16, alphabet = ALPHABET.ALPHA_DIGIT) => {
+  let str = '';
+  const {length} = alphabet;
+  while (size--) {
+    str += alphabet[Math.random() * length|0];
+  }
+
+  return str;
+};
+
+/**
+ * If the thing is a FormData object, return true, otherwise return false.
+ *
+ * @param {unknown} thing - The thing to check.
+ *
+ * @returns {boolean}
+ */
+function isSpecCompliantForm(thing) {
+  return !!(thing && isFunction(thing.append) && thing[Symbol.toStringTag] === 'FormData' && thing[Symbol.iterator]);
+}
+
+const toJSONObject = (obj) => {
+  const stack = new Array(10);
+
+  const visit = (source, i) => {
+
+    if (isObject(source)) {
+      if (stack.indexOf(source) >= 0) {
+        return;
+      }
+
+      if(!('toJSON' in source)) {
+        stack[i] = source;
+        const target = isArray(source) ? [] : {};
+
+        forEach(source, (value, key) => {
+          const reducedValue = visit(value, i + 1);
+          !isUndefined(reducedValue) && (target[key] = reducedValue);
+        });
+
+        stack[i] = undefined;
+
+        return target;
+      }
+    }
+
+    return source;
+  };
+
+  return visit(obj, 0);
 };
 
 const utils = {
@@ -20155,7 +18233,14 @@ const utils = {
   toObjectSet,
   toCamelCase,
   noop,
-  toFiniteNumber
+  toFiniteNumber,
+  findKey,
+  global: _global,
+  isContextDefined,
+  ALPHABET,
+  generateString,
+  isSpecCompliantForm,
+  toJSONObject
 };
 
 /**
@@ -20201,7 +18286,7 @@ utils.inherits(AxiosError, Error, {
       columnNumber: this.columnNumber,
       stack: this.stack,
       // Axios
-      config: this.config,
+      config: utils.toJSONObject(this.config),
       code: this.code,
       status: this.response && this.response.status ? this.response.status : null
     };
@@ -20309,17 +18394,6 @@ const predicates = utils.toFlatObject(utils, {}, null, function filter(prop) {
 });
 
 /**
- * If the thing is a FormData object, return true, otherwise return false.
- *
- * @param {unknown} thing - The thing to check.
- *
- * @returns {boolean}
- */
-function isSpecCompliant(thing) {
-  return thing && utils.isFunction(thing.append) && thing[Symbol.toStringTag] === 'FormData' && thing[Symbol.iterator];
-}
-
-/**
  * Convert a data object to FormData
  *
  * @param {Object} obj
@@ -20366,7 +18440,7 @@ function toFormData(obj, formData, options) {
   const dots = options.dots;
   const indexes = options.indexes;
   const _Blob = options.Blob || typeof Blob !== 'undefined' && Blob;
-  const useBlob = _Blob && isSpecCompliant(formData);
+  const useBlob = _Blob && utils.isSpecCompliantForm(formData);
 
   if (!utils.isFunction(visitor)) {
     throw new TypeError('visitor must be a function');
@@ -20411,7 +18485,7 @@ function toFormData(obj, formData, options) {
         value = JSON.stringify(value);
       } else if (
         (utils.isArray(value) && isFlatArray(value)) ||
-        (utils.isFileList(value) || utils.endsWith(key, '[]') && (arr = utils.toArray(value))
+        ((utils.isFileList(value) || utils.endsWith(key, '[]')) && (arr = utils.toArray(value))
         )) {
         // eslint-disable-next-line no-param-reassign
         key = removeBrackets(key);
@@ -20653,6 +18727,8 @@ class InterceptorManager {
   }
 }
 
+const InterceptorManager$1 = InterceptorManager;
+
 const transitionalDefaults = {
   silentJSONParsing: true,
   forcedJSONParsing: true,
@@ -20771,6 +18847,547 @@ function formDataToJSON(formData) {
   return null;
 }
 
+const DEFAULT_CONTENT_TYPE = {
+  'Content-Type': undefined
+};
+
+/**
+ * It takes a string, tries to parse it, and if it fails, it returns the stringified version
+ * of the input
+ *
+ * @param {any} rawValue - The value to be stringified.
+ * @param {Function} parser - A function that parses a string into a JavaScript object.
+ * @param {Function} encoder - A function that takes a value and returns a string.
+ *
+ * @returns {string} A stringified version of the rawValue.
+ */
+function stringifySafely(rawValue, parser, encoder) {
+  if (utils.isString(rawValue)) {
+    try {
+      (parser || JSON.parse)(rawValue);
+      return utils.trim(rawValue);
+    } catch (e) {
+      if (e.name !== 'SyntaxError') {
+        throw e;
+      }
+    }
+  }
+
+  return (encoder || JSON.stringify)(rawValue);
+}
+
+const defaults = {
+
+  transitional: transitionalDefaults,
+
+  adapter: ['xhr', 'http'],
+
+  transformRequest: [function transformRequest(data, headers) {
+    const contentType = headers.getContentType() || '';
+    const hasJSONContentType = contentType.indexOf('application/json') > -1;
+    const isObjectPayload = utils.isObject(data);
+
+    if (isObjectPayload && utils.isHTMLForm(data)) {
+      data = new FormData(data);
+    }
+
+    const isFormData = utils.isFormData(data);
+
+    if (isFormData) {
+      if (!hasJSONContentType) {
+        return data;
+      }
+      return hasJSONContentType ? JSON.stringify(formDataToJSON(data)) : data;
+    }
+
+    if (utils.isArrayBuffer(data) ||
+      utils.isBuffer(data) ||
+      utils.isStream(data) ||
+      utils.isFile(data) ||
+      utils.isBlob(data)
+    ) {
+      return data;
+    }
+    if (utils.isArrayBufferView(data)) {
+      return data.buffer;
+    }
+    if (utils.isURLSearchParams(data)) {
+      headers.setContentType('application/x-www-form-urlencoded;charset=utf-8', false);
+      return data.toString();
+    }
+
+    let isFileList;
+
+    if (isObjectPayload) {
+      if (contentType.indexOf('application/x-www-form-urlencoded') > -1) {
+        return toURLEncodedForm(data, this.formSerializer).toString();
+      }
+
+      if ((isFileList = utils.isFileList(data)) || contentType.indexOf('multipart/form-data') > -1) {
+        const _FormData = this.env && this.env.FormData;
+
+        return toFormData(
+          isFileList ? {'files[]': data} : data,
+          _FormData && new _FormData(),
+          this.formSerializer
+        );
+      }
+    }
+
+    if (isObjectPayload || hasJSONContentType ) {
+      headers.setContentType('application/json', false);
+      return stringifySafely(data);
+    }
+
+    return data;
+  }],
+
+  transformResponse: [function transformResponse(data) {
+    const transitional = this.transitional || defaults.transitional;
+    const forcedJSONParsing = transitional && transitional.forcedJSONParsing;
+    const JSONRequested = this.responseType === 'json';
+
+    if (data && utils.isString(data) && ((forcedJSONParsing && !this.responseType) || JSONRequested)) {
+      const silentJSONParsing = transitional && transitional.silentJSONParsing;
+      const strictJSONParsing = !silentJSONParsing && JSONRequested;
+
+      try {
+        return JSON.parse(data);
+      } catch (e) {
+        if (strictJSONParsing) {
+          if (e.name === 'SyntaxError') {
+            throw AxiosError.from(e, AxiosError.ERR_BAD_RESPONSE, this, null, this.response);
+          }
+          throw e;
+        }
+      }
+    }
+
+    return data;
+  }],
+
+  /**
+   * A timeout in milliseconds to abort a request. If set to 0 (default) a
+   * timeout is not created.
+   */
+  timeout: 0,
+
+  xsrfCookieName: 'XSRF-TOKEN',
+  xsrfHeaderName: 'X-XSRF-TOKEN',
+
+  maxContentLength: -1,
+  maxBodyLength: -1,
+
+  env: {
+    FormData: platform.classes.FormData,
+    Blob: platform.classes.Blob
+  },
+
+  validateStatus: function validateStatus(status) {
+    return status >= 200 && status < 300;
+  },
+
+  headers: {
+    common: {
+      'Accept': 'application/json, text/plain, */*'
+    }
+  }
+};
+
+utils.forEach(['delete', 'get', 'head'], function forEachMethodNoData(method) {
+  defaults.headers[method] = {};
+});
+
+utils.forEach(['post', 'put', 'patch'], function forEachMethodWithData(method) {
+  defaults.headers[method] = utils.merge(DEFAULT_CONTENT_TYPE);
+});
+
+const defaults$1 = defaults;
+
+// RawAxiosHeaders whose duplicates are ignored by node
+// c.f. https://nodejs.org/api/http.html#http_message_headers
+const ignoreDuplicateOf = utils.toObjectSet([
+  'age', 'authorization', 'content-length', 'content-type', 'etag',
+  'expires', 'from', 'host', 'if-modified-since', 'if-unmodified-since',
+  'last-modified', 'location', 'max-forwards', 'proxy-authorization',
+  'referer', 'retry-after', 'user-agent'
+]);
+
+/**
+ * Parse headers into an object
+ *
+ * ```
+ * Date: Wed, 27 Aug 2014 08:58:49 GMT
+ * Content-Type: application/json
+ * Connection: keep-alive
+ * Transfer-Encoding: chunked
+ * ```
+ *
+ * @param {String} rawHeaders Headers needing to be parsed
+ *
+ * @returns {Object} Headers parsed into an object
+ */
+const parseHeaders = rawHeaders => {
+  const parsed = {};
+  let key;
+  let val;
+  let i;
+
+  rawHeaders && rawHeaders.split('\n').forEach(function parser(line) {
+    i = line.indexOf(':');
+    key = line.substring(0, i).trim().toLowerCase();
+    val = line.substring(i + 1).trim();
+
+    if (!key || (parsed[key] && ignoreDuplicateOf[key])) {
+      return;
+    }
+
+    if (key === 'set-cookie') {
+      if (parsed[key]) {
+        parsed[key].push(val);
+      } else {
+        parsed[key] = [val];
+      }
+    } else {
+      parsed[key] = parsed[key] ? parsed[key] + ', ' + val : val;
+    }
+  });
+
+  return parsed;
+};
+
+const $internals = Symbol('internals');
+
+function normalizeHeader(header) {
+  return header && String(header).trim().toLowerCase();
+}
+
+function normalizeValue(value) {
+  if (value === false || value == null) {
+    return value;
+  }
+
+  return utils.isArray(value) ? value.map(normalizeValue) : String(value);
+}
+
+function parseTokens(str) {
+  const tokens = Object.create(null);
+  const tokensRE = /([^\s,;=]+)\s*(?:=\s*([^,;]+))?/g;
+  let match;
+
+  while ((match = tokensRE.exec(str))) {
+    tokens[match[1]] = match[2];
+  }
+
+  return tokens;
+}
+
+function isValidHeaderName(str) {
+  return /^[-_a-zA-Z]+$/.test(str.trim());
+}
+
+function matchHeaderValue(context, value, header, filter, isHeaderNameFilter) {
+  if (utils.isFunction(filter)) {
+    return filter.call(this, value, header);
+  }
+
+  if (isHeaderNameFilter) {
+    value = header;
+  }
+
+  if (!utils.isString(value)) return;
+
+  if (utils.isString(filter)) {
+    return value.indexOf(filter) !== -1;
+  }
+
+  if (utils.isRegExp(filter)) {
+    return filter.test(value);
+  }
+}
+
+function formatHeader(header) {
+  return header.trim()
+    .toLowerCase().replace(/([a-z\d])(\w*)/g, (w, char, str) => {
+      return char.toUpperCase() + str;
+    });
+}
+
+function buildAccessors(obj, header) {
+  const accessorName = utils.toCamelCase(' ' + header);
+
+  ['get', 'set', 'has'].forEach(methodName => {
+    Object.defineProperty(obj, methodName + accessorName, {
+      value: function(arg1, arg2, arg3) {
+        return this[methodName].call(this, header, arg1, arg2, arg3);
+      },
+      configurable: true
+    });
+  });
+}
+
+class AxiosHeaders {
+  constructor(headers) {
+    headers && this.set(headers);
+  }
+
+  set(header, valueOrRewrite, rewrite) {
+    const self = this;
+
+    function setHeader(_value, _header, _rewrite) {
+      const lHeader = normalizeHeader(_header);
+
+      if (!lHeader) {
+        throw new Error('header name must be a non-empty string');
+      }
+
+      const key = utils.findKey(self, lHeader);
+
+      if(!key || self[key] === undefined || _rewrite === true || (_rewrite === undefined && self[key] !== false)) {
+        self[key || _header] = normalizeValue(_value);
+      }
+    }
+
+    const setHeaders = (headers, _rewrite) =>
+      utils.forEach(headers, (_value, _header) => setHeader(_value, _header, _rewrite));
+
+    if (utils.isPlainObject(header) || header instanceof this.constructor) {
+      setHeaders(header, valueOrRewrite);
+    } else if(utils.isString(header) && (header = header.trim()) && !isValidHeaderName(header)) {
+      setHeaders(parseHeaders(header), valueOrRewrite);
+    } else {
+      header != null && setHeader(valueOrRewrite, header, rewrite);
+    }
+
+    return this;
+  }
+
+  get(header, parser) {
+    header = normalizeHeader(header);
+
+    if (header) {
+      const key = utils.findKey(this, header);
+
+      if (key) {
+        const value = this[key];
+
+        if (!parser) {
+          return value;
+        }
+
+        if (parser === true) {
+          return parseTokens(value);
+        }
+
+        if (utils.isFunction(parser)) {
+          return parser.call(this, value, key);
+        }
+
+        if (utils.isRegExp(parser)) {
+          return parser.exec(value);
+        }
+
+        throw new TypeError('parser must be boolean|regexp|function');
+      }
+    }
+  }
+
+  has(header, matcher) {
+    header = normalizeHeader(header);
+
+    if (header) {
+      const key = utils.findKey(this, header);
+
+      return !!(key && this[key] !== undefined && (!matcher || matchHeaderValue(this, this[key], key, matcher)));
+    }
+
+    return false;
+  }
+
+  delete(header, matcher) {
+    const self = this;
+    let deleted = false;
+
+    function deleteHeader(_header) {
+      _header = normalizeHeader(_header);
+
+      if (_header) {
+        const key = utils.findKey(self, _header);
+
+        if (key && (!matcher || matchHeaderValue(self, self[key], key, matcher))) {
+          delete self[key];
+
+          deleted = true;
+        }
+      }
+    }
+
+    if (utils.isArray(header)) {
+      header.forEach(deleteHeader);
+    } else {
+      deleteHeader(header);
+    }
+
+    return deleted;
+  }
+
+  clear(matcher) {
+    const keys = Object.keys(this);
+    let i = keys.length;
+    let deleted = false;
+
+    while (i--) {
+      const key = keys[i];
+      if(!matcher || matchHeaderValue(this, this[key], key, matcher, true)) {
+        delete this[key];
+        deleted = true;
+      }
+    }
+
+    return deleted;
+  }
+
+  normalize(format) {
+    const self = this;
+    const headers = {};
+
+    utils.forEach(this, (value, header) => {
+      const key = utils.findKey(headers, header);
+
+      if (key) {
+        self[key] = normalizeValue(value);
+        delete self[header];
+        return;
+      }
+
+      const normalized = format ? formatHeader(header) : String(header).trim();
+
+      if (normalized !== header) {
+        delete self[header];
+      }
+
+      self[normalized] = normalizeValue(value);
+
+      headers[normalized] = true;
+    });
+
+    return this;
+  }
+
+  concat(...targets) {
+    return this.constructor.concat(this, ...targets);
+  }
+
+  toJSON(asStrings) {
+    const obj = Object.create(null);
+
+    utils.forEach(this, (value, header) => {
+      value != null && value !== false && (obj[header] = asStrings && utils.isArray(value) ? value.join(', ') : value);
+    });
+
+    return obj;
+  }
+
+  [Symbol.iterator]() {
+    return Object.entries(this.toJSON())[Symbol.iterator]();
+  }
+
+  toString() {
+    return Object.entries(this.toJSON()).map(([header, value]) => header + ': ' + value).join('\n');
+  }
+
+  get [Symbol.toStringTag]() {
+    return 'AxiosHeaders';
+  }
+
+  static from(thing) {
+    return thing instanceof this ? thing : new this(thing);
+  }
+
+  static concat(first, ...targets) {
+    const computed = new this(first);
+
+    targets.forEach((target) => computed.set(target));
+
+    return computed;
+  }
+
+  static accessor(header) {
+    const internals = this[$internals] = (this[$internals] = {
+      accessors: {}
+    });
+
+    const accessors = internals.accessors;
+    const prototype = this.prototype;
+
+    function defineAccessor(_header) {
+      const lHeader = normalizeHeader(_header);
+
+      if (!accessors[lHeader]) {
+        buildAccessors(prototype, _header);
+        accessors[lHeader] = true;
+      }
+    }
+
+    utils.isArray(header) ? header.forEach(defineAccessor) : defineAccessor(header);
+
+    return this;
+  }
+}
+
+AxiosHeaders.accessor(['Content-Type', 'Content-Length', 'Accept', 'Accept-Encoding', 'User-Agent', 'Authorization']);
+
+utils.freezeMethods(AxiosHeaders.prototype);
+utils.freezeMethods(AxiosHeaders);
+
+const AxiosHeaders$1 = AxiosHeaders;
+
+/**
+ * Transform the data for a request or a response
+ *
+ * @param {Array|Function} fns A single function or Array of functions
+ * @param {?Object} response The response object
+ *
+ * @returns {*} The resulting transformed data
+ */
+function transformData(fns, response) {
+  const config = this || defaults$1;
+  const context = response || config;
+  const headers = AxiosHeaders$1.from(context.headers);
+  let data = context.data;
+
+  utils.forEach(fns, function transform(fn) {
+    data = fn.call(config, data, headers.normalize(), response ? response.status : undefined);
+  });
+
+  headers.normalize();
+
+  return data;
+}
+
+function isCancel(value) {
+  return !!(value && value.__CANCEL__);
+}
+
+/**
+ * A `CanceledError` is an object that is thrown when an operation is canceled.
+ *
+ * @param {string=} message The message.
+ * @param {Object=} config The config.
+ * @param {Object=} request The request.
+ *
+ * @returns {CanceledError} The created error.
+ */
+function CanceledError(message, config, request) {
+  // eslint-disable-next-line no-eq-null,eqeqeq
+  AxiosError.call(this, message == null ? 'canceled' : message, AxiosError.ERR_CANCELED, config, request);
+  this.name = 'CanceledError';
+}
+
+utils.inherits(CanceledError, AxiosError, {
+  __CANCEL__: true
+});
+
 /**
  * Resolve or reject a Promise based on response status.
  *
@@ -20840,26 +19457,7 @@ function buildFullPath(baseURL, requestedURL) {
   return requestedURL;
 }
 
-const VERSION = "1.1.3";
-
-/**
- * A `CanceledError` is an object that is thrown when an operation is canceled.
- *
- * @param {string=} message The message.
- * @param {Object=} config The config.
- * @param {Object=} request The request.
- *
- * @returns {CanceledError} The created error.
- */
-function CanceledError(message, config, request) {
-  // eslint-disable-next-line no-eq-null,eqeqeq
-  AxiosError.call(this, message == null ? 'canceled' : message, AxiosError.ERR_CANCELED, config, request);
-  this.name = 'CanceledError';
-}
-
-utils.inherits(CanceledError, AxiosError, {
-  __CANCEL__: true
-});
+const VERSION = "1.3.4";
 
 function parseProtocol(url) {
   const match = /^([-+\w]{1,25})(:?\/\/|:)/.exec(url);
@@ -20913,320 +19511,6 @@ function fromDataURI(uri, asBlob, options) {
 
   throw new AxiosError('Unsupported protocol ' + protocol, AxiosError.ERR_NOT_SUPPORT);
 }
-
-// RawAxiosHeaders whose duplicates are ignored by node
-// c.f. https://nodejs.org/api/http.html#http_message_headers
-const ignoreDuplicateOf = utils.toObjectSet([
-  'age', 'authorization', 'content-length', 'content-type', 'etag',
-  'expires', 'from', 'host', 'if-modified-since', 'if-unmodified-since',
-  'last-modified', 'location', 'max-forwards', 'proxy-authorization',
-  'referer', 'retry-after', 'user-agent'
-]);
-
-/**
- * Parse headers into an object
- *
- * ```
- * Date: Wed, 27 Aug 2014 08:58:49 GMT
- * Content-Type: application/json
- * Connection: keep-alive
- * Transfer-Encoding: chunked
- * ```
- *
- * @param {String} rawHeaders Headers needing to be parsed
- *
- * @returns {Object} Headers parsed into an object
- */
-const parseHeaders = rawHeaders => {
-  const parsed = {};
-  let key;
-  let val;
-  let i;
-
-  rawHeaders && rawHeaders.split('\n').forEach(function parser(line) {
-    i = line.indexOf(':');
-    key = line.substring(0, i).trim().toLowerCase();
-    val = line.substring(i + 1).trim();
-
-    if (!key || (parsed[key] && ignoreDuplicateOf[key])) {
-      return;
-    }
-
-    if (key === 'set-cookie') {
-      if (parsed[key]) {
-        parsed[key].push(val);
-      } else {
-        parsed[key] = [val];
-      }
-    } else {
-      parsed[key] = parsed[key] ? parsed[key] + ', ' + val : val;
-    }
-  });
-
-  return parsed;
-};
-
-const $internals = Symbol('internals');
-const $defaults = Symbol('defaults');
-
-function normalizeHeader(header) {
-  return header && String(header).trim().toLowerCase();
-}
-
-function normalizeValue(value) {
-  if (value === false || value == null) {
-    return value;
-  }
-
-  return utils.isArray(value) ? value.map(normalizeValue) : String(value);
-}
-
-function parseTokens(str) {
-  const tokens = Object.create(null);
-  const tokensRE = /([^\s,;=]+)\s*(?:=\s*([^,;]+))?/g;
-  let match;
-
-  while ((match = tokensRE.exec(str))) {
-    tokens[match[1]] = match[2];
-  }
-
-  return tokens;
-}
-
-function matchHeaderValue(context, value, header, filter) {
-  if (utils.isFunction(filter)) {
-    return filter.call(this, value, header);
-  }
-
-  if (!utils.isString(value)) return;
-
-  if (utils.isString(filter)) {
-    return value.indexOf(filter) !== -1;
-  }
-
-  if (utils.isRegExp(filter)) {
-    return filter.test(value);
-  }
-}
-
-function formatHeader(header) {
-  return header.trim()
-    .toLowerCase().replace(/([a-z\d])(\w*)/g, (w, char, str) => {
-      return char.toUpperCase() + str;
-    });
-}
-
-function buildAccessors(obj, header) {
-  const accessorName = utils.toCamelCase(' ' + header);
-
-  ['get', 'set', 'has'].forEach(methodName => {
-    Object.defineProperty(obj, methodName + accessorName, {
-      value: function(arg1, arg2, arg3) {
-        return this[methodName].call(this, header, arg1, arg2, arg3);
-      },
-      configurable: true
-    });
-  });
-}
-
-function findKey(obj, key) {
-  key = key.toLowerCase();
-  const keys = Object.keys(obj);
-  let i = keys.length;
-  let _key;
-  while (i-- > 0) {
-    _key = keys[i];
-    if (key === _key.toLowerCase()) {
-      return _key;
-    }
-  }
-  return null;
-}
-
-function AxiosHeaders(headers, defaults) {
-  headers && this.set(headers);
-  this[$defaults] = defaults || null;
-}
-
-Object.assign(AxiosHeaders.prototype, {
-  set: function(header, valueOrRewrite, rewrite) {
-    const self = this;
-
-    function setHeader(_value, _header, _rewrite) {
-      const lHeader = normalizeHeader(_header);
-
-      if (!lHeader) {
-        throw new Error('header name must be a non-empty string');
-      }
-
-      const key = findKey(self, lHeader);
-
-      if (key && _rewrite !== true && (self[key] === false || _rewrite === false)) {
-        return;
-      }
-
-      self[key || _header] = normalizeValue(_value);
-    }
-
-    if (utils.isPlainObject(header)) {
-      utils.forEach(header, (_value, _header) => {
-        setHeader(_value, _header, valueOrRewrite);
-      });
-    } else {
-      setHeader(valueOrRewrite, header, rewrite);
-    }
-
-    return this;
-  },
-
-  get: function(header, parser) {
-    header = normalizeHeader(header);
-
-    if (!header) return undefined;
-
-    const key = findKey(this, header);
-
-    if (key) {
-      const value = this[key];
-
-      if (!parser) {
-        return value;
-      }
-
-      if (parser === true) {
-        return parseTokens(value);
-      }
-
-      if (utils.isFunction(parser)) {
-        return parser.call(this, value, key);
-      }
-
-      if (utils.isRegExp(parser)) {
-        return parser.exec(value);
-      }
-
-      throw new TypeError('parser must be boolean|regexp|function');
-    }
-  },
-
-  has: function(header, matcher) {
-    header = normalizeHeader(header);
-
-    if (header) {
-      const key = findKey(this, header);
-
-      return !!(key && (!matcher || matchHeaderValue(this, this[key], key, matcher)));
-    }
-
-    return false;
-  },
-
-  delete: function(header, matcher) {
-    const self = this;
-    let deleted = false;
-
-    function deleteHeader(_header) {
-      _header = normalizeHeader(_header);
-
-      if (_header) {
-        const key = findKey(self, _header);
-
-        if (key && (!matcher || matchHeaderValue(self, self[key], key, matcher))) {
-          delete self[key];
-
-          deleted = true;
-        }
-      }
-    }
-
-    if (utils.isArray(header)) {
-      header.forEach(deleteHeader);
-    } else {
-      deleteHeader(header);
-    }
-
-    return deleted;
-  },
-
-  clear: function() {
-    return Object.keys(this).forEach(this.delete.bind(this));
-  },
-
-  normalize: function(format) {
-    const self = this;
-    const headers = {};
-
-    utils.forEach(this, (value, header) => {
-      const key = findKey(headers, header);
-
-      if (key) {
-        self[key] = normalizeValue(value);
-        delete self[header];
-        return;
-      }
-
-      const normalized = format ? formatHeader(header) : String(header).trim();
-
-      if (normalized !== header) {
-        delete self[header];
-      }
-
-      self[normalized] = normalizeValue(value);
-
-      headers[normalized] = true;
-    });
-
-    return this;
-  },
-
-  toJSON: function(asStrings) {
-    const obj = Object.create(null);
-
-    utils.forEach(Object.assign({}, this[$defaults] || null, this),
-      (value, header) => {
-        if (value == null || value === false) return;
-        obj[header] = asStrings && utils.isArray(value) ? value.join(', ') : value;
-      });
-
-    return obj;
-  }
-});
-
-Object.assign(AxiosHeaders, {
-  from: function(thing) {
-    if (utils.isString(thing)) {
-      return new this(parseHeaders(thing));
-    }
-    return thing instanceof this ? thing : new this(thing);
-  },
-
-  accessor: function(header) {
-    const internals = this[$internals] = (this[$internals] = {
-      accessors: {}
-    });
-
-    const accessors = internals.accessors;
-    const prototype = this.prototype;
-
-    function defineAccessor(_header) {
-      const lHeader = normalizeHeader(_header);
-
-      if (!accessors[lHeader]) {
-        buildAccessors(prototype, _header);
-        accessors[lHeader] = true;
-      }
-    }
-
-    utils.isArray(header) ? header.forEach(defineAccessor) : defineAccessor(header);
-
-    return this;
-  }
-});
-
-AxiosHeaders.accessor(['Content-Type', 'Content-Length', 'Accept', 'Accept-Encoding', 'User-Agent']);
-
-utils.freezeMethods(AxiosHeaders.prototype);
-utils.freezeMethods(AxiosHeaders);
 
 /**
  * Throttle decorator
@@ -21306,7 +19590,7 @@ function speedometer(samplesCount, min) {
 
     const passed = startedAt && now - startedAt;
 
-    return  passed ? Math.round(bytesCount * 1000 / passed) : undefined;
+    return passed ? Math.round(bytesCount * 1000 / passed) : undefined;
   };
 }
 
@@ -21493,6 +19777,166 @@ class AxiosTransformStream extends stream__default["default"].Transform{
   }
 }
 
+const AxiosTransformStream$1 = AxiosTransformStream;
+
+const {asyncIterator} = Symbol;
+
+const readBlob = async function* (blob) {
+  if (blob.stream) {
+    yield* blob.stream();
+  } else if (blob.arrayBuffer) {
+    yield await blob.arrayBuffer();
+  } else if (blob[asyncIterator]) {
+    yield* blob[asyncIterator]();
+  } else {
+    yield blob;
+  }
+};
+
+const readBlob$1 = readBlob;
+
+const BOUNDARY_ALPHABET = utils.ALPHABET.ALPHA_DIGIT + '-_';
+
+const textEncoder = new util.TextEncoder();
+
+const CRLF = '\r\n';
+const CRLF_BYTES = textEncoder.encode(CRLF);
+const CRLF_BYTES_COUNT = 2;
+
+class FormDataPart {
+  constructor(name, value) {
+    const {escapeName} = this.constructor;
+    const isStringValue = utils.isString(value);
+
+    let headers = `Content-Disposition: form-data; name="${escapeName(name)}"${
+      !isStringValue && value.name ? `; filename="${escapeName(value.name)}"` : ''
+    }${CRLF}`;
+
+    if (isStringValue) {
+      value = textEncoder.encode(String(value).replace(/\r?\n|\r\n?/g, CRLF));
+    } else {
+      headers += `Content-Type: ${value.type || "application/octet-stream"}${CRLF}`;
+    }
+
+    this.headers = textEncoder.encode(headers + CRLF);
+
+    this.contentLength = isStringValue ? value.byteLength : value.size;
+
+    this.size = this.headers.byteLength + this.contentLength + CRLF_BYTES_COUNT;
+
+    this.name = name;
+    this.value = value;
+  }
+
+  async *encode(){
+    yield this.headers;
+
+    const {value} = this;
+
+    if(utils.isTypedArray(value)) {
+      yield value;
+    } else {
+      yield* readBlob$1(value);
+    }
+
+    yield CRLF_BYTES;
+  }
+
+  static escapeName(name) {
+      return String(name).replace(/[\r\n"]/g, (match) => ({
+        '\r' : '%0D',
+        '\n' : '%0A',
+        '"' : '%22',
+      }[match]));
+  }
+}
+
+const formDataToStream = (form, headersHandler, options) => {
+  const {
+    tag = 'form-data-boundary',
+    size = 25,
+    boundary = tag + '-' + utils.generateString(size, BOUNDARY_ALPHABET)
+  } = options || {};
+
+  if(!utils.isFormData(form)) {
+    throw TypeError('FormData instance required');
+  }
+
+  if (boundary.length < 1 || boundary.length > 70) {
+    throw Error('boundary must be 10-70 characters long')
+  }
+
+  const boundaryBytes = textEncoder.encode('--' + boundary + CRLF);
+  const footerBytes = textEncoder.encode('--' + boundary + '--' + CRLF + CRLF);
+  let contentLength = footerBytes.byteLength;
+
+  const parts = Array.from(form.entries()).map(([name, value]) => {
+    const part = new FormDataPart(name, value);
+    contentLength += part.size;
+    return part;
+  });
+
+  contentLength += boundaryBytes.byteLength * parts.length;
+
+  contentLength = utils.toFiniteNumber(contentLength);
+
+  const computedHeaders = {
+    'Content-Type': `multipart/form-data; boundary=${boundary}`
+  };
+
+  if (Number.isFinite(contentLength)) {
+    computedHeaders['Content-Length'] = contentLength;
+  }
+
+  headersHandler && headersHandler(computedHeaders);
+
+  return stream.Readable.from((async function *() {
+    for(const part of parts) {
+      yield boundaryBytes;
+      yield* part.encode();
+    }
+
+    yield footerBytes;
+  })());
+};
+
+const formDataToStream$1 = formDataToStream;
+
+class ZlibHeaderTransformStream extends stream__default["default"].Transform {
+  __transform(chunk, encoding, callback) {
+    this.push(chunk);
+    callback();
+  }
+
+  _transform(chunk, encoding, callback) {
+    if (chunk.length !== 0) {
+      this._transform = this.__transform;
+
+      // Add Default Compression headers if no zlib headers are present
+      if (chunk[0] !== 120) { // Hex: 78
+        const header = Buffer.alloc(2);
+        header[0] = 120; // Hex: 78
+        header[1] = 156; // Hex: 9C 
+        this.push(header, encoding);
+      }
+    }
+
+    this.__transform(chunk, encoding, callback);
+  }
+}
+
+const ZlibHeaderTransformStream$1 = ZlibHeaderTransformStream;
+
+const zlibOptions = {
+  flush: zlib__default["default"].constants.Z_SYNC_FLUSH,
+  finishFlush: zlib__default["default"].constants.Z_SYNC_FLUSH
+};
+
+const brotliOptions = {
+  flush: zlib__default["default"].constants.BROTLI_OPERATION_FLUSH,
+  finishFlush: zlib__default["default"].constants.BROTLI_OPERATION_FLUSH
+};
+
 const isBrotliSupported = utils.isFunction(zlib__default["default"].createBrotliDecompress);
 
 const {http: httpFollow, https: httpsFollow} = followRedirects__default["default"];
@@ -21573,14 +20017,41 @@ function setProxy(options, configProxy, location) {
   };
 }
 
+const isHttpAdapterSupported = typeof process !== 'undefined' && utils.kindOf(process) === 'process';
+
+// temporary hotfix
+
+const wrapAsync = (asyncExecutor) => {
+  return new Promise((resolve, reject) => {
+    let onDone;
+    let isDone;
+
+    const done = (value, isRejected) => {
+      if (isDone) return;
+      isDone = true;
+      onDone && onDone(value, isRejected);
+    };
+
+    const _resolve = (value) => {
+      done(value);
+      resolve(value);
+    };
+
+    const _reject = (reason) => {
+      done(reason, true);
+      reject(reason);
+    };
+
+    asyncExecutor(_resolve, _reject, (onDoneHandler) => (onDone = onDoneHandler)).catch(_reject);
+  })
+};
+
 /*eslint consistent-return:0*/
-function httpAdapter(config) {
-  return new Promise(function dispatchHttpRequest(resolvePromise, rejectPromise) {
-    let data = config.data;
-    const responseType = config.responseType;
-    const responseEncoding = config.responseEncoding;
+const httpAdapter = isHttpAdapterSupported && function httpAdapter(config) {
+  return wrapAsync(async function dispatchHttpRequest(resolve, reject, onDone) {
+    let {data} = config;
+    const {responseType, responseEncoding} = config;
     const method = config.method.toUpperCase();
-    let isFinished;
     let isDone;
     let rejected = false;
     let req;
@@ -21588,10 +20059,7 @@ function httpAdapter(config) {
     // temporary internal emitter until the AxiosRequest class will be implemented
     const emitter = new EventEmitter__default["default"]();
 
-    function onFinished() {
-      if (isFinished) return;
-      isFinished = true;
-
+    const onFinished = () => {
       if (config.cancelToken) {
         config.cancelToken.unsubscribe(abort);
       }
@@ -21601,28 +20069,15 @@ function httpAdapter(config) {
       }
 
       emitter.removeAllListeners();
-    }
+    };
 
-    function done(value, isRejected) {
-      if (isDone) return;
-
+    onDone((value, isRejected) => {
       isDone = true;
-
       if (isRejected) {
         rejected = true;
         onFinished();
       }
-
-      isRejected ? rejectPromise(value) : resolvePromise(value);
-    }
-
-    const resolve = function resolve(value) {
-      done(value);
-    };
-
-    const reject = function reject(value) {
-      done(value, true);
-    };
+    });
 
     function abort(reason) {
       emitter.emit('abort', !reason || reason.type ? new CanceledError(null, config, req) : reason);
@@ -21639,7 +20094,7 @@ function httpAdapter(config) {
 
     // Parse url
     const fullPath = buildFullPath(config.baseURL, config.url);
-    const parsed = new URL(fullPath);
+    const parsed = new URL(fullPath, 'http://localhost');
     const protocol = parsed.protocol || supportedProtocols[0];
 
     if (protocol === 'data:') {
@@ -21666,7 +20121,7 @@ function httpAdapter(config) {
         convertedData = convertedData.toString(responseEncoding);
 
         if (!responseEncoding || responseEncoding === 'utf8') {
-          data = utils.stripBOM(convertedData);
+          convertedData = utils.stripBOM(convertedData);
         }
       } else if (responseType === 'stream') {
         convertedData = stream__default["default"].Readable.from(convertedData);
@@ -21676,7 +20131,7 @@ function httpAdapter(config) {
         data: convertedData,
         status: 200,
         statusText: 'OK',
-        headers: {},
+        headers: new AxiosHeaders$1(),
         config
       });
     }
@@ -21689,7 +20144,7 @@ function httpAdapter(config) {
       ));
     }
 
-    const headers = AxiosHeaders.from(config.headers).normalize();
+    const headers = AxiosHeaders$1.from(config.headers).normalize();
 
     // Set User-Agent (required by some servers)
     // See https://github.com/axios/axios/issues/69
@@ -21703,9 +20158,32 @@ function httpAdapter(config) {
     let maxUploadRate = undefined;
     let maxDownloadRate = undefined;
 
-    // support for https://www.npmjs.com/package/form-data api
-    if (utils.isFormData(data) && utils.isFunction(data.getHeaders)) {
+    // support for spec compliant FormData objects
+    if (utils.isSpecCompliantForm(data)) {
+      const userBoundary = headers.getContentType(/boundary=([-_\w\d]{10,70})/i);
+
+      data = formDataToStream$1(data, (formHeaders) => {
+        headers.set(formHeaders);
+      }, {
+        tag: `axios-${VERSION}-boundary`,
+        boundary: userBoundary && userBoundary[1] || undefined
+      });
+      // support for https://www.npmjs.com/package/form-data api
+    } else if (utils.isFormData(data) && utils.isFunction(data.getHeaders)) {
       headers.set(data.getHeaders());
+
+      if (!headers.hasContentLength()) {
+        try {
+          const knownLength = await util__default["default"].promisify(data.getLength).call(data);
+          Number.isFinite(knownLength) && knownLength >= 0 && headers.setContentLength(knownLength);
+          /*eslint no-empty:0*/
+        } catch (e) {
+        }
+      }
+    } else if (utils.isBlob(data)) {
+      data.size && headers.setContentType(data.type || 'application/octet-stream');
+      headers.setContentLength(data.size || 0);
+      data = stream__default["default"].Readable.from(readBlob$1(data));
     } else if (data && !utils.isStream(data)) {
       if (Buffer.isBuffer(data)) ; else if (utils.isArrayBuffer(data)) {
         data = Buffer.from(new Uint8Array(data));
@@ -21720,7 +20198,7 @@ function httpAdapter(config) {
       }
 
       // Add Content-Length header if data exists
-      headers.set('Content-Length', data.length, false);
+      headers.setContentLength(data.length, false);
 
       if (config.maxBodyLength > -1 && data.length > config.maxBodyLength) {
         return reject(new AxiosError(
@@ -21731,7 +20209,7 @@ function httpAdapter(config) {
       }
     }
 
-    const contentLength = +headers.getContentLength();
+    const contentLength = utils.toFiniteNumber(headers.getContentLength());
 
     if (utils.isArray(maxRate)) {
       maxUploadRate = maxRate[0];
@@ -21745,8 +20223,8 @@ function httpAdapter(config) {
         data = stream__default["default"].Readable.from(data, {objectMode: false});
       }
 
-      data = stream__default["default"].pipeline([data, new AxiosTransformStream({
-        length: utils.toFiniteNumber(contentLength),
+      data = stream__default["default"].pipeline([data, new AxiosTransformStream$1({
+        length: contentLength,
         maxRate: utils.toFiniteNumber(maxUploadRate)
       })], utils.noop);
 
@@ -21789,7 +20267,10 @@ function httpAdapter(config) {
       return reject(customErr);
     }
 
-    headers.set('Accept-Encoding', 'gzip, deflate, br', false);
+    headers.set(
+      'Accept-Encoding',
+      'gzip, compress, deflate' + (isBrotliSupported ? ', br' : ''), false
+      );
 
     const options = {
       path,
@@ -21844,43 +20325,10 @@ function httpAdapter(config) {
 
       const streams = [res];
 
-      // uncompress the response body transparently if required
-      let responseStream = res;
-
-      // return the last request in case of redirects
-      const lastRequest = res.req || req;
-
-      // if decompress disabled we should not decompress
-      if (config.decompress !== false) {
-        // if no content, but headers still say that it is encoded,
-        // remove the header not confuse downstream operations
-        if (data && data.length === 0 && res.headers['content-encoding']) {
-          delete res.headers['content-encoding'];
-        }
-
-        switch (res.headers['content-encoding']) {
-        /*eslint default-case:0*/
-        case 'gzip':
-        case 'compress':
-        case 'deflate':
-          // add the unzipper to the body stream processing pipeline
-          streams.push(zlib__default["default"].createUnzip());
-
-          // remove the content-encoding in order to not confuse downstream operations
-          delete res.headers['content-encoding'];
-          break;
-        case 'br':
-          if (isBrotliSupported) {
-            streams.push(zlib__default["default"].createBrotliDecompress());
-            delete res.headers['content-encoding'];
-          }
-        }
-      }
+      const responseLength = +res.headers['content-length'];
 
       if (onDownloadProgress) {
-        const responseLength = +res.headers['content-length'];
-
-        const transformStream = new AxiosTransformStream({
+        const transformStream = new AxiosTransformStream$1({
           length: utils.toFiniteNumber(responseLength),
           maxRate: utils.toFiniteNumber(maxDownloadRate)
         });
@@ -21894,6 +20342,49 @@ function httpAdapter(config) {
         streams.push(transformStream);
       }
 
+      // decompress the response body transparently if required
+      let responseStream = res;
+
+      // return the last request in case of redirects
+      const lastRequest = res.req || req;
+
+      // if decompress disabled we should not decompress
+      if (config.decompress !== false && res.headers['content-encoding']) {
+        // if no content, but headers still say that it is encoded,
+        // remove the header not confuse downstream operations
+        if (method === 'HEAD' || res.statusCode === 204) {
+          delete res.headers['content-encoding'];
+        }
+
+        switch (res.headers['content-encoding']) {
+        /*eslint default-case:0*/
+        case 'gzip':
+        case 'x-gzip':
+        case 'compress':
+        case 'x-compress':
+          // add the unzipper to the body stream processing pipeline
+          streams.push(zlib__default["default"].createUnzip(zlibOptions));
+
+          // remove the content-encoding in order to not confuse downstream operations
+          delete res.headers['content-encoding'];
+          break;
+        case 'deflate':
+          streams.push(new ZlibHeaderTransformStream$1());
+
+          // add the unzipper to the body stream processing pipeline
+          streams.push(zlib__default["default"].createUnzip(zlibOptions));
+
+          // remove the content-encoding in order to not confuse downstream operations
+          delete res.headers['content-encoding'];
+          break;
+        case 'br':
+          if (isBrotliSupported) {
+            streams.push(zlib__default["default"].createBrotliDecompress(brotliOptions));
+            delete res.headers['content-encoding'];
+          }
+        }
+      }
+
       responseStream = streams.length > 1 ? stream__default["default"].pipeline(streams, utils.noop) : streams[0];
 
       const offListeners = stream__default["default"].finished(responseStream, () => {
@@ -21904,7 +20395,7 @@ function httpAdapter(config) {
       const response = {
         status: res.statusCode,
         statusText: res.statusMessage,
-        headers: new AxiosHeaders(res.headers),
+        headers: new AxiosHeaders$1(res.headers),
         config,
         request: lastRequest
       };
@@ -22057,7 +20548,7 @@ function httpAdapter(config) {
       req.end(data);
     }
   });
-}
+};
 
 const cookies = platform.isStandardBrowserEnv ?
 
@@ -22189,7 +20680,8 @@ function progressEventReducer(listener, isDownloadStream) {
       progress: total ? (loaded / total) : undefined,
       bytes: progressBytes,
       rate: rate ? rate : undefined,
-      estimated: rate && total && inRange ? (total - loaded) / rate : undefined
+      estimated: rate && total && inRange ? (total - loaded) / rate : undefined,
+      event: e
     };
 
     data[isDownloadStream ? 'download' : 'upload'] = true;
@@ -22198,10 +20690,12 @@ function progressEventReducer(listener, isDownloadStream) {
   };
 }
 
-function xhrAdapter(config) {
+const isXHRAdapterSupported = typeof XMLHttpRequest !== 'undefined';
+
+const xhrAdapter = isXHRAdapterSupported && function (config) {
   return new Promise(function dispatchXhrRequest(resolve, reject) {
     let requestData = config.data;
-    const requestHeaders = AxiosHeaders.from(config.headers).normalize();
+    const requestHeaders = AxiosHeaders$1.from(config.headers).normalize();
     const responseType = config.responseType;
     let onCanceled;
     function done() {
@@ -22214,7 +20708,7 @@ function xhrAdapter(config) {
       }
     }
 
-    if (utils.isFormData(requestData) && platform.isStandardBrowserEnv) {
+    if (utils.isFormData(requestData) && (platform.isStandardBrowserEnv || platform.isStandardBrowserWebWorkerEnv)) {
       requestHeaders.setContentType(false); // Let the browser set it
     }
 
@@ -22239,10 +20733,10 @@ function xhrAdapter(config) {
         return;
       }
       // Prepare the response
-      const responseHeaders = AxiosHeaders.from(
+      const responseHeaders = AxiosHeaders$1.from(
         'getAllResponseHeaders' in request && request.getAllResponseHeaders()
       );
-      const responseData = !responseType || responseType === 'text' ||  responseType === 'json' ?
+      const responseData = !responseType || responseType === 'text' || responseType === 'json' ?
         request.responseText : request.response;
       const response = {
         data: responseData,
@@ -22399,237 +20893,62 @@ function xhrAdapter(config) {
     // Send the request
     request.send(requestData || null);
   });
-}
+};
 
-const adapters = {
+const knownAdapters = {
   http: httpAdapter,
   xhr: xhrAdapter
 };
 
-const adapters$1 = {
-  getAdapter: (nameOrAdapter) => {
-    if(utils.isString(nameOrAdapter)){
-      const adapter = adapters[nameOrAdapter];
+utils.forEach(knownAdapters, (fn, value) => {
+  if(fn) {
+    try {
+      Object.defineProperty(fn, 'name', {value});
+    } catch (e) {
+      // eslint-disable-next-line no-empty
+    }
+    Object.defineProperty(fn, 'adapterName', {value});
+  }
+});
 
-      if (!nameOrAdapter) {
-        throw Error(
-          utils.hasOwnProp(nameOrAdapter) ?
-            `Adapter '${nameOrAdapter}' is not available in the build` :
-            `Can not resolve adapter '${nameOrAdapter}'`
+const adapters = {
+  getAdapter: (adapters) => {
+    adapters = utils.isArray(adapters) ? adapters : [adapters];
+
+    const {length} = adapters;
+    let nameOrAdapter;
+    let adapter;
+
+    for (let i = 0; i < length; i++) {
+      nameOrAdapter = adapters[i];
+      if((adapter = utils.isString(nameOrAdapter) ? knownAdapters[nameOrAdapter.toLowerCase()] : nameOrAdapter)) {
+        break;
+      }
+    }
+
+    if (!adapter) {
+      if (adapter === false) {
+        throw new AxiosError(
+          `Adapter ${nameOrAdapter} is not supported by the environment`,
+          'ERR_NOT_SUPPORT'
         );
       }
 
-      return adapter
+      throw new Error(
+        utils.hasOwnProp(knownAdapters, nameOrAdapter) ?
+          `Adapter '${nameOrAdapter}' is not available in the build` :
+          `Unknown adapter '${nameOrAdapter}'`
+      );
     }
 
-    if (!utils.isFunction(nameOrAdapter)) {
+    if (!utils.isFunction(adapter)) {
       throw new TypeError('adapter is not a function');
     }
 
-    return nameOrAdapter;
+    return adapter;
   },
-  adapters
+  adapters: knownAdapters
 };
-
-const DEFAULT_CONTENT_TYPE = {
-  'Content-Type': 'application/x-www-form-urlencoded'
-};
-
-/**
- * If the browser has an XMLHttpRequest object, use the XHR adapter, otherwise use the HTTP
- * adapter
- *
- * @returns {Function}
- */
-function getDefaultAdapter() {
-  let adapter;
-  if (typeof XMLHttpRequest !== 'undefined') {
-    // For browsers use XHR adapter
-    adapter = adapters$1.getAdapter('xhr');
-  } else if (typeof process !== 'undefined' && utils.kindOf(process) === 'process') {
-    // For node use HTTP adapter
-    adapter = adapters$1.getAdapter('http');
-  }
-  return adapter;
-}
-
-/**
- * It takes a string, tries to parse it, and if it fails, it returns the stringified version
- * of the input
- *
- * @param {any} rawValue - The value to be stringified.
- * @param {Function} parser - A function that parses a string into a JavaScript object.
- * @param {Function} encoder - A function that takes a value and returns a string.
- *
- * @returns {string} A stringified version of the rawValue.
- */
-function stringifySafely(rawValue, parser, encoder) {
-  if (utils.isString(rawValue)) {
-    try {
-      (parser || JSON.parse)(rawValue);
-      return utils.trim(rawValue);
-    } catch (e) {
-      if (e.name !== 'SyntaxError') {
-        throw e;
-      }
-    }
-  }
-
-  return (encoder || JSON.stringify)(rawValue);
-}
-
-const defaults = {
-
-  transitional: transitionalDefaults,
-
-  adapter: getDefaultAdapter(),
-
-  transformRequest: [function transformRequest(data, headers) {
-    const contentType = headers.getContentType() || '';
-    const hasJSONContentType = contentType.indexOf('application/json') > -1;
-    const isObjectPayload = utils.isObject(data);
-
-    if (isObjectPayload && utils.isHTMLForm(data)) {
-      data = new FormData(data);
-    }
-
-    const isFormData = utils.isFormData(data);
-
-    if (isFormData) {
-      if (!hasJSONContentType) {
-        return data;
-      }
-      return hasJSONContentType ? JSON.stringify(formDataToJSON(data)) : data;
-    }
-
-    if (utils.isArrayBuffer(data) ||
-      utils.isBuffer(data) ||
-      utils.isStream(data) ||
-      utils.isFile(data) ||
-      utils.isBlob(data)
-    ) {
-      return data;
-    }
-    if (utils.isArrayBufferView(data)) {
-      return data.buffer;
-    }
-    if (utils.isURLSearchParams(data)) {
-      headers.setContentType('application/x-www-form-urlencoded;charset=utf-8', false);
-      return data.toString();
-    }
-
-    let isFileList;
-
-    if (isObjectPayload) {
-      if (contentType.indexOf('application/x-www-form-urlencoded') > -1) {
-        return toURLEncodedForm(data, this.formSerializer).toString();
-      }
-
-      if ((isFileList = utils.isFileList(data)) || contentType.indexOf('multipart/form-data') > -1) {
-        const _FormData = this.env && this.env.FormData;
-
-        return toFormData(
-          isFileList ? {'files[]': data} : data,
-          _FormData && new _FormData(),
-          this.formSerializer
-        );
-      }
-    }
-
-    if (isObjectPayload || hasJSONContentType ) {
-      headers.setContentType('application/json', false);
-      return stringifySafely(data);
-    }
-
-    return data;
-  }],
-
-  transformResponse: [function transformResponse(data) {
-    const transitional = this.transitional || defaults.transitional;
-    const forcedJSONParsing = transitional && transitional.forcedJSONParsing;
-    const JSONRequested = this.responseType === 'json';
-
-    if (data && utils.isString(data) && ((forcedJSONParsing && !this.responseType) || JSONRequested)) {
-      const silentJSONParsing = transitional && transitional.silentJSONParsing;
-      const strictJSONParsing = !silentJSONParsing && JSONRequested;
-
-      try {
-        return JSON.parse(data);
-      } catch (e) {
-        if (strictJSONParsing) {
-          if (e.name === 'SyntaxError') {
-            throw AxiosError.from(e, AxiosError.ERR_BAD_RESPONSE, this, null, this.response);
-          }
-          throw e;
-        }
-      }
-    }
-
-    return data;
-  }],
-
-  /**
-   * A timeout in milliseconds to abort a request. If set to 0 (default) a
-   * timeout is not created.
-   */
-  timeout: 0,
-
-  xsrfCookieName: 'XSRF-TOKEN',
-  xsrfHeaderName: 'X-XSRF-TOKEN',
-
-  maxContentLength: -1,
-  maxBodyLength: -1,
-
-  env: {
-    FormData: platform.classes.FormData,
-    Blob: platform.classes.Blob
-  },
-
-  validateStatus: function validateStatus(status) {
-    return status >= 200 && status < 300;
-  },
-
-  headers: {
-    common: {
-      'Accept': 'application/json, text/plain, */*'
-    }
-  }
-};
-
-utils.forEach(['delete', 'get', 'head'], function forEachMethodNoData(method) {
-  defaults.headers[method] = {};
-});
-
-utils.forEach(['post', 'put', 'patch'], function forEachMethodWithData(method) {
-  defaults.headers[method] = utils.merge(DEFAULT_CONTENT_TYPE);
-});
-
-/**
- * Transform the data for a request or a response
- *
- * @param {Array|Function} fns A single function or Array of functions
- * @param {?Object} response The response object
- *
- * @returns {*} The resulting transformed data
- */
-function transformData(fns, response) {
-  const config = this || defaults;
-  const context = response || config;
-  const headers = AxiosHeaders.from(context.headers);
-  let data = context.data;
-
-  utils.forEach(fns, function transform(fn) {
-    data = fn.call(config, data, headers.normalize(), response ? response.status : undefined);
-  });
-
-  headers.normalize();
-
-  return data;
-}
-
-function isCancel(value) {
-  return !!(value && value.__CANCEL__);
-}
 
 /**
  * Throws a `CanceledError` if cancellation has been requested.
@@ -22644,7 +20963,7 @@ function throwIfCancellationRequested(config) {
   }
 
   if (config.signal && config.signal.aborted) {
-    throw new CanceledError();
+    throw new CanceledError(null, config);
   }
 }
 
@@ -22658,7 +20977,7 @@ function throwIfCancellationRequested(config) {
 function dispatchRequest(config) {
   throwIfCancellationRequested(config);
 
-  config.headers = AxiosHeaders.from(config.headers);
+  config.headers = AxiosHeaders$1.from(config.headers);
 
   // Transform request data
   config.data = transformData.call(
@@ -22666,7 +20985,11 @@ function dispatchRequest(config) {
     config.transformRequest
   );
 
-  const adapter = config.adapter || defaults.adapter;
+  if (['post', 'put', 'patch'].indexOf(config.method) !== -1) {
+    config.headers.setContentType('application/x-www-form-urlencoded', false);
+  }
+
+  const adapter = adapters.getAdapter(config.adapter || defaults$1.adapter);
 
   return adapter(config).then(function onAdapterResolution(response) {
     throwIfCancellationRequested(config);
@@ -22678,7 +21001,7 @@ function dispatchRequest(config) {
       response
     );
 
-    response.headers = AxiosHeaders.from(response.headers);
+    response.headers = AxiosHeaders$1.from(response.headers);
 
     return response;
   }, function onAdapterRejection(reason) {
@@ -22692,13 +21015,15 @@ function dispatchRequest(config) {
           config.transformResponse,
           reason.response
         );
-        reason.response.headers = AxiosHeaders.from(reason.response.headers);
+        reason.response.headers = AxiosHeaders$1.from(reason.response.headers);
       }
     }
 
     return Promise.reject(reason);
   });
 }
+
+const headersToObject = (thing) => thing instanceof AxiosHeaders$1 ? thing.toJSON() : thing;
 
 /**
  * Config-specific merge-function which creates a new config-object
@@ -22714,9 +21039,9 @@ function mergeConfig(config1, config2) {
   config2 = config2 || {};
   const config = {};
 
-  function getMergedValue(target, source) {
+  function getMergedValue(target, source, caseless) {
     if (utils.isPlainObject(target) && utils.isPlainObject(source)) {
-      return utils.merge(target, source);
+      return utils.merge.call({caseless}, target, source);
     } else if (utils.isPlainObject(source)) {
       return utils.merge({}, source);
     } else if (utils.isArray(source)) {
@@ -22726,72 +21051,73 @@ function mergeConfig(config1, config2) {
   }
 
   // eslint-disable-next-line consistent-return
-  function mergeDeepProperties(prop) {
-    if (!utils.isUndefined(config2[prop])) {
-      return getMergedValue(config1[prop], config2[prop]);
-    } else if (!utils.isUndefined(config1[prop])) {
-      return getMergedValue(undefined, config1[prop]);
+  function mergeDeepProperties(a, b, caseless) {
+    if (!utils.isUndefined(b)) {
+      return getMergedValue(a, b, caseless);
+    } else if (!utils.isUndefined(a)) {
+      return getMergedValue(undefined, a, caseless);
     }
   }
 
   // eslint-disable-next-line consistent-return
-  function valueFromConfig2(prop) {
-    if (!utils.isUndefined(config2[prop])) {
-      return getMergedValue(undefined, config2[prop]);
+  function valueFromConfig2(a, b) {
+    if (!utils.isUndefined(b)) {
+      return getMergedValue(undefined, b);
     }
   }
 
   // eslint-disable-next-line consistent-return
-  function defaultToConfig2(prop) {
-    if (!utils.isUndefined(config2[prop])) {
-      return getMergedValue(undefined, config2[prop]);
-    } else if (!utils.isUndefined(config1[prop])) {
-      return getMergedValue(undefined, config1[prop]);
+  function defaultToConfig2(a, b) {
+    if (!utils.isUndefined(b)) {
+      return getMergedValue(undefined, b);
+    } else if (!utils.isUndefined(a)) {
+      return getMergedValue(undefined, a);
     }
   }
 
   // eslint-disable-next-line consistent-return
-  function mergeDirectKeys(prop) {
+  function mergeDirectKeys(a, b, prop) {
     if (prop in config2) {
-      return getMergedValue(config1[prop], config2[prop]);
+      return getMergedValue(a, b);
     } else if (prop in config1) {
-      return getMergedValue(undefined, config1[prop]);
+      return getMergedValue(undefined, a);
     }
   }
 
   const mergeMap = {
-    'url': valueFromConfig2,
-    'method': valueFromConfig2,
-    'data': valueFromConfig2,
-    'baseURL': defaultToConfig2,
-    'transformRequest': defaultToConfig2,
-    'transformResponse': defaultToConfig2,
-    'paramsSerializer': defaultToConfig2,
-    'timeout': defaultToConfig2,
-    'timeoutMessage': defaultToConfig2,
-    'withCredentials': defaultToConfig2,
-    'adapter': defaultToConfig2,
-    'responseType': defaultToConfig2,
-    'xsrfCookieName': defaultToConfig2,
-    'xsrfHeaderName': defaultToConfig2,
-    'onUploadProgress': defaultToConfig2,
-    'onDownloadProgress': defaultToConfig2,
-    'decompress': defaultToConfig2,
-    'maxContentLength': defaultToConfig2,
-    'maxBodyLength': defaultToConfig2,
-    'beforeRedirect': defaultToConfig2,
-    'transport': defaultToConfig2,
-    'httpAgent': defaultToConfig2,
-    'httpsAgent': defaultToConfig2,
-    'cancelToken': defaultToConfig2,
-    'socketPath': defaultToConfig2,
-    'responseEncoding': defaultToConfig2,
-    'validateStatus': mergeDirectKeys
+    url: valueFromConfig2,
+    method: valueFromConfig2,
+    data: valueFromConfig2,
+    baseURL: defaultToConfig2,
+    transformRequest: defaultToConfig2,
+    transformResponse: defaultToConfig2,
+    paramsSerializer: defaultToConfig2,
+    timeout: defaultToConfig2,
+    timeoutMessage: defaultToConfig2,
+    withCredentials: defaultToConfig2,
+    adapter: defaultToConfig2,
+    responseType: defaultToConfig2,
+    xsrfCookieName: defaultToConfig2,
+    xsrfHeaderName: defaultToConfig2,
+    onUploadProgress: defaultToConfig2,
+    onDownloadProgress: defaultToConfig2,
+    decompress: defaultToConfig2,
+    maxContentLength: defaultToConfig2,
+    maxBodyLength: defaultToConfig2,
+    beforeRedirect: defaultToConfig2,
+    transport: defaultToConfig2,
+    httpAgent: defaultToConfig2,
+    httpsAgent: defaultToConfig2,
+    cancelToken: defaultToConfig2,
+    socketPath: defaultToConfig2,
+    responseEncoding: defaultToConfig2,
+    validateStatus: mergeDirectKeys,
+    headers: (a, b) => mergeDeepProperties(headersToObject(a), headersToObject(b), true)
   };
 
   utils.forEach(Object.keys(config1).concat(Object.keys(config2)), function computeConfigValue(prop) {
     const merge = mergeMap[prop] || mergeDeepProperties;
-    const configValue = merge(prop);
+    const configValue = merge(config1[prop], config2[prop], prop);
     (utils.isUndefined(configValue) && merge !== mergeDirectKeys) || (config[prop] = configValue);
   });
 
@@ -22898,8 +21224,8 @@ class Axios {
   constructor(instanceConfig) {
     this.defaults = instanceConfig;
     this.interceptors = {
-      request: new InterceptorManager(),
-      response: new InterceptorManager()
+      request: new InterceptorManager$1(),
+      response: new InterceptorManager$1()
     };
   }
 
@@ -22923,7 +21249,7 @@ class Axios {
 
     config = mergeConfig(this.defaults, config);
 
-    const {transitional, paramsSerializer} = config;
+    const {transitional, paramsSerializer, headers} = config;
 
     if (transitional !== undefined) {
       validator.assertOptions(transitional, {
@@ -22943,20 +21269,22 @@ class Axios {
     // Set config.method
     config.method = (config.method || this.defaults.method || 'get').toLowerCase();
 
+    let contextHeaders;
+
     // Flatten headers
-    const defaultHeaders = config.headers && utils.merge(
-      config.headers.common,
-      config.headers[config.method]
+    contextHeaders = headers && utils.merge(
+      headers.common,
+      headers[config.method]
     );
 
-    defaultHeaders && utils.forEach(
+    contextHeaders && utils.forEach(
       ['delete', 'get', 'head', 'post', 'put', 'patch', 'common'],
-      function cleanHeaderConfig(method) {
-        delete config.headers[method];
+      (method) => {
+        delete headers[method];
       }
     );
 
-    config.headers = new AxiosHeaders(config.headers, defaultHeaders);
+    config.headers = AxiosHeaders$1.concat(contextHeaders, headers);
 
     // filter out skipped interceptors
     const requestInterceptorChain = [];
@@ -23067,6 +21395,8 @@ utils.forEach(['post', 'put', 'patch'], function forEachMethodWithData(method) {
 
   Axios.prototype[method + 'Form'] = generateHTTPMethod(true);
 });
+
+const Axios$1 = Axios;
 
 /**
  * A `CancelToken` is an object that can be used to request cancellation of an operation.
@@ -23184,6 +21514,8 @@ class CancelToken {
   }
 }
 
+const CancelToken$1 = CancelToken;
+
 /**
  * Syntactic sugar for invoking a function and expanding an array for arguments.
  *
@@ -23222,6 +21554,78 @@ function isAxiosError(payload) {
   return utils.isObject(payload) && (payload.isAxiosError === true);
 }
 
+const HttpStatusCode = {
+  Continue: 100,
+  SwitchingProtocols: 101,
+  Processing: 102,
+  EarlyHints: 103,
+  Ok: 200,
+  Created: 201,
+  Accepted: 202,
+  NonAuthoritativeInformation: 203,
+  NoContent: 204,
+  ResetContent: 205,
+  PartialContent: 206,
+  MultiStatus: 207,
+  AlreadyReported: 208,
+  ImUsed: 226,
+  MultipleChoices: 300,
+  MovedPermanently: 301,
+  Found: 302,
+  SeeOther: 303,
+  NotModified: 304,
+  UseProxy: 305,
+  Unused: 306,
+  TemporaryRedirect: 307,
+  PermanentRedirect: 308,
+  BadRequest: 400,
+  Unauthorized: 401,
+  PaymentRequired: 402,
+  Forbidden: 403,
+  NotFound: 404,
+  MethodNotAllowed: 405,
+  NotAcceptable: 406,
+  ProxyAuthenticationRequired: 407,
+  RequestTimeout: 408,
+  Conflict: 409,
+  Gone: 410,
+  LengthRequired: 411,
+  PreconditionFailed: 412,
+  PayloadTooLarge: 413,
+  UriTooLong: 414,
+  UnsupportedMediaType: 415,
+  RangeNotSatisfiable: 416,
+  ExpectationFailed: 417,
+  ImATeapot: 418,
+  MisdirectedRequest: 421,
+  UnprocessableEntity: 422,
+  Locked: 423,
+  FailedDependency: 424,
+  TooEarly: 425,
+  UpgradeRequired: 426,
+  PreconditionRequired: 428,
+  TooManyRequests: 429,
+  RequestHeaderFieldsTooLarge: 431,
+  UnavailableForLegalReasons: 451,
+  InternalServerError: 500,
+  NotImplemented: 501,
+  BadGateway: 502,
+  ServiceUnavailable: 503,
+  GatewayTimeout: 504,
+  HttpVersionNotSupported: 505,
+  VariantAlsoNegotiates: 506,
+  InsufficientStorage: 507,
+  LoopDetected: 508,
+  NotExtended: 510,
+  NetworkAuthenticationRequired: 511,
+};
+
+Object.entries(HttpStatusCode).forEach(([key, value]) => {
+  HttpStatusCode[value] = key;
+});
+
+const HttpStatusCode$1 = HttpStatusCode;
+
 /**
  * Create an instance of Axios
  *
@@ -23230,11 +21634,11 @@ function isAxiosError(payload) {
  * @returns {Axios} A new instance of Axios
  */
 function createInstance(defaultConfig) {
-  const context = new Axios(defaultConfig);
-  const instance = bind(Axios.prototype.request, context);
+  const context = new Axios$1(defaultConfig);
+  const instance = bind(Axios$1.prototype.request, context);
 
   // Copy axios.prototype to instance
-  utils.extend(instance, Axios.prototype, context, {allOwnKeys: true});
+  utils.extend(instance, Axios$1.prototype, context, {allOwnKeys: true});
 
   // Copy context to instance
   utils.extend(instance, context, null, {allOwnKeys: true});
@@ -23248,14 +21652,14 @@ function createInstance(defaultConfig) {
 }
 
 // Create the default instance to be exported
-const axios = createInstance(defaults);
+const axios = createInstance(defaults$1);
 
 // Expose Axios class to allow class inheritance
-axios.Axios = Axios;
+axios.Axios = Axios$1;
 
 // Expose Cancel & CancelToken
 axios.CanceledError = CanceledError;
-axios.CancelToken = CancelToken;
+axios.CancelToken = CancelToken$1;
 axios.isCancel = isCancel;
 axios.VERSION = VERSION;
 axios.toFormData = toFormData;
@@ -23276,21 +21680,20 @@ axios.spread = spread;
 // Expose isAxiosError
 axios.isAxiosError = isAxiosError;
 
-axios.formToJSON = thing => {
-  return formDataToJSON(utils.isHTMLForm(thing) ? new FormData(thing) : thing);
-};
+// Expose mergeConfig
+axios.mergeConfig = mergeConfig;
+
+axios.AxiosHeaders = AxiosHeaders$1;
+
+axios.formToJSON = thing => formDataToJSON(utils.isHTMLForm(thing) ? new FormData(thing) : thing);
+
+axios.HttpStatusCode = HttpStatusCode$1;
+
+axios.default = axios;
 
 module.exports = axios;
 //# sourceMappingURL=axios.cjs.map
 
-
-/***/ }),
-
-/***/ 2210:
-/***/ ((module) => {
-
-"use strict";
-module.exports = JSON.parse('{"name":"axios","version":"0.21.3","description":"Promise based HTTP client for the browser and node.js","main":"index.js","scripts":{"test":"grunt test","start":"node ./sandbox/server.js","build":"NODE_ENV=production grunt build","preversion":"npm test","version":"npm run build && grunt version && git add -A dist && git add CHANGELOG.md bower.json package.json","postversion":"git push && git push --tags","examples":"node ./examples/server.js","coveralls":"cat coverage/lcov.info | ./node_modules/coveralls/bin/coveralls.js","fix":"eslint --fix lib/**/*.js"},"repository":{"type":"git","url":"https://github.com/axios/axios.git"},"keywords":["xhr","http","ajax","promise","node"],"author":"Matt Zabriskie","license":"MIT","bugs":{"url":"https://github.com/axios/axios/issues"},"homepage":"https://axios-http.com","devDependencies":{"coveralls":"^3.0.0","es6-promise":"^4.2.4","grunt":"^1.3.0","grunt-banner":"^0.6.0","grunt-cli":"^1.2.0","grunt-contrib-clean":"^1.1.0","grunt-contrib-watch":"^1.0.0","grunt-eslint":"^23.0.0","grunt-karma":"^4.0.0","grunt-mocha-test":"^0.13.3","grunt-ts":"^6.0.0-beta.19","grunt-webpack":"^4.0.2","istanbul-instrumenter-loader":"^1.0.0","jasmine-core":"^2.4.1","karma":"^6.3.2","karma-chrome-launcher":"^3.1.0","karma-firefox-launcher":"^2.1.0","karma-jasmine":"^1.1.1","karma-jasmine-ajax":"^0.1.13","karma-safari-launcher":"^1.0.0","karma-sauce-launcher":"^4.3.6","karma-sinon":"^1.0.5","karma-sourcemap-loader":"^0.3.8","karma-webpack":"^4.0.2","load-grunt-tasks":"^3.5.2","minimist":"^1.2.0","mocha":"^8.2.1","sinon":"^4.5.0","terser-webpack-plugin":"^4.2.3","typescript":"^4.0.5","url-search-params":"^0.10.0","webpack":"^4.44.2","webpack-dev-server":"^3.11.0"},"browser":{"./lib/adapters/http.js":"./lib/adapters/xhr.js"},"jsdelivr":"dist/axios.min.js","unpkg":"dist/axios.min.js","typings":"./index.d.ts","dependencies":{"follow-redirects":"^1.14.0"},"bundlesize":[{"path":"./dist/axios.min.js","threshold":"5kB"}]}');
 
 /***/ }),
 
