@@ -22,7 +22,7 @@ jobs:
           CROWDIN_ORGANIZATION: ${{ secrets.CROWDIN_ORGANIZATION }}
 
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v4
+        uses: peter-evans/create-pull-request@v5
         with:
           title: Update Crowdin Contributors table
           body: By [action-crowdin-contributors](https://github.com/andrii-bodnar/action-crowdin-contributors) GitHub action
