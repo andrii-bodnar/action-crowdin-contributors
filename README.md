@@ -41,7 +41,7 @@ jobs:
       uses: actions/checkout@v3
 
     - name: Generate Crowdin Contributors table
-      uses: andrii-bodnar/action-crowdin-contributors@0.2.0
+      uses: andrii-bodnar/action-crowdin-contributors@v1
       with:
         contributors_per_line: 8
         max_contributors: 32
@@ -79,7 +79,7 @@ jobs:
       uses: actions/checkout@v3
 
     - name: Generate Crowdin Contributors table
-      uses: andrii-bodnar/action-crowdin-contributors@0.2.0
+      uses: andrii-bodnar/action-crowdin-contributors@v1
       with:
         contributors_per_line: 8
         max_contributors: 32
@@ -110,6 +110,7 @@ jobs:
 | `image_size`            | 100                                   | Size (in px) of the user's avatar                                |
 | `files`                 | README.md                             | Array of files to update                                         |
 | `crowdin_project_link`  |                                       | Crowdin project link will be added after the contributors' table |
+| `include_languages`     | false                                 | Specifies whether to include contributed languages in table      |
 | `placeholder_start`     | `<!-- CROWDIN-CONTRIBUTORS-START -->` | Placeholder that marks the start of the contributors table       |
 | `placeholder_end`       | `<!-- CROWDIN-CONTRIBUTORS-END -->`   | Placeholder that marks the end of the contributors table         |
 
@@ -117,9 +118,10 @@ jobs:
 
 This actions provides the following outputs that can be used by other steps in your workflow:
 
-| Output               | Description                       |
-|----------------------|-----------------------------------|
-| `contributors_table` | Generated table with contributors |
+| Output               | Description                                          |
+|----------------------|------------------------------------------------------|
+| `contributors_table` | Generated table with contributors                    |
+| `json_report`        | JSON report with contributors used to render a table |
 
 ## Demo
 

@@ -13,6 +13,7 @@ async function run(): Promise<void> {
             contributorsPerLine: +core.getInput('contributors_per_line'),
             imageSize: +core.getInput('image_size'),
             crowdinProjectLink: core.getInput('crowdin_project_link').trim(),
+            includeLanguages: core.getInput('include_languages') === 'true',
             files: core.getMultilineInput('files'),
             placeholderStart: core.getInput('placeholder_start'),
             placeholderEnd: core.getInput('placeholder_end')

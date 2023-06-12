@@ -25,6 +25,9 @@ inputs:
     description: "Size (in px) of the user's avatar"
     default: '100'
     required: false
+  include_languages:
+    description: "Specifies whether to include contributed languages in table"
+    required: false
   crowdin_project_link:
     description: "Crowdin project link will be added after the contributors' table"
     required: false
@@ -44,6 +47,8 @@ inputs:
 outputs:
   contributors_table:
     description: 'Generated table with contributors'
+  json_report:
+    description: 'JSON report with contributors used to render a table'
 
 runs:
   using: 'node16'

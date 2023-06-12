@@ -6,6 +6,7 @@ import * as core from '@actions/core';
 import {ContributorsTableConfig, CredentialsConfig} from './config';
 import {wait} from './wait';
 import {Writer} from './writer';
+import {Logger} from './logger';
 
 export interface User {
     id: number;
@@ -14,6 +15,12 @@ export interface User {
     translated: string;
     approved: string;
     picture: string;
+    languages: Language[];
+}
+
+export interface Language {
+    id: string;
+    name: string;
 }
 
 export class Contributors {
@@ -25,7 +32,7 @@ export class Contributors {
         this.credentials = credentials;
         this.config = config;
 
-        this.writer = new Writer(credentials, config);
+        this.writer = new Writer(credentials, config, new Logger());
     }
 
     public async generate(): Promise<void> {
@@ -39,7 +46,10 @@ export class Contributors {
 
         this.writer.updateContributorsTable(preparedData);
 
+        await this.addJobSummary(this.writer.getTableContent());
+
         core.setOutput('contributors_table', this.writer.getTableContent());
+        core.setOutput('json_report', JSON.stringify(preparedData));
     }
 
     private async downloadReport(): Promise<any[]> {
@@ -127,7 +137,7 @@ export class Contributors {
                     user.user.id
                 );
 
-                if ("avatarUrl" in crowdinMember.data && crowdinMember.data.avatarUrl) {
+                if ('avatarUrl' in crowdinMember.data && crowdinMember.data.avatarUrl) {
                     picture = crowdinMember.data.avatarUrl;
                 }
             } catch (e) {
@@ -140,7 +150,8 @@ export class Contributors {
                 name: user.user.fullName,
                 translated: user.translated,
                 approved: user.approved,
-                picture: picture
+                picture: picture,
+                languages: user.languages
             });
 
             if (result.length === this.config.maxContributors) {
@@ -169,6 +180,12 @@ export class Contributors {
         }
 
         this.config.files = files;
+    }
+
+    private async addJobSummary(content: string): Promise<void> {
+        core.info('Writing summary...');
+
+        await core.summary.addHeading('Crowdin Contributors ✨').addRaw(content).write();
     }
 
     private static throwError(message: string, e: any): never {
