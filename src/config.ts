@@ -4,6 +4,7 @@ interface ContributorsTableConfig {
     contributorsPerLine: number;
     imageSize: number;
     crowdinProjectLink: string;
+    includeLanguages: boolean;
     files: string[];
     placeholderStart: string;
     placeholderEnd: string;

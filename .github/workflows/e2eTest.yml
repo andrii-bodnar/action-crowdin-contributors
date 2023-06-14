@@ -11,6 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: ./
+        id: contributors
         with:
           max_contributors: 10
           min_words_contributed: 1
@@ -18,6 +19,7 @@ jobs:
           placeholder_end: '<!-- TEST-CONTRIBUTORS-END -->'
           files: ./__tests__/files/contributors.md
           crowdin_project_link: 'https://crowdin.com/project/crowdin'
+          include_languages: true
         env:
           CROWDIN_PROJECT_ID: 2
           CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
@@ -26,3 +28,10 @@ jobs:
       - name: Test the Readme
         run: |
           cat ./__tests__/files/contributors.md
+
+      - name: Test outputs
+        run: |
+          echo "contributors_table:"
+          echo "${{ steps.contributors.outputs.contributors_table }}"
+          echo "json_report:"
+          echo "${{ steps.contributors.outputs.json_report }}"

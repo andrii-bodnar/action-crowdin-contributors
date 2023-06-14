@@ -50,11 +50,12 @@ const util = __importStar(__nccwpck_require__(3837));
 const core = __importStar(__nccwpck_require__(2186));
 const wait_1 = __nccwpck_require__(5817);
 const writer_1 = __nccwpck_require__(5829);
+const logger_1 = __nccwpck_require__(5228);
 class Contributors {
     constructor(credentials, config) {
         this.credentials = credentials;
         this.config = config;
-        this.writer = new writer_1.Writer(credentials, config);
+        this.writer = new writer_1.Writer(credentials, config, new logger_1.Logger());
     }
     generate() {
         return __awaiter(this, void 0, void 0, function* () {
@@ -63,7 +64,9 @@ class Contributors {
             core.info(`Found ${reportResults.length} user(s), preparing the data...`);
             const preparedData = yield this.prepareData(reportResults);
             this.writer.updateContributorsTable(preparedData);
+            yield this.addJobSummary(this.writer.getTableContent());
             core.setOutput('contributors_table', this.writer.getTableContent());
+            core.setOutput('json_report', JSON.stringify(preparedData));
         });
     }
     downloadReport() {
@@ -126,7 +129,7 @@ class Contributors {
                 let picture = 'https://i2.wp.com/crowdin.com/images/user-picture.png?ssl=1';
                 try {
                     const crowdinMember = yield usersApi.getProjectMemberPermissions(this.credentials.projectId, user.user.id);
-                    if ("avatarUrl" in crowdinMember.data && crowdinMember.data.avatarUrl) {
+                    if ('avatarUrl' in crowdinMember.data && crowdinMember.data.avatarUrl) {
                         picture = crowdinMember.data.avatarUrl;
                     }
                 }
@@ -139,7 +142,8 @@ class Contributors {
                     name: user.user.fullName,
                     translated: user.translated,
                     approved: user.approved,
-                    picture: picture
+                    picture: picture,
+                    languages: user.languages
                 });
                 if (result.length === this.config.maxContributors) {
                     break;
@@ -162,6 +166,12 @@ class Contributors {
         }
         this.config.files = files;
     }
+    addJobSummary(content) {
+        return __awaiter(this, void 0, void 0, function* () {
+            core.info('Writing summary...');
+            yield core.summary.addHeading('Crowdin Contributors ✨').addRaw(content).write();
+        });
+    }
     static throwError(message, e) {
         let finalMessage = message;
         if (core.isDebug() && e.message) {
@@ -171,6 +181,56 @@ class Contributors {
     }
 }
 exports.Contributors = Contributors;
+
+
+/***/ }),
+
+/***/ 5228:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || function (mod) {
+    if (mod && mod.__esModule) return mod;
+    var result = {};
+    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
+    __setModuleDefault(result, mod);
+    return result;
+};
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.Logger = void 0;
+const core = __importStar(__nccwpck_require__(2186));
+class Logger {
+    log(type, message) {
+        switch (type) {
+            case 'debug':
+                core.debug(message);
+                break;
+            case 'warning':
+                core.warning(message);
+                break;
+            default:
+                core.info(message);
+        }
+    }
+}
+exports.Logger = Logger;
 
 
 /***/ }),
@@ -226,6 +286,7 @@ function run() {
                 contributorsPerLine: +core.getInput('contributors_per_line'),
                 imageSize: +core.getInput('image_size'),
                 crowdinProjectLink: core.getInput('crowdin_project_link').trim(),
+                includeLanguages: core.getInput('include_languages') === 'true',
                 files: core.getMultilineInput('files'),
                 placeholderStart: core.getInput('placeholder_start'),
                 placeholderEnd: core.getInput('placeholder_end')
@@ -310,63 +371,33 @@ exports.wait = wait;
 
 "use strict";
 
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || function (mod) {
-    if (mod && mod.__esModule) return mod;
-    var result = {};
-    if (mod != null) for (var k in mod) if (k !== "default" && Object.prototype.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-    __setModuleDefault(result, mod);
-    return result;
-};
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.Writer = void 0;
-const core = __importStar(__nccwpck_require__(2186));
 const fs_1 = __importDefault(__nccwpck_require__(7147));
 const pretty_1 = __importDefault(__nccwpck_require__(4257));
 class Writer {
-    constructor(credentials, config) {
+    constructor(credentials, config, logger) {
         this.tableContent = '';
         this.PROJECT_LINK_TEXT = 'Translate in Crowdin 🚀';
         this.credentials = credentials;
         this.config = config;
+        this.logger = logger;
     }
     getTableContent() {
         return this.tableContent;
     }
+    setTableContent(tableContent) {
+        this.tableContent = tableContent;
+    }
     updateContributorsTable(report) {
-        core.info(`Rendering table with ${report.length} contributor(s)...`);
+        this.logger.log('info', `Rendering table with ${report.length} contributor(s)...`);
         const tableContent = this.renderReport(report);
         this.writeFiles(tableContent);
         this.tableContent = tableContent;
-        this.addJobSummary();
-        core.info('The contributors table successfully updated!');
+        this.logger.log('info', 'The contributors table successfully updated!');
     }
     renderReport(report) {
         let result = [];
@@ -386,7 +417,7 @@ class Writer {
                 html += `<td align="center" valign="top">
                   ${userData}
                   <br />
-                  <sub><b>${+result[i][j].translated + +result[i][j].approved} words</b></sub>
+                  <sub><b>${+result[i][j].translated + +result[i][j].approved} words</b></sub>${this.formatLanguages(result[i][j])}
               </td>`;
             }
             html += '</tr>';
@@ -397,26 +428,30 @@ class Writer {
         }
         return (0, pretty_1.default)(html);
     }
+    formatLanguages(userData) {
+        if (!this.config.includeLanguages || !userData.languages || userData.languages.length === 0) {
+            return '';
+        }
+        let languages = [];
+        userData.languages.map((language) => {
+            languages.push(`<b><code title="${language.name}">${language.id}</code></b>`);
+        });
+        return `\n<br /><sub>${languages.join(', ')}</sub>`;
+    }
     writeFiles(tableContent) {
         this.config.files.map((file) => {
-            core.info(`Writing result to ${file}`);
+            this.logger.log('info', `Writing result to ${file}`);
             let fileContents = fs_1.default.readFileSync(file).toString();
             if (!fileContents.includes(this.config.placeholderStart) ||
                 !fileContents.includes(this.config.placeholderEnd)) {
-                core.warning(`Unable to locate start or end tag in ${file}`);
+                this.logger.log('warning', `Unable to locate start or end tag in ${file}`);
                 return;
             }
             const sliceFrom = fileContents.indexOf(this.config.placeholderStart) + this.config.placeholderStart.length;
             const sliceTo = fileContents.indexOf(this.config.placeholderEnd);
             fileContents = `${fileContents.slice(0, sliceFrom)}\n${tableContent}\n${fileContents.slice(sliceTo)}`;
-            core.debug(fileContents);
+            this.logger.log('debug', fileContents);
             fs_1.default.writeFileSync(file, fileContents);
-        });
-    }
-    addJobSummary() {
-        return __awaiter(this, void 0, void 0, function* () {
-            core.info('Writing summary...');
-            yield core.summary.addHeading('Crowdin Contributors ✨').addRaw(this.tableContent).write();
         });
     }
 }
@@ -2244,6 +2279,35 @@ class Bundles extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param bundleId bundle identifier
+     * @param exportId export identifier
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.bundles.exports.download.get
+     */
+    downloadBundle(projectId, bundleId, exportId) {
+        const url = `${this.url}/projects/${projectId}/bundles/${bundleId}/exports/${exportId}/download`;
+        return this.get(url, this.defaultConfig());
+    }
+    /**
+     * @param projectId project identifier
+     * @param bundleId bundle identifier
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.bundles.exports.post
+     */
+    exportBundle(projectId, bundleId) {
+        const url = `${this.url}/projects/${projectId}/bundles/${bundleId}/exports`;
+        return this.post(url, undefined, this.defaultConfig());
+    }
+    /**
+     * @param projectId project identifier
+     * @param bundleId bundle identifier
+     * @param exportId export identifier
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.bundles.exports.get
+     */
+    checkBundleExportStatus(projectId, bundleId, exportId) {
+        const url = `${this.url}/projects/${projectId}/bundles/${bundleId}/exports/${exportId}`;
+        return this.get(url, this.defaultConfig());
+    }
+    /**
+     * @param projectId project identifier
+     * @param bundleId bundle identifier
      * @param options optional parameters for the request
      * @see https://developer.crowdin.com/api/v2/#operation/api.projects.bundles.files.getMany
      */
@@ -2389,6 +2453,10 @@ class CrowdinApi {
             };
         }
         this.retryService = new retry_1.RetryService(retryConfig);
+        if (config === null || config === void 0 ? void 0 : config.httpRequestTimeout) {
+            CrowdinApi.FETCH_INSTANCE.withTimeout(config === null || config === void 0 ? void 0 : config.httpRequestTimeout);
+            CrowdinApi.AXIOS_INSTANCE.defaults.timeout = config === null || config === void 0 ? void 0 : config.httpRequestTimeout;
+        }
         this.config = config;
     }
     graphql(req) {
@@ -2437,7 +2505,6 @@ class CrowdinApi {
         }
         return CrowdinApi.AXIOS_INSTANCE;
     }
-    // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
     withFetchAll(maxLimit) {
         this.fetchAllFlag = true;
         this.maxLimit = maxLimit;
@@ -2638,6 +2705,10 @@ class FetchClient {
         this.requestIntervalMs = 10;
         this.pendingRequests = 0;
     }
+    withTimeout(timeout) {
+        this.timeout = timeout;
+        return this;
+    }
     get(url, config) {
         return this.request(url, 'GET', config);
     }
@@ -2671,11 +2742,20 @@ class FetchClient {
             }
         }
         await this.waitInQueue();
-        return fetch(url, {
-            method: method,
-            headers: config ? config.headers : {},
-            body: body,
-        })
+        let request;
+        const headers = config ? config.headers : {};
+        if (this.timeout) {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+            request = fetch(url, { method, headers, body, signal: controller.signal }).then(res => {
+                clearTimeout(timeoutId);
+                return res;
+            });
+        }
+        else {
+            request = fetch(url, { method, headers, body });
+        }
+        return request
             .then(async (res) => {
             if (res.status === 204) {
                 return {};
@@ -3179,6 +3259,7 @@ const issues_1 = __nccwpck_require__(4600);
 const labels_1 = __nccwpck_require__(8203);
 const languages_1 = __nccwpck_require__(1560);
 const machineTranslation_1 = __nccwpck_require__(9262);
+const organizationWebhooks_1 = __nccwpck_require__(9643);
 const projectsGroups_1 = __nccwpck_require__(2305);
 const reports_1 = __nccwpck_require__(3828);
 const screenshots_1 = __nccwpck_require__(9236);
@@ -3189,8 +3270,8 @@ const stringTranslations_1 = __nccwpck_require__(7301);
 const tasks_1 = __nccwpck_require__(2207);
 const teams_1 = __nccwpck_require__(9602);
 const translationMemory_1 = __nccwpck_require__(8376);
-const translations_1 = __nccwpck_require__(8281);
 const translationStatus_1 = __nccwpck_require__(9084);
+const translations_1 = __nccwpck_require__(8281);
 const uploadStorage_1 = __nccwpck_require__(4351);
 const users_1 = __nccwpck_require__(8865);
 const vendors_1 = __nccwpck_require__(5770);
@@ -3205,6 +3286,7 @@ __exportStar(__nccwpck_require__(4600), exports);
 __exportStar(__nccwpck_require__(8203), exports);
 __exportStar(__nccwpck_require__(1560), exports);
 __exportStar(__nccwpck_require__(9262), exports);
+__exportStar(__nccwpck_require__(9643), exports);
 __exportStar(__nccwpck_require__(2305), exports);
 __exportStar(__nccwpck_require__(3828), exports);
 __exportStar(__nccwpck_require__(9236), exports);
@@ -3215,8 +3297,8 @@ __exportStar(__nccwpck_require__(7301), exports);
 __exportStar(__nccwpck_require__(2207), exports);
 __exportStar(__nccwpck_require__(9602), exports);
 __exportStar(__nccwpck_require__(8376), exports);
-__exportStar(__nccwpck_require__(8281), exports);
 __exportStar(__nccwpck_require__(9084), exports);
+__exportStar(__nccwpck_require__(8281), exports);
 __exportStar(__nccwpck_require__(4351), exports);
 __exportStar(__nccwpck_require__(8865), exports);
 __exportStar(__nccwpck_require__(5770), exports);
@@ -3241,6 +3323,7 @@ class Client extends core_1.CrowdinApi {
         this.tasksApi = new tasks_1.Tasks(credentials, config);
         this.translationMemoryApi = new translationMemory_1.TranslationMemory(credentials, config);
         this.webhooksApi = new webhooks_1.Webhooks(credentials, config);
+        this.organizationWebhooksApi = new organizationWebhooks_1.OrganizationWebhooks(credentials, config);
         this.machineTranslationApi = new machineTranslation_1.MachineTranslation(credentials, config);
         this.stringTranslationsApi = new stringTranslations_1.StringTranslations(credentials, config);
         this.workflowsApi = new workflows_1.Workflows(credentials, config);
@@ -3355,6 +3438,27 @@ class Labels extends core_1.CrowdinApi {
     editLabel(projectId, labelId, request) {
         const url = `${this.url}/projects/${projectId}/labels/${labelId}`;
         return this.patch(url, request, this.defaultConfig());
+    }
+    /**
+     * @param projectId project identifier
+     * @param labelId label identifier
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.labels.screenshots.post
+     */
+    assignLabelToScreenshots(projectId, labelId, request) {
+        const url = `${this.url}/projects/${projectId}/labels/${labelId}/screenshots`;
+        return this.post(url, request, this.defaultConfig());
+    }
+    /**
+     * @param projectId project identifier
+     * @param labelId label identifier
+     * @param screenshotIds screenshot identifiers
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.labels.screenshots.deleteMany
+     */
+    unassignLabelFromScreenshots(projectId, labelId, screenshotIds) {
+        let url = `${this.url}/projects/${projectId}/labels/${labelId}/screenshots`;
+        url = this.addQueryParam(url, 'screenshotIds', screenshotIds);
+        return this.delete(url, this.defaultConfig());
     }
     /**
      * @param projectId project identifier
@@ -3510,6 +3614,67 @@ class MachineTranslation extends core_1.CrowdinApi {
     }
 }
 exports.MachineTranslation = MachineTranslation;
+
+
+/***/ }),
+
+/***/ 9643:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.OrganizationWebhooks = void 0;
+const core_1 = __nccwpck_require__(4275);
+/**
+ * Webhooks allow you to collect information about events that happen in your Crowdin account.
+ *
+ * You can select the request type, content type, and add a custom payload, which allows you to create integrations with other systems on your own.
+ */
+class OrganizationWebhooks extends core_1.CrowdinApi {
+    /**
+     * @param options optional pagination parameters for the request
+     * @see https://developer.crowdin.com/api/v2/#operation/api.webhooks.getMany
+     */
+    listWebhooks(options) {
+        const url = `${this.url}/webhooks`;
+        return this.getList(url, options === null || options === void 0 ? void 0 : options.limit, options === null || options === void 0 ? void 0 : options.offset);
+    }
+    /**
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/#operation/api.webhooks.post
+     */
+    addWebhook(request) {
+        const url = `${this.url}/webhooks`;
+        return this.post(url, request, this.defaultConfig());
+    }
+    /**
+     * @param webhookId webhook identifier
+     * @see https://developer.crowdin.com/api/v2/#operation/api.webhooks.get
+     */
+    getWebhook(webhookId) {
+        const url = `${this.url}/webhooks/${webhookId}`;
+        return this.get(url, this.defaultConfig());
+    }
+    /**
+     * @param webhookId webhook identifier
+     * @see https://developer.crowdin.com/api/v2/#operation/api.webhooks.delete
+     */
+    deleteWebhook(webhookId) {
+        const url = `${this.url}/webhooks/${webhookId}`;
+        return this.delete(url, this.defaultConfig());
+    }
+    /**
+     * @param webhookId webhook identifier
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/#operation/api.webhooks.patch
+     */
+    editWebhook(webhookId, request) {
+        const url = `${this.url}/webhooks/${webhookId}`;
+        return this.patch(url, request, this.defaultConfig());
+    }
+}
+exports.OrganizationWebhooks = OrganizationWebhooks;
 
 
 /***/ }),
@@ -3698,6 +3863,12 @@ var ProjectsGroupsModel;
         Type[Type["FILES_BASED"] = 0] = "FILES_BASED";
         Type[Type["STRINGS_BASED"] = 1] = "STRINGS_BASED";
     })(Type = ProjectsGroupsModel.Type || (ProjectsGroupsModel.Type = {}));
+    let TagDetection;
+    (function (TagDetection) {
+        TagDetection[TagDetection["AUTO"] = 0] = "AUTO";
+        TagDetection[TagDetection["COUNT_TAGS"] = 1] = "COUNT_TAGS";
+        TagDetection[TagDetection["SKIP_TAGS"] = 2] = "SKIP_TAGS";
+    })(TagDetection = ProjectsGroupsModel.TagDetection || (ProjectsGroupsModel.TagDetection = {}));
     let TranslateDuplicates;
     (function (TranslateDuplicates) {
         TranslateDuplicates[TranslateDuplicates["SHOW"] = 0] = "SHOW";
@@ -4183,6 +4354,15 @@ class SourceFiles extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param fileId file identifier
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.files.preview.get
+     */
+    downloadFilePreview(projectId, fileId) {
+        const url = `${this.url}/projects/${projectId}/files/${fileId}/preview`;
+        return this.get(url, this.defaultConfig());
+    }
+    /**
+     * @param projectId project identifier
+     * @param fileId file identifier
      * @see https://developer.crowdin.com/api/v2/#operation/api.projects.files.download.get
      */
     downloadFile(projectId, fileId) {
@@ -4305,6 +4485,15 @@ class SourceStrings extends core_1.CrowdinApi {
     addString(projectId, request) {
         const url = `${this.url}/projects/${projectId}/strings`;
         return this.post(url, request, this.defaultConfig());
+    }
+    /**
+     * @param projectId project identifier
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.strings.batchPatch
+     */
+    stringBatchOperations(projectId, request) {
+        const url = `${this.url}/projects/${projectId}/strings`;
+        return this.patch(url, request, this.defaultConfig());
     }
     /**
      * @param projectId project identifier
@@ -4932,6 +5121,24 @@ class TranslationMemory extends core_1.CrowdinApi {
     }
     /**
      * @param tmId tm identifier
+     * @param options optional paramerers for the request
+     * @see https://developer.crowdin.com/api/v2/#operation/api.tms.segments.getMany
+     */
+    listTmSegments(tmId, options) {
+        const url = `${this.url}/tms/${tmId}/segments`;
+        return this.getList(url, options === null || options === void 0 ? void 0 : options.limit, options === null || options === void 0 ? void 0 : options.offset);
+    }
+    /**
+     * @param tmId tm identifier
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/#operation/api.tms.segments.post
+     */
+    addTmSegment(tmId, request) {
+        const url = `${this.url}/tms/${tmId}/segments`;
+        return this.post(url, request, this.defaultConfig());
+    }
+    /**
+     * @param tmId tm identifier
      * @see https://developer.crowdin.com/api/v2/#operation/api.tms.segments.clear
      */
     clearTm(tmId) {
@@ -4991,6 +5198,55 @@ class TranslationMemory extends core_1.CrowdinApi {
     checkImportStatus(tmId, importId) {
         const url = `${this.url}/tms/${tmId}/imports/${importId}`;
         return this.get(url, this.defaultConfig());
+    }
+    /**
+     * @param tmId tm identifier
+     * @param segmentId segment identifier
+     * @see https://developer.crowdin.com/api/v2/#operation/api.tms.segments.get
+     */
+    getTmSegment(tmId, segmentId) {
+        const url = `${this.url}/tms/${tmId}/segments/${segmentId}`;
+        return this.get(url, this.defaultConfig());
+    }
+    /**
+     * @param tmId tm identifier
+     * @param segmentId segment identifier
+     * @see https://developer.crowdin.com/api/v2/#operation/api.tms.segments.delete
+     */
+    deleteTmSegment(tmId, segmentId) {
+        const url = `${this.url}/tms/${tmId}/segments/${segmentId}`;
+        return this.delete(url, this.defaultConfig());
+    }
+    /**
+     * @param tmId tm identifier
+     * @param segmentId segment identifier
+     * @param recordId record identifier
+     * @see https://developer.crowdin.com/api/v2/#operation/api.tms.segments.records.delete
+     */
+    deleteTmSegmentRecord(tmId, segmentId, recordId) {
+        const url = `${this.url}/tms/${tmId}/segments/${segmentId}/records/${recordId}`;
+        return this.delete(url, this.defaultConfig());
+    }
+    /**
+     * @param tmId tm identifier
+     * @param segmentId segment identifier
+     * @param recordId record identifier
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/#operation/api.tms.segments.records.patch
+     */
+    editTmSegmentRecord(tmId, segmentId, recordId, request) {
+        const url = `${this.url}/tms/${tmId}/segments/${segmentId}/records/${recordId}`;
+        return this.patch(url, request, this.defaultConfig());
+    }
+    /**
+     * @param tmId tm identifier
+     * @param segmentId segment identifier
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/#operation/api.tms.segments.records.post
+     */
+    addTmSegmentRecords(tmId, segmentId, request) {
+        const url = `${this.url}/tms/${tmId}/segments/${segmentId}/records`;
+        return this.post(url, request, this.defaultConfig());
     }
 }
 exports.TranslationMemory = TranslationMemory;
@@ -8667,13 +8923,14 @@ DelayedStream.prototype._checkIfMaxDataSizeExceeded = function() {
 const fs = __nccwpck_require__(7147)
 const path = __nccwpck_require__(1017)
 const os = __nccwpck_require__(2037)
+const crypto = __nccwpck_require__(6113)
 const packageJson = __nccwpck_require__(9968)
 
 const version = packageJson.version
 
 const LINE = /(?:^|^)\s*(?:export\s+)?([\w.-]+)(?:\s*=\s*?|:\s+?)(\s*'(?:\\'|[^'])*'|\s*"(?:\\"|[^"])*"|\s*`(?:\\`|[^`])*`|[^#\r\n]+)?\s*(?:#.*)?(?:$|$)/mg
 
-// Parser src into an Object
+// Parse src into an Object
 function parse (src) {
   const obj = {}
 
@@ -8712,20 +8969,130 @@ function parse (src) {
   return obj
 }
 
+function _parseVault (options) {
+  const vaultPath = _vaultPath(options)
+
+  // Parse .env.vault
+  const result = DotenvModule.configDotenv({ path: vaultPath })
+  if (!result.parsed) {
+    throw new Error(`MISSING_DATA: Cannot parse ${vaultPath} for an unknown reason`)
+  }
+
+  // handle scenario for comma separated keys - for use with key rotation
+  // example: DOTENV_KEY="dotenv://:key_1234@dotenv.org/vault/.env.vault?environment=prod,dotenv://:key_7890@dotenv.org/vault/.env.vault?environment=prod"
+  const keys = _dotenvKey().split(',')
+  const length = keys.length
+
+  let decrypted
+  for (let i = 0; i < length; i++) {
+    try {
+      // Get full key
+      const key = keys[i].trim()
+
+      // Get instructions for decrypt
+      const attrs = _instructions(result, key)
+
+      // Decrypt
+      decrypted = DotenvModule.decrypt(attrs.ciphertext, attrs.key)
+
+      break
+    } catch (error) {
+      // last key
+      if (i + 1 >= length) {
+        throw error
+      }
+      // try next key
+    }
+  }
+
+  // Parse decrypted .env string
+  return DotenvModule.parse(decrypted)
+}
+
 function _log (message) {
+  console.log(`[dotenv@${version}][INFO] ${message}`)
+}
+
+function _warn (message) {
+  console.log(`[dotenv@${version}][WARN] ${message}`)
+}
+
+function _debug (message) {
   console.log(`[dotenv@${version}][DEBUG] ${message}`)
+}
+
+function _dotenvKey () {
+  if (process.env.DOTENV_KEY && process.env.DOTENV_KEY.length > 0) {
+    return process.env.DOTENV_KEY
+  }
+
+  return ''
+}
+
+function _instructions (result, dotenvKey) {
+  // Parse DOTENV_KEY. Format is a URI
+  let uri
+  try {
+    uri = new URL(dotenvKey)
+  } catch (error) {
+    if (error.code === 'ERR_INVALID_URL') {
+      throw new Error('INVALID_DOTENV_KEY: Wrong format. Must be in valid uri format like dotenv://:key_1234@dotenv.org/vault/.env.vault?environment=development')
+    }
+
+    throw error
+  }
+
+  // Get decrypt key
+  const key = uri.password
+  if (!key) {
+    throw new Error('INVALID_DOTENV_KEY: Missing key part')
+  }
+
+  // Get environment
+  const environment = uri.searchParams.get('environment')
+  if (!environment) {
+    throw new Error('INVALID_DOTENV_KEY: Missing environment part')
+  }
+
+  // Get ciphertext payload
+  const environmentKey = `DOTENV_VAULT_${environment.toUpperCase()}`
+  const ciphertext = result.parsed[environmentKey] // DOTENV_VAULT_PRODUCTION
+  if (!ciphertext) {
+    throw new Error(`NOT_FOUND_DOTENV_ENVIRONMENT: Cannot locate environment ${environmentKey} in your .env.vault file.`)
+  }
+
+  return { ciphertext, key }
+}
+
+function _vaultPath (options) {
+  let dotenvPath = path.resolve(process.cwd(), '.env')
+
+  if (options && options.path && options.path.length > 0) {
+    dotenvPath = options.path
+  }
+
+  // Locate .env.vault
+  return dotenvPath.endsWith('.vault') ? dotenvPath : `${dotenvPath}.vault`
 }
 
 function _resolveHome (envPath) {
   return envPath[0] === '~' ? path.join(os.homedir(), envPath.slice(1)) : envPath
 }
 
-// Populates process.env from .env file
-function config (options) {
+function _configVault (options) {
+  _log('Loading env from encrypted .env.vault')
+
+  const parsed = DotenvModule._parseVault(options)
+
+  DotenvModule.populate(process.env, parsed, options)
+
+  return { parsed }
+}
+
+function configDotenv (options) {
   let dotenvPath = path.resolve(process.cwd(), '.env')
   let encoding = 'utf8'
   const debug = Boolean(options && options.debug)
-  const override = Boolean(options && options.override)
 
   if (options) {
     if (options.path != null) {
@@ -8740,41 +9107,115 @@ function config (options) {
     // Specifying an encoding returns a string instead of a buffer
     const parsed = DotenvModule.parse(fs.readFileSync(dotenvPath, { encoding }))
 
-    Object.keys(parsed).forEach(function (key) {
-      if (!Object.prototype.hasOwnProperty.call(process.env, key)) {
-        process.env[key] = parsed[key]
-      } else {
-        if (override === true) {
-          process.env[key] = parsed[key]
-        }
-
-        if (debug) {
-          if (override === true) {
-            _log(`"${key}" is already defined in \`process.env\` and WAS overwritten`)
-          } else {
-            _log(`"${key}" is already defined in \`process.env\` and was NOT overwritten`)
-          }
-        }
-      }
-    })
+    DotenvModule.populate(process.env, parsed, options)
 
     return { parsed }
   } catch (e) {
     if (debug) {
-      _log(`Failed to load ${dotenvPath} ${e.message}`)
+      _debug(`Failed to load ${dotenvPath} ${e.message}`)
     }
 
     return { error: e }
   }
 }
 
-const DotenvModule = {
-  config,
-  parse
+// Populates process.env from .env file
+function config (options) {
+  const vaultPath = _vaultPath(options)
+
+  // fallback to original dotenv if DOTENV_KEY is not set
+  if (_dotenvKey().length === 0) {
+    return DotenvModule.configDotenv(options)
+  }
+
+  // dotenvKey exists but .env.vault file does not exist
+  if (!fs.existsSync(vaultPath)) {
+    _warn(`You set DOTENV_KEY but you are missing a .env.vault file at ${vaultPath}. Did you forget to build it?`)
+
+    return DotenvModule.configDotenv(options)
+  }
+
+  return DotenvModule._configVault(options)
 }
 
+function decrypt (encrypted, keyStr) {
+  const key = Buffer.from(keyStr.slice(-64), 'hex')
+  let ciphertext = Buffer.from(encrypted, 'base64')
+
+  const nonce = ciphertext.slice(0, 12)
+  const authTag = ciphertext.slice(-16)
+  ciphertext = ciphertext.slice(12, -16)
+
+  try {
+    const aesgcm = crypto.createDecipheriv('aes-256-gcm', key, nonce)
+    aesgcm.setAuthTag(authTag)
+    return `${aesgcm.update(ciphertext)}${aesgcm.final()}`
+  } catch (error) {
+    const isRange = error instanceof RangeError
+    const invalidKeyLength = error.message === 'Invalid key length'
+    const decryptionFailed = error.message === 'Unsupported state or unable to authenticate data'
+
+    if (isRange || invalidKeyLength) {
+      const msg = 'INVALID_DOTENV_KEY: It must be 64 characters long (or more)'
+      throw new Error(msg)
+    } else if (decryptionFailed) {
+      const msg = 'DECRYPTION_FAILED: Please check your DOTENV_KEY'
+      throw new Error(msg)
+    } else {
+      console.error('Error: ', error.code)
+      console.error('Error: ', error.message)
+      throw error
+    }
+  }
+}
+
+// Populate process.env with parsed values
+function populate (processEnv, parsed, options = {}) {
+  const debug = Boolean(options && options.debug)
+  const override = Boolean(options && options.override)
+
+  if (typeof parsed !== 'object') {
+    throw new Error('OBJECT_REQUIRED: Please check the processEnv argument being passed to populate')
+  }
+
+  // Set process.env
+  for (const key of Object.keys(parsed)) {
+    if (Object.prototype.hasOwnProperty.call(processEnv, key)) {
+      if (override === true) {
+        processEnv[key] = parsed[key]
+      }
+
+      if (debug) {
+        if (override === true) {
+          _debug(`"${key}" is already defined and WAS overwritten`)
+        } else {
+          _debug(`"${key}" is already defined and was NOT overwritten`)
+        }
+      }
+    } else {
+      processEnv[key] = parsed[key]
+    }
+  }
+}
+
+const DotenvModule = {
+  configDotenv,
+  _configVault,
+  _parseVault,
+  config,
+  decrypt,
+  parse,
+  populate
+}
+
+module.exports.configDotenv = DotenvModule.configDotenv
+module.exports._configVault = DotenvModule._configVault
+module.exports._parseVault = DotenvModule._parseVault
 module.exports.config = DotenvModule.config
+module.exports.decrypt = DotenvModule.decrypt
 module.exports.parse = DotenvModule.parse
+module.exports.populate = DotenvModule.populate
+
 module.exports = DotenvModule
 
 
@@ -17503,7 +17944,7 @@ module.exports = require("zlib");
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
-// Axios v1.3.4 Copyright (c) 2023 Matt Zabriskie and contributors
+// Axios v1.4.0 Copyright (c) 2023 Matt Zabriskie and contributors
 
 
 const FormData$1 = __nccwpck_require__(1403);
@@ -17721,12 +18162,16 @@ const isStream = (val) => isObject(val) && isFunction(val.pipe);
  * @returns {boolean} True if value is an FormData, otherwise false
  */
 const isFormData = (thing) => {
-  const pattern = '[object FormData]';
+  let kind;
   return thing && (
-    (typeof FormData === 'function' && thing instanceof FormData) ||
-    toString.call(thing) === pattern ||
-    (isFunction(thing.toString) && thing.toString() === pattern)
-  );
+    (typeof FormData === 'function' && thing instanceof FormData) || (
+      isFunction(thing.append) && (
+        (kind = kindOf(thing)) === 'formdata' ||
+        // detect form-data instance
+        (kind === 'object' && isFunction(thing.toString) && thing.toString() === '[object FormData]')
+      )
+    )
+  )
 };
 
 /**
@@ -18191,6 +18636,11 @@ const toJSONObject = (obj) => {
   return visit(obj, 0);
 };
 
+const isAsyncFn = kindOfTest('AsyncFunction');
+
+const isThenable = (thing) =>
+  thing && (isObject(thing) || isFunction(thing)) && isFunction(thing.then) && isFunction(thing.catch);
+
 const utils = {
   isArray,
   isArrayBuffer,
@@ -18240,7 +18690,9 @@ const utils = {
   ALPHABET,
   generateString,
   isSpecCompliantForm,
-  toJSONObject
+  toJSONObject,
+  isAsyncFn,
+  isThenable
 };
 
 /**
@@ -19082,9 +19534,7 @@ function parseTokens(str) {
   return tokens;
 }
 
-function isValidHeaderName(str) {
-  return /^[-_a-zA-Z]+$/.test(str.trim());
-}
+const isValidHeaderName = (str) => /^[-_a-zA-Z0-9^`|~,!#$%&'*+.]+$/.test(str.trim());
 
 function matchHeaderValue(context, value, header, filter, isHeaderNameFilter) {
   if (utils.isFunction(filter)) {
@@ -19457,7 +19907,7 @@ function buildFullPath(baseURL, requestedURL) {
   return requestedURL;
 }
 
-const VERSION = "1.3.4";
+const VERSION = "1.4.0";
 
 function parseProtocol(url) {
   const match = /^([-+\w]{1,25})(:?\/\/|:)/.exec(url);
@@ -19927,6 +20377,21 @@ class ZlibHeaderTransformStream extends stream__default["default"].Transform {
 
 const ZlibHeaderTransformStream$1 = ZlibHeaderTransformStream;
 
+const callbackify = (fn, reducer) => {
+  return utils.isAsyncFn(fn) ? function (...args) {
+    const cb = args.pop();
+    fn.apply(this, args).then((value) => {
+      try {
+        reducer ? cb(null, ...reducer(value)) : cb(null, value);
+      } catch (err) {
+        cb(err);
+      }
+    }, cb);
+  } : fn;
+};
+
+const callbackify$1 = callbackify;
+
 const zlibOptions = {
   flush: zlib__default["default"].constants.Z_SYNC_FLUSH,
   finishFlush: zlib__default["default"].constants.Z_SYNC_FLUSH
@@ -20049,12 +20514,23 @@ const wrapAsync = (asyncExecutor) => {
 /*eslint consistent-return:0*/
 const httpAdapter = isHttpAdapterSupported && function httpAdapter(config) {
   return wrapAsync(async function dispatchHttpRequest(resolve, reject, onDone) {
-    let {data} = config;
+    let {data, lookup, family} = config;
     const {responseType, responseEncoding} = config;
     const method = config.method.toUpperCase();
     let isDone;
     let rejected = false;
     let req;
+
+    if (lookup && utils.isAsyncFn(lookup)) {
+      lookup = callbackify$1(lookup, (entry) => {
+        if(utils.isString(entry)) {
+          entry = [entry, entry.indexOf('.') < 0 ? 6 : 4];
+        } else if (!utils.isArray(entry)) {
+          throw new TypeError('lookup async function must return an array [ip: string, family: number]]')
+        }
+        return entry;
+      });
+    }
 
     // temporary internal emitter until the AxiosRequest class will be implemented
     const emitter = new EventEmitter__default["default"]();
@@ -20279,6 +20755,8 @@ const httpAdapter = isHttpAdapterSupported && function httpAdapter(config) {
       agents: { http: config.httpAgent, https: config.httpsAgent },
       auth,
       protocol,
+      family,
+      lookup,
       beforeRedirect: dispatchBeforeRedirect,
       beforeRedirects: {}
     };
@@ -20708,8 +21186,12 @@ const xhrAdapter = isXHRAdapterSupported && function (config) {
       }
     }
 
-    if (utils.isFormData(requestData) && (platform.isStandardBrowserEnv || platform.isStandardBrowserWebWorkerEnv)) {
-      requestHeaders.setContentType(false); // Let the browser set it
+    if (utils.isFormData(requestData)) {
+      if (platform.isStandardBrowserEnv || platform.isStandardBrowserWebWorkerEnv) {
+        requestHeaders.setContentType(false); // Let the browser set it
+      } else {
+        requestHeaders.setContentType('multipart/form-data;', false); // mobile/desktop app frameworks
+      }
     }
 
     let request = new XMLHttpRequest();
@@ -21115,7 +21597,7 @@ function mergeConfig(config1, config2) {
     headers: (a, b) => mergeDeepProperties(headersToObject(a), headersToObject(b), true)
   };
 
-  utils.forEach(Object.keys(config1).concat(Object.keys(config2)), function computeConfigValue(prop) {
+  utils.forEach(Object.keys(Object.assign({}, config1, config2)), function computeConfigValue(prop) {
     const merge = mergeMap[prop] || mergeDeepProperties;
     const configValue = merge(config1[prop], config2[prop], prop);
     (utils.isUndefined(configValue) && merge !== mergeDirectKeys) || (config[prop] = configValue);
@@ -21259,11 +21741,17 @@ class Axios {
       }, false);
     }
 
-    if (paramsSerializer !== undefined) {
-      validator.assertOptions(paramsSerializer, {
-        encode: validators.function,
-        serialize: validators.function
-      }, true);
+    if (paramsSerializer != null) {
+      if (utils.isFunction(paramsSerializer)) {
+        config.paramsSerializer = {
+          serialize: paramsSerializer
+        };
+      } else {
+        validator.assertOptions(paramsSerializer, {
+          encode: validators.function,
+          serialize: validators.function
+        }, true);
+      }
     }
 
     // Set config.method
@@ -21701,7 +22189,7 @@ module.exports = axios;
 /***/ ((module) => {
 
 "use strict";
-module.exports = JSON.parse('{"name":"dotenv","version":"16.0.3","description":"Loads environment variables from .env file","main":"lib/main.js","types":"lib/main.d.ts","exports":{".":{"require":"./lib/main.js","types":"./lib/main.d.ts","default":"./lib/main.js"},"./config":"./config.js","./config.js":"./config.js","./lib/env-options":"./lib/env-options.js","./lib/env-options.js":"./lib/env-options.js","./lib/cli-options":"./lib/cli-options.js","./lib/cli-options.js":"./lib/cli-options.js","./package.json":"./package.json"},"scripts":{"dts-check":"tsc --project tests/types/tsconfig.json","lint":"standard","lint-readme":"standard-markdown","pretest":"npm run lint && npm run dts-check","test":"tap tests/*.js --100 -Rspec","prerelease":"npm test","release":"standard-version"},"repository":{"type":"git","url":"git://github.com/motdotla/dotenv.git"},"keywords":["dotenv","env",".env","environment","variables","config","settings"],"readmeFilename":"README.md","license":"BSD-2-Clause","devDependencies":{"@types/node":"^17.0.9","decache":"^4.6.1","dtslint":"^3.7.0","sinon":"^12.0.1","standard":"^16.0.4","standard-markdown":"^7.1.0","standard-version":"^9.3.2","tap":"^15.1.6","tar":"^6.1.11","typescript":"^4.5.4"},"engines":{"node":">=12"}}');
+module.exports = JSON.parse('{"name":"dotenv","version":"16.1.4","description":"Loads environment variables from .env file","main":"lib/main.js","types":"lib/main.d.ts","exports":{".":{"types":"./lib/main.d.ts","require":"./lib/main.js","default":"./lib/main.js"},"./config":"./config.js","./config.js":"./config.js","./lib/env-options":"./lib/env-options.js","./lib/env-options.js":"./lib/env-options.js","./lib/cli-options":"./lib/cli-options.js","./lib/cli-options.js":"./lib/cli-options.js","./package.json":"./package.json"},"scripts":{"dts-check":"tsc --project tests/types/tsconfig.json","lint":"standard","lint-readme":"standard-markdown","pretest":"npm run lint && npm run dts-check","test":"tap tests/*.js --100 -Rspec","prerelease":"npm test","release":"standard-version"},"repository":{"type":"git","url":"git://github.com/motdotla/dotenv.git"},"funding":"https://github.com/motdotla/dotenv?sponsor=1","keywords":["dotenv","env",".env","environment","variables","config","settings"],"readmeFilename":"README.md","license":"BSD-2-Clause","devDependencies":{"@definitelytyped/dtslint":"^0.0.133","@types/node":"^18.11.3","decache":"^4.6.1","sinon":"^14.0.1","standard":"^17.0.0","standard-markdown":"^7.1.0","standard-version":"^9.5.0","tap":"^16.3.0","tar":"^6.1.11","typescript":"^4.8.4"},"engines":{"node":">=12"},"browser":{"fs":false}}');
 
 /***/ }),
 
