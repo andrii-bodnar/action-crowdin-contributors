@@ -129,8 +129,8 @@ class Contributors {
                 let picture = 'https://i2.wp.com/crowdin.com/images/user-picture.png?ssl=1';
                 try {
                     const crowdinMember = yield usersApi.getProjectMemberPermissions(this.credentials.projectId, user.user.id);
-                    if ('avatarUrl' in crowdinMember.data && crowdinMember.data.avatarUrl) {
-                        picture = crowdinMember.data.avatarUrl;
+                    if ('avatarUrl' in user.user) {
+                        picture = user.user.avatarUrl;
                     }
                 }
                 catch (e) {
