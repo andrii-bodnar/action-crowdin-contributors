@@ -137,8 +137,8 @@ export class Contributors {
                     user.user.id
                 );
 
-                if ('avatarUrl' in crowdinMember.data && crowdinMember.data.avatarUrl) {
-                    picture = crowdinMember.data.avatarUrl;
+                if ('avatarUrl' in user.user) {
+                    picture = user.user.avatarUrl;
                 }
             } catch (e) {
                 //the account might be private, that produces 404 exception
