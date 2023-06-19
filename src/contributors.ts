@@ -131,14 +131,18 @@ export class Contributors {
 
             let picture = 'https://i2.wp.com/crowdin.com/images/user-picture.png?ssl=1';
 
+            if ('avatarUrl' in user.user) {
+                picture = user.user.avatarUrl;
+            }
+
             try {
                 const crowdinMember = await usersApi.getProjectMemberPermissions(
                     this.credentials.projectId,
                     user.user.id
                 );
 
-                if ('avatarUrl' in user.user) {
-                    picture = user.user.avatarUrl;
+                if ('avatarUrl' in crowdinMember.data && crowdinMember.data.avatarUrl) {
+                    picture = crowdinMember.data.avatarUrl;
                 }
             } catch (e) {
                 //the account might be private, that produces 404 exception
