@@ -134,7 +134,6 @@ export class Contributors {
             if ('avatarUrl' in user.user) {
                 picture = user.user.avatarUrl;
             }
-
             try {
                 const crowdinMember = await usersApi.getProjectMemberPermissions(
                     this.credentials.projectId,
