@@ -131,6 +131,9 @@ export class Contributors {
 
             let picture = 'https://i2.wp.com/crowdin.com/images/user-picture.png?ssl=1';
 
+            if ('avatarUrl' in user.user) {
+                picture = user.user.avatarUrl;
+            }
             try {
                 const crowdinMember = await usersApi.getProjectMemberPermissions(
                     this.credentials.projectId,
