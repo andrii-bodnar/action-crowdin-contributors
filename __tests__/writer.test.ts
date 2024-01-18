@@ -222,7 +222,9 @@ MIT`;
 
             const result = writer.formatLanguages(userData);
 
-            expect(result).toBe(`\n<br /><sub><b><code title="English">en</code></b>, <b><code title="French">fr</code></b></sub>`);
+            expect(result).toBe(
+                `\n<br /><sub><b><code title="English">en</code></b>, <b><code title="French">fr</code></b></sub>`
+            );
         });
     });
 });

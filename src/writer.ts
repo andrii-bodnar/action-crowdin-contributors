@@ -57,10 +57,12 @@ export class Writer {
                     userData = `<a href="https://crowdin.com/profile/${result[i][j].username}">${userData}</a>`;
                 }
 
+                const languages = this.formatLanguages(result[i][j]);
+
                 html += `<td align="center" valign="top">
                   ${userData}
                   <br />
-                  <sub><b>${+result[i][j].translated + +result[i][j].approved} words</b></sub>${this.formatLanguages(result[i][j])}
+                  <sub><b>${+result[i][j].translated + +result[i][j].approved} words</b></sub>${languages}
               </td>`;
             }
 
