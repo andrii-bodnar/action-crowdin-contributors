@@ -131,22 +131,24 @@ MIT`;
             ];
 
             const expectedTableContent = `<table>
-  <tr>
-    <td align="center" valign="top">
-      <img alt="logo" style="width: 100px" src="picture1" />
-      <br />
-      <sub><b>name1</b></sub>
-      <br />
-      <sub><b>15 words</b></sub>
-    </td>
-    <td align="center" valign="top">
-      <img alt="logo" style="width: 100px" src="picture2" />
-      <br />
-      <sub><b>name2</b></sub>
-      <br />
-      <sub><b>35 words</b></sub>
-    </td>
-  </tr>
+  <tbody>
+    <tr>
+      <td align="center" valign="top">
+        <img alt="logo" style="width: 100px" src="picture1" />
+        <br />
+        <sub><b>name1</b></sub>
+        <br />
+        <sub><b>15 words</b></sub>
+      </td>
+      <td align="center" valign="top">
+        <img alt="logo" style="width: 100px" src="picture2" />
+        <br />
+        <sub><b>name2</b></sub>
+        <br />
+        <sub><b>35 words</b></sub>
+      </td>
+    </tr>
+  </tbody>
 </table><a href="https://crowdin.com/project" target="_blank">Translate in Crowdin 🚀</a>`;
 
             expect(writer.renderReport(report)).toBe(expectedTableContent);
@@ -181,24 +183,26 @@ MIT`;
             writer = new Writer({projectId: 1, token: 'token'}, config, logger);
 
             const expectedTableContent = `<table>
-  <tr>
-    <td align="center" valign="top">
-      <a href="https://crowdin.com/profile/username1"><img alt="logo" style="width: 100px" src="https://i2.wp.com/crowdin.com/images/user-picture.png?ssl=1" />
+  <tbody>
+    <tr>
+      <td align="center" valign="top">
+        <a href="https://crowdin.com/profile/username1"><img alt="logo" style="width: 100px" src="https://i2.wp.com/crowdin.com/images/user-picture.png?ssl=1" />
+          <br />
+          <sub><b>name1</b></sub></a>
         <br />
-        <sub><b>name1</b></sub></a>
-      <br />
-      <sub><b>110 words</b></sub>
-      <br /><sub><b><code title="Ukrainian">uk</code></b>, <b><code title="Estonian">et</code></b></sub>
-    </td>
-    <td align="center" valign="top">
-      <a href="https://crowdin.com/profile/username2"><img alt="logo" style="width: 100px" src="https://i2.wp.com/crowdin.com/images/user-picture.png?ssl=1" />
+        <sub><b>110 words</b></sub>
+        <br /><sub><b><code title="Ukrainian">uk</code></b>, <b><code title="Estonian">et</code></b></sub>
+      </td>
+      <td align="center" valign="top">
+        <a href="https://crowdin.com/profile/username2"><img alt="logo" style="width: 100px" src="https://i2.wp.com/crowdin.com/images/user-picture.png?ssl=1" />
+          <br />
+          <sub><b>name2</b></sub></a>
         <br />
-        <sub><b>name2</b></sub></a>
-      <br />
-      <sub><b>35 words</b></sub>
-      <br /><sub><b><code title="French">fr</code></b>, <b><code title="German">de</code></b></sub>
-    </td>
-  </tr>
+        <sub><b>35 words</b></sub>
+        <br /><sub><b><code title="French">fr</code></b>, <b><code title="German">de</code></b></sub>
+      </td>
+    </tr>
+  </tbody>
 </table><a href="https://crowdin.com/project" target="_blank">Translate in Crowdin 🚀</a>`;
 
             expect(writer.renderReport(report)).toBe(expectedTableContent);
