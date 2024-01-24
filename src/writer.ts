@@ -39,7 +39,7 @@ export class Writer {
 
     public renderReport(report: any[]): string {
         let result = [];
-        let html = '<table>';
+        let html = '<table><tbody>';
 
         for (let i = 0; i < report.length; i += this.config.contributorsPerLine) {
             result.push(report.slice(i, i + this.config.contributorsPerLine));
@@ -69,7 +69,7 @@ export class Writer {
             html += '</tr>';
         }
 
-        html += '</table>';
+        html += '</tbody></table>';
 
         if (this.config.crowdinProjectLink.length > 0) {
             html += `<a href="${this.config.crowdinProjectLink}" target="_blank">${this.PROJECT_LINK_TEXT}</a>`;
