@@ -47,7 +47,7 @@
     "pretty": "^2.0.0"
   },
   "devDependencies": {
-    "@types/node": "^20.11.5",
+    "@types/node": "^20.11.14",
     "@types/pretty": "^2.0.1",
     "@typescript-eslint/parser": "^5.59.11",
     "@vercel/ncc": "^0.36.1",
