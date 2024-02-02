@@ -38,10 +38,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Generate Crowdin Contributors table
-      uses: andrii-bodnar/action-crowdin-contributors@v1
+      uses: andrii-bodnar/action-crowdin-contributors@v2
       with:
         contributors_per_line: 8
         max_contributors: 32
@@ -76,10 +76,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Checkout
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Generate Crowdin Contributors table
-      uses: andrii-bodnar/action-crowdin-contributors@v1
+      uses: andrii-bodnar/action-crowdin-contributors@v2
       with:
         contributors_per_line: 8
         max_contributors: 32
@@ -91,7 +91,7 @@ jobs:
         CROWDIN_ORGANIZATION: ${{ secrets.CROWDIN_ORGANIZATION }} # Optional. Only for Crowdin Enterprise
 
     - name: Create Pull Request
-      uses: peter-evans/create-pull-request@v4
+      uses: peter-evans/create-pull-request@v6
       with:
         title: Update Crowdin Contributors table
         body: By [action-crowdin-contributors](https://github.com/andrii-bodnar/action-crowdin-contributors) GitHub action
