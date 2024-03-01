@@ -43,7 +43,7 @@
     "@actions/github": "^6.0.0",
     "@crowdin/crowdin-api-client": "^1.23.1",
     "axios": "^1.6.7",
-    "dotenv": "^16.4.1",
+    "dotenv": "^16.4.5",
     "pretty": "^2.0.0"
   },
   "devDependencies": {
