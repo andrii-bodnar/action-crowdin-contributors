@@ -41,7 +41,7 @@
     "@actions/core": "^1.10.1",
     "@actions/exec": "^1.1.1",
     "@actions/github": "^6.0.0",
-    "@crowdin/crowdin-api-client": "^1.30.0",
+    "@crowdin/crowdin-api-client": "^1.32.0",
     "axios": "^1.6.7",
     "dotenv": "^16.4.5",
     "pretty": "^2.0.0"
