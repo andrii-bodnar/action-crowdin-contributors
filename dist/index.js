@@ -2297,6 +2297,406 @@ function isLoopbackAddress(host) {
 
 /***/ }),
 
+/***/ 2983:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.Ai = void 0;
+const core_1 = __nccwpck_require__(4275);
+class Ai extends core_1.CrowdinApi {
+    /**
+     * @param aiPromptId ai prompt identifier
+     * @param request request body
+     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.ai.prompts.clones.post
+     */
+    cloneAiOrganizationPrompt(aiPromptId, request = {}) {
+        const url = `${this.url}/ai/prompts/${aiPromptId}/clones`;
+        return this.post(url, request, this.defaultConfig());
+    }
+    /**
+     * @param options optional parameters for the request
+     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.ai.prompts.getMany
+     */
+    listAiOrganizationPrompts(options) {
+        let url = `${this.url}/ai/prompts`;
+        url = this.addQueryParam(url, 'projectId', options === null || options === void 0 ? void 0 : options.projectId);
+        url = this.addQueryParam(url, 'action', options === null || options === void 0 ? void 0 : options.action);
+        return this.getList(url, options === null || options === void 0 ? void 0 : options.limit, options === null || options === void 0 ? void 0 : options.offset);
+    }
+    /**
+     * @param request request body
+     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.ai.prompts.post
+     */
+    addAiOrganizationPrompt(request) {
+        const url = `${this.url}/ai/prompts`;
+        return this.post(url, request, this.defaultConfig());
+    }
+    /**
+     * @param aiPromptId ai Prompt identifier.
+     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.ai.prompts.get
+     */
+    getAiOrganizationPrompt(aiPromptId) {
+        const url = `${this.url}/ai/prompts/${aiPromptId}`;
+        return this.get(url, this.defaultConfig());
+    }
+    /**
+     * @param aiPromptId ai Prompt identifier.
+     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.ai.prompts.delete
+     */
+    deleteAiOrganizationPrompt(aiPromptId) {
+        const url = `${this.url}/ai/prompts/${aiPromptId}`;
+        return this.delete(url, this.defaultConfig());
+    }
+    /**
+     * @param aiPromptId ai Prompt identifier
+     * @param request request body
+     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.ai.prompts.patch
+     */
+    editAiOrganizationPrompt(aiPromptId, request) {
+        const url = `${this.url}/ai/prompts/${aiPromptId}`;
+        return this.patch(url, request, this.defaultConfig());
+    }
+    /**
+     * @param options optional parameters for the request
+     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.ai.providers.getMany
+     */
+    listAiOrganizationProviders(options) {
+        const url = `${this.url}/ai/providers`;
+        return this.getList(url, options === null || options === void 0 ? void 0 : options.limit, options === null || options === void 0 ? void 0 : options.offset);
+    }
+    /**
+     * @param request request body
+     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.ai.providers.post
+     */
+    addAiOrganizationProvider(request) {
+        const url = `${this.url}/ai/providers`;
+        return this.post(url, request, this.defaultConfig());
+    }
+    /**
+     * @param aiProviderId ai Provider identifier.
+     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.ai.providers.get
+     */
+    getAiOrganizationProvider(aiProviderId) {
+        const url = `${this.url}/ai/providers/${aiProviderId}`;
+        return this.get(url, this.defaultConfig());
+    }
+    /**
+     * @param aiProviderId ai Provider identifier.
+     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.ai.providers.delete
+     */
+    deleteAiOrganizationProvider(aiProviderId) {
+        const url = `${this.url}/ai/providers/${aiProviderId}`;
+        return this.delete(url, this.defaultConfig());
+    }
+    /**
+     * @param aiProviderId ai Provider identifier
+     * @param request request body
+     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.ai.providers.patch
+     */
+    editAiOrganizationProvider(aiProviderId, request) {
+        const url = `${this.url}/ai/providers/${aiProviderId}`;
+        return this.patch(url, request, this.defaultConfig());
+    }
+    /**
+     * @param aiProviderId ai Provider identifier
+     * @param options optional parameters for the request
+     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.ai.providers.models.getMany
+     */
+    listAiOrganizationProviderModels(aiProviderId, options) {
+        let url = `${this.url}/ai/providers/${aiProviderId}/models`;
+        url = this.addQueryParam(url, 'limit', options === null || options === void 0 ? void 0 : options.limit);
+        url = this.addQueryParam(url, 'offset', options === null || options === void 0 ? void 0 : options.offset);
+        return this.getList(url);
+    }
+    /**
+     * @param aiProviderId ai Provider identifier
+     * @param request request body
+     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.ai.providers.chat.completions.post
+     */
+    createAiOrganizationProxyChatCompletion(aiProviderId, request) {
+        const url = `${this.url}/ai/providers/${aiProviderId}/chat/completions`;
+        return this.post(url, request, this.defaultConfig());
+    }
+    /**
+     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.ai.settings.get
+     */
+    getAiOrganizationSettings() {
+        const url = `${this.url}/ai/settings`;
+        return this.get(url);
+    }
+    /**
+     * @param request request body
+     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.ai.settings.patch
+     */
+    editAiOrganizationSettings(request) {
+        const url = `${this.url}/ai/settings`;
+        return this.patch(url, request, this.defaultConfig());
+    }
+    // Community
+    /**
+     * @param userId user identifier
+     * @param aiPromptId ai prompt identifier
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/#operation/api.users.ai.prompts.clones.post
+     */
+    cloneAiUserPrompt(userId, aiPromptId, request = {}) {
+        const url = `${this.url}/users/${userId}/ai/prompts/${aiPromptId}/clones`;
+        return this.post(url, request, this.defaultConfig());
+    }
+    /**
+     * @param userId user identifier
+     * @param options optional parameters for the request
+     * @see https://developer.crowdin.com/api/v2/#operation/api.users.ai.prompts.post
+     */
+    listAiUserPrompts(userId, options) {
+        let url = `${this.url}/users/${userId}/ai/prompts`;
+        url = this.addQueryParam(url, 'projectId', options === null || options === void 0 ? void 0 : options.projectId);
+        url = this.addQueryParam(url, 'action', options === null || options === void 0 ? void 0 : options.action);
+        return this.getList(url, options === null || options === void 0 ? void 0 : options.limit, options === null || options === void 0 ? void 0 : options.offset);
+    }
+    /**
+     * @param userId user identifier
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/#operation/api.users.ai.prompts.post
+     */
+    addAiUserPrompt(userId, request) {
+        const url = `${this.url}/users/${userId}/ai/prompts`;
+        return this.post(url, request, this.defaultConfig());
+    }
+    /**
+     * @param userId user identifier
+     * @param aiPromptId ai Prompt identifier.
+     * @see https://developer.crowdin.com/api/v2/#operation/api.users.ai.prompts.get
+     */
+    getAiUserPrompt(userId, aiPromptId) {
+        const url = `${this.url}/users/${userId}/ai/prompts/${aiPromptId}`;
+        return this.get(url, this.defaultConfig());
+    }
+    /**
+     * @param userId user identifier
+     * @param aiPromptId ai Prompt identifier.
+     * @see https://developer.crowdin.com/api/v2/#operation/api.users.ai.prompts.delete
+     */
+    deleteAiUserPrompt(userId, aiPromptId) {
+        const url = `${this.url}/users/${userId}/ai/prompts/${aiPromptId}`;
+        return this.delete(url, this.defaultConfig());
+    }
+    /**
+     * @param userId user identifier
+     * @param aiPromptId ai Prompt identifier
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/#operation/api.users.ai.prompts.patch
+     */
+    editAiUserPrompt(userId, aiPromptId, request) {
+        const url = `${this.url}/users/${userId}/ai/prompts/${aiPromptId}`;
+        return this.patch(url, request, this.defaultConfig());
+    }
+    /**
+     * @param userId user identifier
+     * @param options optional parameters for the request
+     * @see https://developer.crowdin.com/api/v2/#operation/api.ai.providers.getMany
+     */
+    listAiUserProviders(userId, options) {
+        const url = `${this.url}/users/${userId}/ai/providers`;
+        return this.getList(url, options === null || options === void 0 ? void 0 : options.limit, options === null || options === void 0 ? void 0 : options.offset);
+    }
+    /**
+     * @param userId user identifier
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/#operation/api.users.ai.providers.post
+     */
+    addAiUserProvider(userId, request) {
+        const url = `${this.url}/users/${userId}/ai/providers`;
+        return this.post(url, request, this.defaultConfig());
+    }
+    /**
+     * @param userId user identifier
+     * @param aiProviderId ai Provider identifier.
+     * @see https://developer.crowdin.com/api/v2/#operation/api.users.ai.providers.get
+     */
+    getAiUserProvider(userId, aiProviderId) {
+        const url = `${this.url}/users/${userId}/ai/providers/${aiProviderId}`;
+        return this.get(url, this.defaultConfig());
+    }
+    /**
+     * @param userId user identifier
+     * @param aiProviderId ai Provider identifier.
+     * @see https://developer.crowdin.com/api/v2/#operation/api.users.ai.providers.delete
+     */
+    deleteAiUserProvider(userId, aiProviderId) {
+        const url = `${this.url}/users/${userId}/ai/providers/${aiProviderId}`;
+        return this.delete(url, this.defaultConfig());
+    }
+    /**
+     * @param userId user identifier
+     * @param aiProviderId ai Provider identifier
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/#operation/api.users.ai.providers.patch
+     */
+    editAiUserProvider(userId, aiProviderId, request) {
+        const url = `${this.url}/users/${userId}/ai/providers/${aiProviderId}`;
+        return this.patch(url, request, this.defaultConfig());
+    }
+    /**
+     * @param userId user identifier
+     * @param aiProviderId ai Provider identifier
+     * @param options optional parameters for the request
+     * @see https://developer.crowdin.com/api/v2/#operation/api.ai.providers.models.getMany
+     */
+    listAiUserProviderModels(userId, aiProviderId, options) {
+        let url = `${this.url}/users/${userId}/ai/providers/${aiProviderId}/models`;
+        url = this.addQueryParam(url, 'limit', options === null || options === void 0 ? void 0 : options.limit);
+        url = this.addQueryParam(url, 'offset', options === null || options === void 0 ? void 0 : options.offset);
+        return this.getList(url);
+    }
+    /**
+     * @param userId user Identifier
+     * @param aiProviderId ai Provider identifier
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/#operation/api.users.ai.providers.chat.completions.post
+     */
+    createAiUserProxyChatCompletion(userId, aiProviderId, request) {
+        const url = `${this.url}/users/${userId}/ai/providers/${aiProviderId}/chat/completions`;
+        return this.post(url, request, this.defaultConfig());
+    }
+    /**
+     * @param userId user Identifier
+     * @see https://developer.crowdin.com/api/v2/#operation/api.users.ai.settings.get
+     */
+    getAiUsertSettings(userId) {
+        const url = `${this.url}/users/${userId}/ai/settings`;
+        return this.get(url);
+    }
+    /**
+     * @param userId user Identifier
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/#operation/api.users.ai.settings.patch
+     */
+    editAiUserSettings(userId, request) {
+        const url = `${this.url}/users/${userId}/ai/settings`;
+        return this.patch(url, request, this.defaultConfig());
+    }
+}
+exports.Ai = Ai;
+
+
+/***/ }),
+
+/***/ 669:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.Applications = void 0;
+const core_1 = __nccwpck_require__(4275);
+/**
+ * Crowdin Apps are web applications that can be integrated with Crowdin to extend its functionality.
+ *
+ * Use the API to manage the necessary app data.
+ */
+class Applications extends core_1.CrowdinApi {
+    /**
+     * @param options optional pagination parameters for the request
+     * @see https://developer.crowdin.com/api/v2/#operation/api.applications.installations.getMany
+     */
+    listApplicationInstallations(options) {
+        const url = `${this.url}/applications/installations`;
+        return this.getList(url, options === null || options === void 0 ? void 0 : options.limit, options === null || options === void 0 ? void 0 : options.offset);
+    }
+    /**
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/#operation/api.applications.installations.post
+     */
+    installApplication(request) {
+        const url = `${this.url}/applications/installations`;
+        return this.post(url, request, this.defaultConfig());
+    }
+    /**
+     * @param applicationId application identifier
+     * @see https://developer.crowdin.com/api/v2/#operation/api.applications.installations.get
+     */
+    getApplicationInstallation(applicationId) {
+        const url = `${this.url}/applications/installations/${applicationId}`;
+        return this.get(url, this.defaultConfig());
+    }
+    /**
+     * @param applicationId application identifier
+     * @param force force delete the application
+     * @see https://developer.crowdin.com/api/v2/#operation/api.applications.installations.delete
+     */
+    deleteApplicationInstallation(applicationId, force) {
+        const url = `${this.url}/applications/installations/${applicationId}`;
+        if (force) {
+            this.addQueryParam(url, 'force', String(force));
+        }
+        return this.delete(url, this.defaultConfig());
+    }
+    /**
+     * @param applicationId application identifier
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/#operation/api.applications.installations.patch
+     */
+    editApplicationInstallation(applicationId, request) {
+        const url = `${this.url}/applications/installations/${applicationId}`;
+        return this.patch(url, request, this.defaultConfig());
+    }
+    /**
+     * @param applicationId application identifier
+     * @param path path implemented by the application
+     * @see https://developer.crowdin.com/api/v2/#operation/api.applications.api.get
+     */
+    getApplicationData(applicationId, path) {
+        const url = `${this.url}/applications/${applicationId}/api/${path}`;
+        return this.get(url, this.defaultConfig());
+    }
+    /**
+     * @param applicationId application identifier
+     * @param path path implemented by the application
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/#operation/api.applications.api.put
+     */
+    updateOrRestoreApplicationData(applicationId, path, request) {
+        const url = `${this.url}/applications/${applicationId}/api/${path}`;
+        return this.put(url, request, this.defaultConfig());
+    }
+    /**
+     * @param applicationId application identifier
+     * @param path path implemented by the application
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/#operation/api.applications.api.post
+     */
+    addApplicationData(applicationId, path, request) {
+        const url = `${this.url}/applications/${applicationId}/api/${path}`;
+        return this.post(url, request, this.defaultConfig());
+    }
+    /**
+     * @param applicationId application identifier
+     * @param path path implemented by the application
+     * @see https://developer.crowdin.com/api/v2/#operation/api.applications.api.delete
+     */
+    deleteApplicationData(applicationId, path) {
+        const url = `${this.url}/applications/${applicationId}/api/${path}`;
+        return this.delete(url, this.defaultConfig());
+    }
+    /**
+     * @param applicationId application identifier
+     * @param path path implemented by the application
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/#operation/api.applications.api.patch
+     */
+    editApplicationData(applicationId, path, request) {
+        const url = `${this.url}/applications/${applicationId}/api/${path}`;
+        return this.patch(url, request, this.defaultConfig());
+    }
+}
+exports.Applications = Applications;
+
+
+/***/ }),
+
 /***/ 3436:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
@@ -2391,8 +2791,46 @@ class Bundles extends core_1.CrowdinApi {
         const url = `${this.url}/projects/${projectId}/bundles/${bundleId}/files`;
         return this.getList(url, options === null || options === void 0 ? void 0 : options.limit, options === null || options === void 0 ? void 0 : options.offset);
     }
+    /**
+     * @param projectId project identifier
+     * @param bundleId bundle identifier
+     * @param options optional parameters for the request
+     */
+    listBundleBranches(projectId, bundleId, options) {
+        const url = `${this.url}/projects/${projectId}/bundles/${bundleId}/branches`;
+        return this.getList(url, options === null || options === void 0 ? void 0 : options.limit, options === null || options === void 0 ? void 0 : options.offset);
+    }
 }
 exports.Bundles = Bundles;
+
+
+/***/ }),
+
+/***/ 2527:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.Clients = void 0;
+const core_1 = __nccwpck_require__(4275);
+/**
+ * Clients are the organizations that order professional translation services from Vendors.
+ * Clients can invite an existing organization to become a Vendor for them.
+ *
+ * Use the API to get a list of the Clients you already cooperate with as a Vendor.
+ */
+class Clients extends core_1.CrowdinApi {
+    /**
+     * @param options optional pagination parameters for the request
+     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.clients.getMany
+     */
+    listClients(options) {
+        const url = `${this.url}/clients`;
+        return this.getList(url, options === null || options === void 0 ? void 0 : options.limit, options === null || options === void 0 ? void 0 : options.offset);
+    }
+}
+exports.Clients = Clients;
 
 
 /***/ }),
@@ -2449,30 +2887,42 @@ exports.CrowdinError = CrowdinError;
  * @internal
  */
 class CrowdinValidationError extends CrowdinError {
-    constructor(messsage, validationCodes) {
-        super(messsage, 400);
+    constructor(message, validationCodes) {
+        super(message, 400);
         this.validationCodes = validationCodes;
     }
 }
 exports.CrowdinValidationError = CrowdinValidationError;
+function isAxiosError(error) {
+    var _a;
+    return error instanceof axios_1.AxiosError || !!((_a = error.response) === null || _a === void 0 ? void 0 : _a.data);
+}
 /**
  * @internal
  */
 function handleHttpClientError(error) {
-    var _a, _b, _c, _d;
-    const crowdinResponseErrors = error instanceof axios_1.AxiosError
-        ? (_b = (_a = error.response) === null || _a === void 0 ? void 0 : _a.data) === null || _b === void 0 ? void 0 : _b.errors
-        : error instanceof fetchClientError_1.FetchClientJsonPayloadError
-            ? error.jsonPayload && typeof error.jsonPayload === 'object' && 'errors' in error.jsonPayload
-                ? error.jsonPayload.errors
-                : null
-            : null;
+    var _a, _b, _c, _d, _e, _f;
+    let crowdinResponseErrors = null;
+    if (isAxiosError(error)) {
+        crowdinResponseErrors = ((_b = (_a = error.response) === null || _a === void 0 ? void 0 : _a.data) === null || _b === void 0 ? void 0 : _b.errors) || ((_d = (_c = error.response) === null || _c === void 0 ? void 0 : _c.data) === null || _d === void 0 ? void 0 : _d.error);
+    }
+    else if (error instanceof fetchClientError_1.FetchClientJsonPayloadError) {
+        crowdinResponseErrors =
+            error.jsonPayload &&
+                typeof error.jsonPayload === 'object' &&
+                ('errors' in error.jsonPayload || 'error' in error.jsonPayload)
+                ? error.jsonPayload.errors || error.jsonPayload.error
+                : null;
+    }
     if (Array.isArray(crowdinResponseErrors)) {
         const validationCodes = [];
         const validationMessages = [];
         crowdinResponseErrors.forEach((e) => {
-            var _a;
-            if (e.error.key && Array.isArray((_a = e.error) === null || _a === void 0 ? void 0 : _a.errors)) {
+            var _a, _b, _c;
+            if (typeof e.index === 'number' || typeof ((_a = e.error) === null || _a === void 0 ? void 0 : _a.key) === 'number') {
+                throw new CrowdinValidationError(JSON.stringify(crowdinResponseErrors, null, 2), []);
+            }
+            if (((_b = e.error) === null || _b === void 0 ? void 0 : _b.key) && Array.isArray((_c = e.error) === null || _c === void 0 ? void 0 : _c.errors)) {
                 const codes = [];
                 e.error.errors.forEach((er) => {
                     if (er.message && er.code) {
@@ -2486,9 +2936,12 @@ function handleHttpClientError(error) {
         const message = validationMessages.length === 0 ? 'Validation error' : validationMessages.join(', ');
         throw new CrowdinValidationError(message, validationCodes);
     }
+    else if ((crowdinResponseErrors === null || crowdinResponseErrors === void 0 ? void 0 : crowdinResponseErrors.message) && (crowdinResponseErrors === null || crowdinResponseErrors === void 0 ? void 0 : crowdinResponseErrors.code)) {
+        throw new CrowdinError(crowdinResponseErrors.message, crowdinResponseErrors.code);
+    }
     if (error instanceof Error) {
-        const code = error instanceof axios_1.AxiosError && ((_c = error.response) === null || _c === void 0 ? void 0 : _c.status)
-            ? (_d = error.response) === null || _d === void 0 ? void 0 : _d.status
+        const code = error instanceof axios_1.AxiosError && ((_e = error.response) === null || _e === void 0 ? void 0 : _e.status)
+            ? (_f = error.response) === null || _f === void 0 ? void 0 : _f.status
             : error instanceof fetchClientError_1.FetchClientJsonPayloadError
                 ? error.statusCode
                 : 500;
@@ -2536,10 +2989,14 @@ class CrowdinApi {
         this.config = config;
     }
     graphql(req) {
-        if (!this.organization) {
-            throw new Error('GraphQL API could be used only with Crowdin Enterprise.');
+        let url;
+        if (this.organization) {
+            url = `https://${this.organization}.api.crowdin.com/api/graphql`;
         }
-        return this.post(`https://${this.organization}.api.crowdin.com/api/graphql`, req, this.defaultConfig());
+        else {
+            url = 'https://api.crowdin.com/api/graphql';
+        }
+        return this.post(url, req, this.defaultConfig());
     }
     addQueryParam(url, name, value) {
         if (value) {
@@ -3084,6 +3541,65 @@ exports.Distributions = Distributions;
 
 /***/ }),
 
+/***/ 3554:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.Fields = void 0;
+const core_1 = __nccwpck_require__(4275);
+class Fields extends core_1.CrowdinApi {
+    /**
+     * @param options optional parameters for the request
+     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.fields.getMany
+     */
+    listFields(options) {
+        let url = `${this.url}/fields`;
+        url = this.addQueryParam(url, 'search', options === null || options === void 0 ? void 0 : options.search);
+        url = this.addQueryParam(url, 'entity', options === null || options === void 0 ? void 0 : options.entity);
+        url = this.addQueryParam(url, 'type', options === null || options === void 0 ? void 0 : options.type);
+        return this.getList(url, options === null || options === void 0 ? void 0 : options.limit, options === null || options === void 0 ? void 0 : options.offset);
+    }
+    /**
+     * @param request request body
+     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.fields.post
+     */
+    addField(request) {
+        const url = `${this.url}/fields`;
+        return this.post(url, request, this.defaultConfig());
+    }
+    /**
+     * @param fieldId field identifier
+     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.fields.get
+     */
+    getField(fieldId) {
+        const url = `${this.url}/fields/${fieldId}`;
+        return this.get(url, this.defaultConfig());
+    }
+    /**
+     * @param fieldId field identifier
+     * @see https://developer.crowdin.com/api/v2/#operation/api.fields.delete
+     */
+    deleteField(fieldId) {
+        const url = `${this.url}/fields/${fieldId}`;
+        return this.delete(url, this.defaultConfig());
+    }
+    /**
+     * @param fieldId field identifier
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/#operation/api.fields.patch
+     */
+    editField(fieldId, request) {
+        const url = `${this.url}/fields/${fieldId}`;
+        return this.patch(url, request, this.defaultConfig());
+    }
+}
+exports.Fields = Fields;
+
+
+/***/ }),
+
 /***/ 510:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
@@ -3105,6 +3621,8 @@ class Glossaries extends core_1.CrowdinApi {
         }
         let url = `${this.url}/glossaries`;
         url = this.addQueryParam(url, 'groupId', options.groupId);
+        url = this.addQueryParam(url, 'orderBy', options.orderBy);
+        url = this.addQueryParam(url, 'userId', options.userId);
         return this.getList(url, options.limit, options.offset);
     }
     /**
@@ -3201,6 +3719,7 @@ class Glossaries extends core_1.CrowdinApi {
         url = this.addQueryParam(url, 'languageId', options.languageId);
         url = this.addQueryParam(url, 'translationOfTermId', options.translationOfTermId);
         url = this.addQueryParam(url, 'conceptId', options.conceptId);
+        url = this.addQueryParam(url, 'orderBy', options.orderBy);
         return this.getList(url, options.limit, options.offset);
     }
     /**
@@ -3260,7 +3779,8 @@ class Glossaries extends core_1.CrowdinApi {
      * @see https://developer.crowdin.com/api/v2/#operation/api.glossaries.concepts.getMany
      */
     listConcepts(glossaryId, options) {
-        const url = `${this.url}/glossaries/${glossaryId}/concepts`;
+        let url = `${this.url}/glossaries/${glossaryId}/concepts`;
+        url = this.addQueryParam(url, 'orderBy', options === null || options === void 0 ? void 0 : options.orderBy);
         return this.getList(url, options === null || options === void 0 ? void 0 : options.limit, options === null || options === void 0 ? void 0 : options.offset);
     }
     /**
@@ -3326,19 +3846,25 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", ({ value: true }));
+const ai_1 = __nccwpck_require__(2983);
+const applications_1 = __nccwpck_require__(669);
 const bundles_1 = __nccwpck_require__(3436);
+const clients_1 = __nccwpck_require__(2527);
 const core_1 = __nccwpck_require__(4275);
 const dictionaries_1 = __nccwpck_require__(8252);
 const distributions_1 = __nccwpck_require__(3146);
+const fields_1 = __nccwpck_require__(3554);
 const glossaries_1 = __nccwpck_require__(510);
 const issues_1 = __nccwpck_require__(4600);
 const labels_1 = __nccwpck_require__(8203);
 const languages_1 = __nccwpck_require__(1560);
 const machineTranslation_1 = __nccwpck_require__(9262);
+const notifications_1 = __nccwpck_require__(5806);
 const organizationWebhooks_1 = __nccwpck_require__(9643);
 const projectsGroups_1 = __nccwpck_require__(2305);
 const reports_1 = __nccwpck_require__(3828);
 const screenshots_1 = __nccwpck_require__(9236);
+const securityLogs_1 = __nccwpck_require__(7216);
 const sourceFiles_1 = __nccwpck_require__(4547);
 const sourceStrings_1 = __nccwpck_require__(4514);
 const stringComments_1 = __nccwpck_require__(1415);
@@ -3353,19 +3879,25 @@ const users_1 = __nccwpck_require__(8865);
 const vendors_1 = __nccwpck_require__(5770);
 const webhooks_1 = __nccwpck_require__(919);
 const workflows_1 = __nccwpck_require__(6184);
+__exportStar(__nccwpck_require__(2983), exports);
+__exportStar(__nccwpck_require__(669), exports);
 __exportStar(__nccwpck_require__(3436), exports);
+__exportStar(__nccwpck_require__(2527), exports);
 __exportStar(__nccwpck_require__(4275), exports);
 __exportStar(__nccwpck_require__(8252), exports);
 __exportStar(__nccwpck_require__(3146), exports);
+__exportStar(__nccwpck_require__(3554), exports);
 __exportStar(__nccwpck_require__(510), exports);
 __exportStar(__nccwpck_require__(4600), exports);
 __exportStar(__nccwpck_require__(8203), exports);
 __exportStar(__nccwpck_require__(1560), exports);
 __exportStar(__nccwpck_require__(9262), exports);
+__exportStar(__nccwpck_require__(5806), exports);
 __exportStar(__nccwpck_require__(9643), exports);
 __exportStar(__nccwpck_require__(2305), exports);
 __exportStar(__nccwpck_require__(3828), exports);
 __exportStar(__nccwpck_require__(9236), exports);
+__exportStar(__nccwpck_require__(7216), exports);
 __exportStar(__nccwpck_require__(4547), exports);
 __exportStar(__nccwpck_require__(4514), exports);
 __exportStar(__nccwpck_require__(1415), exports);
@@ -3386,6 +3918,8 @@ __exportStar(__nccwpck_require__(6184), exports);
 class Client extends core_1.CrowdinApi {
     constructor(credentials, config) {
         super(credentials, config);
+        this.aiApi = new ai_1.Ai(credentials, config);
+        this.applicationsApi = new applications_1.Applications(credentials, config);
         this.sourceFilesApi = new sourceFiles_1.SourceFiles(credentials, config);
         this.glossariesApi = new glossaries_1.Glossaries(credentials, config);
         this.languagesApi = new languages_1.Languages(credentials, config);
@@ -3412,6 +3946,10 @@ class Client extends core_1.CrowdinApi {
         this.labelsApi = new labels_1.Labels(credentials, config);
         this.stringCommentsApi = new stringComments_1.StringComments(credentials, config);
         this.bundlesApi = new bundles_1.Bundles(credentials, config);
+        this.notificationsApi = new notifications_1.Notifications(credentials, config);
+        this.clientsApi = new clients_1.Clients(credentials, config);
+        this.securityLogsApi = new securityLogs_1.SecurityLogs(credentials, config);
+        this.fieldsApi = new fields_1.Fields(credentials, config);
     }
 }
 exports["default"] = Client;
@@ -3447,6 +3985,7 @@ class Issues extends core_1.CrowdinApi {
         return this.getList(url, options.limit, deprecatedOffset);
     }
     /**
+     * @deprecated
      * @param projectId project identifier
      * @param issueId issue identifier
      * @param request request body
@@ -3475,7 +4014,8 @@ class Labels extends core_1.CrowdinApi {
         if ((0, core_1.isOptionalNumber)(options, '1' in arguments)) {
             options = { limit: options, offset: deprecatedOffset };
         }
-        const url = `${this.url}/projects/${projectId}/labels`;
+        let url = `${this.url}/projects/${projectId}/labels`;
+        url = this.addQueryParam(url, 'orderBy', options.orderBy);
         return this.getList(url, options.limit, options.offset);
     }
     /**
@@ -3694,6 +4234,46 @@ exports.MachineTranslation = MachineTranslation;
 
 /***/ }),
 
+/***/ 5806:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.Notifications = void 0;
+const core_1 = __nccwpck_require__(4275);
+class Notifications extends core_1.CrowdinApi {
+    /**
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/#operation/api.notify.post
+     */
+    sendNotificationToAuthenticatedUser(request) {
+        const url = `${this.url}/notify`;
+        return this.post(url, request, this.defaultConfig());
+    }
+    /**
+     * @param projectId project identifier
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.notify.post
+     */
+    sendNotificationToProjectMembers(projectId, request) {
+        const url = `${this.url}/projects/${projectId}/notify`;
+        return this.post(url, request, this.defaultConfig());
+    }
+    /**
+     * @param request request body
+     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.notify.post
+     */
+    sendNotificationToOrganizationMembers(request) {
+        const url = `${this.url}/notify`;
+        return this.post(url, request, this.defaultConfig());
+    }
+}
+exports.Notifications = Notifications;
+
+
+/***/ }),
+
 /***/ 9643:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
@@ -3784,6 +4364,7 @@ class ProjectsGroups extends core_1.CrowdinApi {
         let url = `${this.url}/groups`;
         url = this.addQueryParam(url, 'parentId', options.parentId);
         url = this.addQueryParam(url, 'userId', options.userId);
+        url = this.addQueryParam(url, 'orderBy', options.orderBy);
         return this.getList(url, options.limit, options.offset);
     }
     /**
@@ -3831,6 +4412,8 @@ class ProjectsGroups extends core_1.CrowdinApi {
         let url = `${this.url}/projects`;
         url = this.addQueryParam(url, 'groupId', options.groupId);
         url = this.addQueryParam(url, 'hasManagerAccess', options.hasManagerAccess);
+        url = this.addQueryParam(url, 'type', options.type);
+        url = this.addQueryParam(url, 'orderBy', options.orderBy);
         return this.getList(url, options.limit, options.offset);
     }
     /**
@@ -3930,6 +4513,52 @@ class ProjectsGroups extends core_1.CrowdinApi {
         const url = `${this.url}/projects/${projectId}/file-format-settings/${fileFormatSettingsId}`;
         return this.patch(url, request, this.defaultConfig());
     }
+    /**
+     * @param projectId project identifier
+     * @param options optional parameters for the request
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.strings-exporter-settings.getMany
+     */
+    listProjectStringsExporterSettings(projectId, options) {
+        const url = `${this.url}/projects/${projectId}/strings-exporter-settings`;
+        return this.getList(url, options === null || options === void 0 ? void 0 : options.limit, options === null || options === void 0 ? void 0 : options.offset);
+    }
+    /**
+     * @param projectId project identifier
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.strings-exporter-settings.post
+     */
+    addProjectStringsExporterSettings(projectId, request) {
+        const url = `${this.url}/projects/${projectId}/strings-exporter-settings`;
+        return this.post(url, request, this.defaultConfig());
+    }
+    /**
+     * @param projectId project identifier
+     * @param systemStringsExporterSettingsId file format settings identifier
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.strings-exporter-settings.get
+     */
+    getProjectStringsExporterSettings(projectId, systemStringsExporterSettingsId) {
+        const url = `${this.url}/projects/${projectId}/strings-exporter-settings/${systemStringsExporterSettingsId}`;
+        return this.get(url, this.defaultConfig());
+    }
+    /**
+     * @param projectId project identifier
+     * @param systemStringsExporterSettingsId file format settings identifier
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.strings-exporter-settings.delete
+     */
+    deleteProjectStringsExporterSettings(projectId, systemStringsExporterSettingsId) {
+        const url = `${this.url}/projects/${projectId}/strings-exporter-settings/${systemStringsExporterSettingsId}`;
+        return this.delete(url, this.defaultConfig());
+    }
+    /**
+     * @param projectId project identifier
+     * @param systemStringsExporterSettingsId file format settings identifier
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.strings-exporter-settings.patch
+     */
+    editProjectStringsExporterSettings(projectId, systemStringsExporterSettingsId, request) {
+        const url = `${this.url}/projects/${projectId}/strings-exporter-settings/${systemStringsExporterSettingsId}`;
+        return this.patch(url, request, this.defaultConfig());
+    }
 }
 exports.ProjectsGroups = ProjectsGroups;
 var ProjectsGroupsModel;
@@ -3975,6 +4604,116 @@ const core_1 = __nccwpck_require__(4275);
  * Report generation is an asynchronous operation and shall be completed with a sequence of API methods.
  */
 class Reports extends core_1.CrowdinApi {
+    /**
+     * @param options optional parameters for the request
+     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.reports.archives.getMany
+     */
+    listOrganizationReportArchives(options) {
+        let url = `${this.url}/reports/archives`;
+        url = this.addQueryParam(url, 'scopeId', options === null || options === void 0 ? void 0 : options.scopeId);
+        url = this.addQueryParam(url, 'scopeType', options === null || options === void 0 ? void 0 : options.scopeType);
+        return this.getList(url, options === null || options === void 0 ? void 0 : options.limit, options === null || options === void 0 ? void 0 : options.offset);
+    }
+    /**
+     * @param archiveId archive identifier
+     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.reports.archives.get
+     */
+    getOrganizationReportArchive(archiveId) {
+        const url = `${this.url}/reports/archives/${archiveId}`;
+        return this.get(url, this.defaultConfig());
+    }
+    /**
+     * @param archiveId archive identifier
+     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.reports.archives.delete
+     */
+    deleteOrganizationReportArchive(archiveId) {
+        const url = `${this.url}/reports/archives/${archiveId}`;
+        return this.delete(url, this.defaultConfig());
+    }
+    /**
+     * @param archiveId archive identifier
+     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.reports.archives.exports.post
+     */
+    exportOrganizationReportArchive(archiveId, request = {}) {
+        const url = `${this.url}/reports/archives/${archiveId}/exports`;
+        return this.post(url, request, this.defaultConfig());
+    }
+    /**
+     * @param archiveId archive identifier
+     * @param exportId export identifier
+     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.reports.archives.exports.get
+     */
+    checkOrganizationReportArchiveStatus(archiveId, exportId) {
+        const url = `${this.url}/reports/archives/${archiveId}/exports/${exportId}`;
+        return this.get(url, this.defaultConfig());
+    }
+    /**
+     * @param archiveId archive identifier
+     * @param exportId export identifier
+     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.reports.archives.exports.download.get
+     */
+    downloadOrganizationReportArchive(archiveId, exportId) {
+        const url = `${this.url}/reports/archives/${archiveId}/exports/${exportId}/download`;
+        return this.get(url, this.defaultConfig());
+    }
+    /**
+     * @param userId user identifier
+     * @param options optional parameters for the request
+     * @see https://developer.crowdin.com/api/v2/#operation/api.reports.archives.getMany
+     */
+    listUserReportArchives(userId, options) {
+        let url = `${this.url}/users/${userId}/reports/archives`;
+        url = this.addQueryParam(url, 'scopeId', options === null || options === void 0 ? void 0 : options.scopeId);
+        url = this.addQueryParam(url, 'scopeType', options === null || options === void 0 ? void 0 : options.scopeType);
+        return this.getList(url, options === null || options === void 0 ? void 0 : options.limit, options === null || options === void 0 ? void 0 : options.offset);
+    }
+    /**
+     * @param userId user identifier
+     * @param archiveId archive identifier
+     * @see https://developer.crowdin.com/api/v2/#operation/api.users.reports.archives.get
+     */
+    getUserReportArchive(userId, archiveId) {
+        const url = `${this.url}/users/${userId}/reports/archives/${archiveId}`;
+        return this.get(url, this.defaultConfig());
+    }
+    /**
+     * @param userId user identifier
+     * @param archiveId archive identifier
+     * @see https://developer.crowdin.com/api/v2/#operation/api.users.reports.archives.delete
+     */
+    deleteUserReportArchive(userId, archiveId) {
+        const url = `${this.url}/users/${userId}/reports/archives/${archiveId}`;
+        return this.delete(url, this.defaultConfig());
+    }
+    /**
+     * @param userId user identifier
+     * @param archiveId archive identifier
+     * @see https://developer.crowdin.com/api/v2/#operation/api.reports.archives.exports.post
+     */
+    exportUserReportArchive(userId, archiveId, request = {}) {
+        const url = `${this.url}/users/${userId}/reports/archives/${archiveId}/exports`;
+        return this.post(url, request, this.defaultConfig());
+    }
+    /**
+     * @param userId user identifier
+     * @param archiveId archive identifier
+     * @param exportId export identifier
+     * @see https://developer.crowdin.com/api/v2/#operation/api.users.reports.archives.exports.get
+     */
+    checkUserReportArchiveStatus(userId, archiveId, exportId) {
+        const url = `${this.url}/users/${userId}/reports/archives/${archiveId}/exports/${exportId}`;
+        return this.get(url, this.defaultConfig());
+    }
+    /**
+     * @param userId user identifier
+     * @param archiveId archive identifier
+     * @param exportId export identifier
+     * @see https://developer.crowdin.com/api/v2/#operation/api.users.reports.archives.exports.download.get
+     */
+    downloadUserReportArchive(userId, archiveId, exportId) {
+        const url = `${this.url}/users/${userId}/reports/archives/${archiveId}/exports/${exportId}/download`;
+        return this.get(url, this.defaultConfig());
+    }
     /**
      * @param groupId group identifier
      * @param request request body
@@ -4124,7 +4863,11 @@ class Screenshots extends core_1.CrowdinApi {
         if ((0, core_1.isOptionalNumber)(options, '1' in arguments)) {
             options = { limit: options, offset: deprecatedOffset };
         }
-        const url = `${this.url}/projects/${projectId}/screenshots`;
+        let url = `${this.url}/projects/${projectId}/screenshots`;
+        url = this.addQueryParam(url, 'stringId', options.stringId);
+        url = this.addQueryParam(url, 'labelIds', options.labelIds);
+        url = this.addQueryParam(url, 'excludeLabelIds', options.excludeLabelIds);
+        url = this.addQueryParam(url, 'orderBy', options.orderBy);
         return this.getList(url, options.limit, options.offset);
     }
     /**
@@ -4247,6 +4990,64 @@ exports.Screenshots = Screenshots;
 
 /***/ }),
 
+/***/ 7216:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+"use strict";
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.SecurityLogs = void 0;
+const core_1 = __nccwpck_require__(4275);
+class SecurityLogs extends core_1.CrowdinApi {
+    /**
+     * @param options optional parameters for the request
+     * @see https://support.crowdin.com/enterprise/api/#operation/api.projects.workflow-steps.getMany
+     */
+    listOrganizationSecurityLogs(options) {
+        let url = `${this.url}/security-logs`;
+        url = this.addQueryParam(url, 'event', options === null || options === void 0 ? void 0 : options.event);
+        url = this.addQueryParam(url, 'createdAfter', options === null || options === void 0 ? void 0 : options.createdAfter);
+        url = this.addQueryParam(url, 'createdBefore', options === null || options === void 0 ? void 0 : options.createdBefore);
+        url = this.addQueryParam(url, 'ipAddress', options === null || options === void 0 ? void 0 : options.ipAddress);
+        url = this.addQueryParam(url, 'userId', options === null || options === void 0 ? void 0 : options.userId);
+        return this.getList(url, options === null || options === void 0 ? void 0 : options.limit, options === null || options === void 0 ? void 0 : options.offset);
+    }
+    /**
+     * @param securityLogId security log identifier
+     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.security-logs.get
+     */
+    getOrganizationSecurityLog(securityLogId) {
+        const url = `${this.url}/security-logs/${securityLogId}`;
+        return this.get(url, this.defaultConfig());
+    }
+    /**
+     * @param userId user identifier
+     * @param options optional parameters for the request
+     * @see https://developer.crowdin.com/api/v2/#operation/api.users.security-logs.getMany
+     */
+    listUserSecurityLogs(userId, options) {
+        let url = `${this.url}/users/${userId}/security-logs`;
+        url = this.addQueryParam(url, 'event', options === null || options === void 0 ? void 0 : options.event);
+        url = this.addQueryParam(url, 'createdAfter', options === null || options === void 0 ? void 0 : options.createdAfter);
+        url = this.addQueryParam(url, 'createdBefore', options === null || options === void 0 ? void 0 : options.createdBefore);
+        url = this.addQueryParam(url, 'ipAddress', options === null || options === void 0 ? void 0 : options.ipAddress);
+        return this.getList(url, options === null || options === void 0 ? void 0 : options.limit, options === null || options === void 0 ? void 0 : options.offset);
+    }
+    /**
+     * @param userId security log identifier
+     * @param securityLogId security log identifier
+     * @see https://developer.crowdin.com/api/v2/#operation/api.users.security-logs.get
+     */
+    getUserSecurityLog(userId, securityLogId) {
+        const url = `${this.url}/users/${userId}/security-logs/${securityLogId}`;
+        return this.get(url, this.defaultConfig());
+    }
+}
+exports.SecurityLogs = SecurityLogs;
+
+
+/***/ }),
+
 /***/ 4547:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
@@ -4262,12 +5063,43 @@ const core_1 = __nccwpck_require__(4275);
  * Before adding source files to the project, upload each file to the Storage first.
  */
 class SourceFiles extends core_1.CrowdinApi {
+    /**
+     * @param projectId project identifier
+     * @param branchId branch identifier
+     * @param cloneId clone branch identifier
+     * @see https://developer.crowdin.com/api/v2/string-based/#operation/api.projects.branches.clones.branch.get
+     */
+    getClonedBranch(projectId, branchId, cloneId) {
+        const url = `${this.url}/projects/${projectId}/branches/${branchId}/clones/${cloneId}/branch`;
+        return this.get(url, this.defaultConfig());
+    }
+    /**
+     * @param projectId project identifier
+     * @param branchId branch identifier
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/string-based/#operation/api.projects.branches.clones.post
+     */
+    clonedBranch(projectId, branchId, request) {
+        const url = `${this.url}/projects/${projectId}/branches/${branchId}/clones`;
+        return this.post(url, request, this.defaultConfig());
+    }
+    /**
+     * @param projectId project identifier
+     * @param branchId branch identifier
+     * @param cloneId clone branch identifier
+     * @see https://developer.crowdin.com/api/v2/string-based/#operation/api.projects.branches.clones.get
+     */
+    checkBranchClonedStatus(projectId, branchId, cloneId) {
+        const url = `${this.url}/projects/${projectId}/branches/${branchId}/clones/${cloneId}`;
+        return this.get(url, this.defaultConfig());
+    }
     listProjectBranches(projectId, options, deprecatedLimit, deprecatedOffset) {
         if ((0, core_1.isOptionalString)(options, '1' in arguments)) {
             options = { name: options, limit: deprecatedLimit, offset: deprecatedOffset };
         }
         let url = `${this.url}/projects/${projectId}/branches`;
         url = this.addQueryParam(url, 'name', options.name);
+        url = this.addQueryParam(url, 'orderBy', options.orderBy);
         return this.getList(url, options.limit, options.offset);
     }
     /**
@@ -4323,6 +5155,7 @@ class SourceFiles extends core_1.CrowdinApi {
         url = this.addQueryParam(url, 'directoryId', options.directoryId);
         url = this.addQueryParam(url, 'filter', options.filter);
         url = this.addQueryParam(url, 'recursion', options.recursion);
+        url = this.addQueryParam(url, 'orderBy', options.orderBy);
         return this.getList(url, options.limit, options.offset);
     }
     /**
@@ -4378,6 +5211,7 @@ class SourceFiles extends core_1.CrowdinApi {
         url = this.addQueryParam(url, 'directoryId', options.directoryId);
         url = this.addQueryParam(url, 'recursion', options.recursion);
         url = this.addQueryParam(url, 'filter', options.filter);
+        url = this.addQueryParam(url, 'orderBy', options.orderBy);
         return this.getList(url, options.limit, options.offset);
     }
     /**
@@ -4508,6 +5342,11 @@ var SourceFilesModel;
         EscapeQuotes[EscapeQuotes["TWO"] = 2] = "TWO";
         EscapeQuotes[EscapeQuotes["THREE"] = 3] = "THREE";
     })(EscapeQuotes = SourceFilesModel.EscapeQuotes || (SourceFilesModel.EscapeQuotes = {}));
+    let ExportQuotes;
+    (function (ExportQuotes) {
+        ExportQuotes["SINGLE"] = "single";
+        ExportQuotes["DOUBLE"] = "double";
+    })(ExportQuotes = SourceFilesModel.ExportQuotes || (SourceFilesModel.ExportQuotes = {}));
 })(SourceFilesModel = exports.SourceFilesModel || (exports.SourceFilesModel = {}));
 
 
@@ -4527,6 +5366,22 @@ const core_1 = __nccwpck_require__(4275);
  * Use API to add, edit, or delete some specific strings in the source-based and files-based projects.
  */
 class SourceStrings extends core_1.CrowdinApi {
+    /**
+     * @param projectId project identifier
+     * @param uploadId export identifier
+     */
+    uploadStringsStatus(projectId, uploadId) {
+        const url = `${this.url}/projects/${projectId}/strings/uploads/${uploadId}`;
+        return this.get(url, this.defaultConfig());
+    }
+    /**
+     * @param projectId project identifier
+     * @param request request payload
+     */
+    uploadStrings(projectId, request) {
+        const url = `${this.url}/projects/${projectId}/strings/uploads`;
+        return this.post(url, request, this.defaultConfig());
+    }
     listProjectStrings(projectId, options, deprecatedLimit, deprecatedOffset, deprecatedFilter, deprecatedDenormalizePlaceholders, deprecatedLabelIds, deprecatedScope, deprecatedCroql, deprecatedBranchId, deprecatedDirectoryId) {
         let url = `${this.url}/projects/${projectId}/strings`;
         if ((0, core_1.isOptionalNumber)(options, '1' in arguments)) {
@@ -4551,6 +5406,7 @@ class SourceStrings extends core_1.CrowdinApi {
         url = this.addQueryParam(url, 'croql', options.croql);
         url = this.addQueryParam(url, 'branchId', options.branchId);
         url = this.addQueryParam(url, 'directoryId', options.directoryId);
+        url = this.addQueryParam(url, 'orderBy', options.orderBy);
         return this.getList(url, options.limit, options.offset);
     }
     /**
@@ -4574,10 +5430,12 @@ class SourceStrings extends core_1.CrowdinApi {
     /**
      * @param projectId project identifier
      * @param stringId string identifier
+     * @param query query params
      * @see https://developer.crowdin.com/api/v2/#operation/api.projects.strings.get
      */
-    getString(projectId, stringId) {
-        const url = `${this.url}/projects/${projectId}/strings/${stringId}`;
+    getString(projectId, stringId, query) {
+        let url = `${this.url}/projects/${projectId}/strings/${stringId}`;
+        url = this.addQueryParam(url, 'denormalizePlaceholders', query === null || query === void 0 ? void 0 : query.denormalizePlaceholders);
         return this.get(url, this.defaultConfig());
     }
     /**
@@ -4642,6 +5500,7 @@ class StringComments extends core_1.CrowdinApi {
         url = this.addQueryParam(url, 'targetLanguageId', options.targetLanguageId);
         url = this.addQueryParam(url, 'issueType', options.issueType);
         url = this.addQueryParam(url, 'issueStatus', options.issueStatus);
+        url = this.addQueryParam(url, 'orderBy', options.orderBy);
         return this.getList(url, options.limit, options.offset);
     }
     /**
@@ -4699,7 +5558,7 @@ const core_1 = __nccwpck_require__(4275);
  * Use API to add or remove strings translations, approvals, and votes.
  */
 class StringTranslations extends core_1.CrowdinApi {
-    listTranslationApprovals(projectId, options, deprecatedLanguageId, deprecatedTranslationId, deprecatedLimit, deprecatedOffset, deprecatedFileId) {
+    listTranslationApprovals(projectId, options, deprecatedLanguageId, deprecatedTranslationId, deprecatedLimit, deprecatedOffset, deprecatedFileId, deprecatedLabelIds, deprecatedExcludeLabelIds) {
         let url = `${this.url}/projects/${projectId}/approvals`;
         if ((0, core_1.isOptionalNumber)(options, '1' in arguments)) {
             options = {
@@ -4709,12 +5568,17 @@ class StringTranslations extends core_1.CrowdinApi {
                 limit: deprecatedLimit,
                 offset: deprecatedOffset,
                 fileId: deprecatedFileId,
+                labelIds: deprecatedLabelIds,
+                excludeLabelIds: deprecatedExcludeLabelIds,
             };
         }
         url = this.addQueryParam(url, 'stringId', options.stringId);
         url = this.addQueryParam(url, 'languageId', options.languageId);
         url = this.addQueryParam(url, 'translationId', options.translationId);
         url = this.addQueryParam(url, 'fileId', options.fileId);
+        url = this.addQueryParam(url, 'labelIds', options.labelIds);
+        url = this.addQueryParam(url, 'excludeLabelIds', options.excludeLabelIds);
+        url = this.addQueryParam(url, 'orderBy', options.orderBy);
         return this.getList(url, options.limit, options.offset);
     }
     /**
@@ -4762,6 +5626,12 @@ class StringTranslations extends core_1.CrowdinApi {
         url = this.addQueryParam(url, 'labelIds', options.labelIds);
         url = this.addQueryParam(url, 'denormalizePlaceholders', options.denormalizePlaceholders);
         url = this.addQueryParam(url, 'croql', options.croql);
+        url = this.addQueryParam(url, 'orderBy', options.orderBy);
+        url = this.addQueryParam(url, 'approvedOnly', options.approvedOnly);
+        url = this.addQueryParam(url, 'passedWorkflow', options.passedWorkflow);
+        url = this.addQueryParam(url, 'branchId', options.branchId);
+        url = this.addQueryParam(url, 'directoryId', options.directoryId);
+        url = this.addQueryParam(url, 'minApprovalCount', options.minApprovalCount);
         return this.getList(url, options.limit, options.offset);
     }
     /**
@@ -4785,6 +5655,7 @@ class StringTranslations extends core_1.CrowdinApi {
         url = this.addQueryParam(url, 'stringId', stringId);
         url = this.addQueryParam(url, 'languageId', languageId);
         url = this.addQueryParam(url, 'denormalizePlaceholders', options.denormalizePlaceholders);
+        url = this.addQueryParam(url, 'orderBy', options.orderBy);
         return this.getList(url, options.limit, options.offset);
     }
     /**
@@ -4823,7 +5694,7 @@ class StringTranslations extends core_1.CrowdinApi {
      * @see https://developer.crowdin.com/api/v2/#operation/api.projects.translations.put
      */
     restoreTranslation(projectId, translationId) {
-        const url = `${this.url}/projects/${projectId}/translations/${translationId}/restore`;
+        const url = `${this.url}/projects/${projectId}/translations/${translationId}`;
         return this.put(url, {}, this.defaultConfig());
     }
     /**
@@ -4835,13 +5706,15 @@ class StringTranslations extends core_1.CrowdinApi {
         const url = `${this.url}/projects/${projectId}/translations/${translationId}`;
         return this.delete(url, this.defaultConfig());
     }
-    listTranslationVotes(projectId, options, deprecatedLanguageId, deprecatedTranslationId, deprecatedLimit, deprecatedOffset) {
+    listTranslationVotes(projectId, options, deprecatedLanguageId, deprecatedTranslationId, deprecatedLabelIds, deprecatedExcludeLabelIds, deprecatedLimit, deprecatedOffset) {
         let url = `${this.url}/projects/${projectId}/votes`;
         if ((0, core_1.isOptionalNumber)(options, '1' in arguments)) {
             options = {
                 stringId: options,
                 languageId: deprecatedLanguageId,
                 translationId: deprecatedTranslationId,
+                labelIds: deprecatedLabelIds,
+                excludeLabelIds: deprecatedExcludeLabelIds,
                 limit: deprecatedLimit,
                 offset: deprecatedOffset,
             };
@@ -4849,6 +5722,9 @@ class StringTranslations extends core_1.CrowdinApi {
         url = this.addQueryParam(url, 'stringId', options.stringId);
         url = this.addQueryParam(url, 'languageId', options.languageId);
         url = this.addQueryParam(url, 'translationId', options.translationId);
+        url = this.addQueryParam(url, 'labelIds', options.labelIds);
+        url = this.addQueryParam(url, 'excludeLabelIds', options.excludeLabelIds);
+        url = this.addQueryParam(url, 'fileId', options.fileId);
         return this.getList(url, options.limit, options.offset);
     }
     /**
@@ -4906,6 +5782,8 @@ class Tasks extends core_1.CrowdinApi {
         }
         let url = `${this.url}/projects/${projectId}/tasks`;
         url = this.addQueryParam(url, 'status', options.status);
+        url = this.addQueryParam(url, 'assigneeId', options.assigneeId);
+        url = this.addQueryParam(url, 'orderBy', options.orderBy);
         return this.getList(url, options.limit, options.offset);
     }
     /**
@@ -4966,6 +5844,7 @@ class Tasks extends core_1.CrowdinApi {
         }
         url = this.addQueryParam(url, 'status', options.status);
         url = this.addQueryParam(url, 'isArchived', options.isArchived);
+        url = this.addQueryParam(url, 'orderBy', options.orderBy);
         return this.getList(url, options.limit, options.offset);
     }
     /**
@@ -5033,8 +5912,18 @@ var TasksModel;
     (function (Type) {
         Type[Type["TRANSLATE"] = 0] = "TRANSLATE";
         Type[Type["PROOFREAD"] = 1] = "PROOFREAD";
-        Type[Type["TRANSLATE_BY_VENDOR"] = 2] = "TRANSLATE_BY_VENDOR";
     })(Type = TasksModel.Type || (TasksModel.Type = {}));
+    let TypeVendor;
+    (function (TypeVendor) {
+        TypeVendor[TypeVendor["TRANSLATE_BY_VENDOR"] = 2] = "TRANSLATE_BY_VENDOR";
+        TypeVendor[TypeVendor["PROOFREAD_BY_VENDOR"] = 3] = "PROOFREAD_BY_VENDOR";
+    })(TypeVendor = TasksModel.TypeVendor || (TasksModel.TypeVendor = {}));
+    let TranslatedExpertise;
+    (function (TranslatedExpertise) {
+        TranslatedExpertise["ECONOMY"] = "P";
+        TranslatedExpertise["PROFESSIONAL"] = "T";
+        TranslatedExpertise["PREMIUM"] = "R";
+    })(TranslatedExpertise = TasksModel.TranslatedExpertise || (TasksModel.TranslatedExpertise = {}));
 })(TasksModel = exports.TasksModel || (exports.TasksModel = {}));
 
 
@@ -5050,6 +5939,24 @@ exports.Teams = void 0;
 const core_1 = __nccwpck_require__(4275);
 class Teams extends core_1.CrowdinApi {
     /**
+     * @param teamId team identifier
+     * @param options request options
+     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.teams.projects.permissions.getMany
+     */
+    listTeamProjectPermissions(teamId, options) {
+        const url = `${this.url}/teams/${teamId}/projects/permissions`;
+        return this.getList(url, options === null || options === void 0 ? void 0 : options.limit, options === null || options === void 0 ? void 0 : options.offset);
+    }
+    /**
+     * @param teamId team identifier
+     * @param request request body
+     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.teams.projects.permissions.patch
+     */
+    editTeamProjectPermissions(teamId, request) {
+        const url = `${this.url}/teams/${teamId}/projects/permissions`;
+        return this.patch(url, request, this.defaultConfig());
+    }
+    /**
      * @param projectId project identifier
      * @param request request body
      * @see https://support.crowdin.com/enterprise/api/#operation/api.projects.teams.post
@@ -5062,7 +5969,8 @@ class Teams extends core_1.CrowdinApi {
         if ((0, core_1.isOptionalNumber)(options, '0' in arguments)) {
             options = { limit: options, offset: deprecatedOffset };
         }
-        const url = `${this.url}/teams`;
+        let url = `${this.url}/teams`;
+        url = this.addQueryParam(url, 'orderBy', options.orderBy);
         return this.getList(url, options.limit, options.offset);
     }
     /**
@@ -5160,6 +6068,8 @@ class TranslationMemory extends core_1.CrowdinApi {
         }
         let url = `${this.url}/tms`;
         url = this.addQueryParam(url, 'groupId', options.groupId);
+        url = this.addQueryParam(url, 'userId', options.userId);
+        url = this.addQueryParam(url, 'orderBy', options.orderBy);
         return this.getList(url, options.limit, options.offset);
     }
     /**
@@ -5201,7 +6111,9 @@ class TranslationMemory extends core_1.CrowdinApi {
      * @see https://developer.crowdin.com/api/v2/#operation/api.tms.segments.getMany
      */
     listTmSegments(tmId, options) {
-        const url = `${this.url}/tms/${tmId}/segments`;
+        let url = `${this.url}/tms/${tmId}/segments`;
+        url = this.addQueryParam(url, 'croql', options === null || options === void 0 ? void 0 : options.croql);
+        url = this.addQueryParam(url, 'orderBy', options === null || options === void 0 ? void 0 : options.orderBy);
         return this.getList(url, options === null || options === void 0 ? void 0 : options.limit, options === null || options === void 0 ? void 0 : options.offset);
     }
     /**
@@ -5296,6 +6208,17 @@ class TranslationMemory extends core_1.CrowdinApi {
     /**
      * @param tmId tm identifier
      * @param segmentId segment identifier
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/#operation/api.tms.segments.patch
+     */
+    editTmSegment(tmId, segmentId, request) {
+        const url = `${this.url}/tms/${tmId}/segments/${segmentId}`;
+        return this.patch(url, request, this.defaultConfig());
+    }
+    /**
+     * @deprecated
+     * @param tmId tm identifier
+     * @param segmentId segment identifier
      * @param recordId record identifier
      * @see https://developer.crowdin.com/api/v2/#operation/api.tms.segments.records.delete
      */
@@ -5304,6 +6227,7 @@ class TranslationMemory extends core_1.CrowdinApi {
         return this.delete(url, this.defaultConfig());
     }
     /**
+     * @deprecated
      * @param tmId tm identifier
      * @param segmentId segment identifier
      * @param recordId record identifier
@@ -5315,6 +6239,7 @@ class TranslationMemory extends core_1.CrowdinApi {
         return this.patch(url, request, this.defaultConfig());
     }
     /**
+     * @deprecated
      * @param tmId tm identifier
      * @param segmentId segment identifier
      * @param request request body
@@ -5391,8 +6316,8 @@ class TranslationStatus extends core_1.CrowdinApi {
                 languageIds: deprecatedLanguageIds,
             };
         }
-        url = this.addQueryParam(url, 'category', options.category);
-        url = this.addQueryParam(url, 'validation', options.validation);
+        url = this.addQueryParam(url, 'category', Array.isArray(options.category) ? options.category.join(',') : options.category);
+        url = this.addQueryParam(url, 'validation', Array.isArray(options.validation) ? options.validation.join(',') : options.validation);
         url = this.addQueryParam(url, 'languageIds', options.languageIds);
         return this.getList(url, options.limit, options.offset);
     }
@@ -5485,6 +6410,10 @@ class Translations extends core_1.CrowdinApi {
      * @see https://developer.crowdin.com/api/v2/#operation/api.projects.translations.postOnLanguage
      */
     uploadTranslation(projectId, languageId, request) {
+        const url = `${this.url}/projects/${projectId}/translations/${languageId}`;
+        return this.post(url, request, this.defaultConfig());
+    }
+    uploadTranslationStrings(projectId, languageId, request) {
         const url = `${this.url}/projects/${projectId}/translations/${languageId}`;
         return this.post(url, request, this.defaultConfig());
     }
@@ -6541,6 +7470,8 @@ class Users extends core_1.CrowdinApi {
         url = this.addQueryParam(url, 'search', options.search);
         url = this.addQueryParam(url, 'role', options.role);
         url = this.addQueryParam(url, 'languageId', options.languageId);
+        url = this.addQueryParam(url, 'workflowStepId', options.workflowStepId);
+        url = this.addQueryParam(url, 'orderBy', options.orderBy);
         return this.getList(url, options.limit, options.offset);
     }
     /**
@@ -6593,6 +7524,7 @@ class Users extends core_1.CrowdinApi {
         url = this.addQueryParam(url, 'status', options.status);
         url = this.addQueryParam(url, 'search', options.search);
         url = this.addQueryParam(url, 'twoFactor', options.twoFactor);
+        url = this.addQueryParam(url, 'orderBy', options.orderBy);
         return this.getList(url, options.limit, options.offset);
     }
     /**
@@ -6634,6 +7566,41 @@ class Users extends core_1.CrowdinApi {
     getAuthenticatedUser() {
         const url = `${this.url}/user`;
         return this.get(url, this.defaultConfig());
+    }
+    /**
+     * @param request request body
+     * @see https://developer.crowdin.com/api/v2/#operation/api.user.patch
+     */
+    editAuthenticatedUser(request) {
+        const url = `${this.url}/user`;
+        return this.patch(url, request, this.defaultConfig());
+    }
+    /**
+     * @param userId user identifier
+     * @param options request options
+     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.users.projects.permissions.getMany
+     */
+    listUserProjectPermissions(userId, options) {
+        const url = `${this.url}/users/${userId}/projects/permissions`;
+        return this.getList(url, options === null || options === void 0 ? void 0 : options.limit, options === null || options === void 0 ? void 0 : options.offset);
+    }
+    /**
+     * @param userId user identifier
+     * @param request request body
+     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.users.projects.permissions.patch
+     */
+    editUserProjectPermissions(userId, request) {
+        const url = `${this.url}/users/${userId}/projects/permissions`;
+        return this.patch(url, request, this.defaultConfig());
+    }
+    /**
+     * @param userId user identifier
+     * @param options request options
+     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.users.projects.contributions.getMany
+     */
+    listUserProjectContributions(userId, options) {
+        const url = `${this.url}/users/${userId}/projects/contributions`;
+        return this.getList(url, options === null || options === void 0 ? void 0 : options.limit, options === null || options === void 0 ? void 0 : options.offset);
     }
 }
 exports.Users = Users;
@@ -9057,7 +10024,7 @@ function _parseVault (options) {
   }
 
   // handle scenario for comma separated keys - for use with key rotation
-  // example: DOTENV_KEY="dotenv://:key_1234@dotenv.org/vault/.env.vault?environment=prod,dotenv://:key_7890@dotenv.org/vault/.env.vault?environment=prod"
+  // example: DOTENV_KEY="dotenv://:key_1234@dotenvx.com/vault/.env.vault?environment=prod,dotenv://:key_7890@dotenvx.com/vault/.env.vault?environment=prod"
   const keys = _dotenvKey(options).split(',')
   const length = keys.length
 
@@ -9121,7 +10088,7 @@ function _instructions (result, dotenvKey) {
     uri = new URL(dotenvKey)
   } catch (error) {
     if (error.code === 'ERR_INVALID_URL') {
-      const err = new Error('INVALID_DOTENV_KEY: Wrong format. Must be in valid uri format like dotenv://:key_1234@dotenv.org/vault/.env.vault?environment=development')
+      const err = new Error('INVALID_DOTENV_KEY: Wrong format. Must be in valid uri format like dotenv://:key_1234@dotenvx.com/vault/.env.vault?environment=development')
       err.code = 'INVALID_DOTENV_KEY'
       throw err
     }
@@ -9201,52 +10168,59 @@ function _configVault (options) {
 }
 
 function configDotenv (options) {
-  let dotenvPath = path.resolve(process.cwd(), '.env')
+  const dotenvPath = path.resolve(process.cwd(), '.env')
   let encoding = 'utf8'
   const debug = Boolean(options && options.debug)
 
-  if (options) {
-    if (options.path != null) {
-      let envPath = options.path
-
-      if (Array.isArray(envPath)) {
-        for (const filepath of options.path) {
-          if (fs.existsSync(filepath)) {
-            envPath = filepath
-            break
-          }
-        }
-      }
-
-      dotenvPath = _resolveHome(envPath)
+  if (options && options.encoding) {
+    encoding = options.encoding
+  } else {
+    if (debug) {
+      _debug('No encoding is specified. UTF-8 is used by default')
     }
-    if (options.encoding != null) {
-      encoding = options.encoding
+  }
+
+  let optionPaths = [dotenvPath] // default, look for .env
+  if (options && options.path) {
+    if (!Array.isArray(options.path)) {
+      optionPaths = [_resolveHome(options.path)]
     } else {
-      if (debug) {
-        _debug('No encoding is specified. UTF-8 is used by default')
+      optionPaths = [] // reset default
+      for (const filepath of options.path) {
+        optionPaths.push(_resolveHome(filepath))
       }
     }
   }
 
-  try {
-    // Specifying an encoding returns a string instead of a buffer
-    const parsed = DotenvModule.parse(fs.readFileSync(dotenvPath, { encoding }))
+  // Build the parsed data in a temporary object (because we need to return it).  Once we have the final
+  // parsed data, we will combine it with process.env (or options.processEnv if provided).
+  let lastError
+  const parsedAll = {}
+  for (const path of optionPaths) {
+    try {
+      // Specifying an encoding returns a string instead of a buffer
+      const parsed = DotenvModule.parse(fs.readFileSync(path, { encoding }))
 
-    let processEnv = process.env
-    if (options && options.processEnv != null) {
-      processEnv = options.processEnv
+      DotenvModule.populate(parsedAll, parsed, options)
+    } catch (e) {
+      if (debug) {
+        _debug(`Failed to load ${path} ${e.message}`)
+      }
+      lastError = e
     }
+  }
 
-    DotenvModule.populate(processEnv, parsed, options)
+  let processEnv = process.env
+  if (options && options.processEnv != null) {
+    processEnv = options.processEnv
+  }
 
-    return { parsed }
-  } catch (e) {
-    if (debug) {
-      _debug(`Failed to load ${dotenvPath} ${e.message}`)
-    }
+  DotenvModule.populate(processEnv, parsedAll, options)
 
-    return { error: e }
+  if (lastError) {
+    return { parsed: parsedAll, error: lastError }
+  } else {
+    return { parsed: parsedAll }
   }
 }
 
@@ -9883,7 +10857,7 @@ RedirectableRequest.prototype._processResponse = function (response) {
      redirectUrl.protocol !== "https:" ||
      redirectUrl.host !== currentHost &&
      !isSubdomain(redirectUrl.host, currentHost)) {
-    removeMatchingHeaders(/^(?:authorization|cookie)$/i, this._options.headers);
+    removeMatchingHeaders(/^(?:(?:proxy-)?authorization|cookie)$/i, this._options.headers);
   }
 
   // Evaluate the beforeRedirect callback
@@ -23692,6 +24666,132 @@ module.exports = buildConnector
 
 /***/ }),
 
+/***/ 4462:
+/***/ ((module) => {
+
+"use strict";
+
+
+/** @type {Record<string, string | undefined>} */
+const headerNameLowerCasedRecord = {}
+
+// https://developer.mozilla.org/docs/Web/HTTP/Headers
+const wellknownHeaderNames = [
+  'Accept',
+  'Accept-Encoding',
+  'Accept-Language',
+  'Accept-Ranges',
+  'Access-Control-Allow-Credentials',
+  'Access-Control-Allow-Headers',
+  'Access-Control-Allow-Methods',
+  'Access-Control-Allow-Origin',
+  'Access-Control-Expose-Headers',
+  'Access-Control-Max-Age',
+  'Access-Control-Request-Headers',
+  'Access-Control-Request-Method',
+  'Age',
+  'Allow',
+  'Alt-Svc',
+  'Alt-Used',
+  'Authorization',
+  'Cache-Control',
+  'Clear-Site-Data',
+  'Connection',
+  'Content-Disposition',
+  'Content-Encoding',
+  'Content-Language',
+  'Content-Length',
+  'Content-Location',
+  'Content-Range',
+  'Content-Security-Policy',
+  'Content-Security-Policy-Report-Only',
+  'Content-Type',
+  'Cookie',
+  'Cross-Origin-Embedder-Policy',
+  'Cross-Origin-Opener-Policy',
+  'Cross-Origin-Resource-Policy',
+  'Date',
+  'Device-Memory',
+  'Downlink',
+  'ECT',
+  'ETag',
+  'Expect',
+  'Expect-CT',
+  'Expires',
+  'Forwarded',
+  'From',
+  'Host',
+  'If-Match',
+  'If-Modified-Since',
+  'If-None-Match',
+  'If-Range',
+  'If-Unmodified-Since',
+  'Keep-Alive',
+  'Last-Modified',
+  'Link',
+  'Location',
+  'Max-Forwards',
+  'Origin',
+  'Permissions-Policy',
+  'Pragma',
+  'Proxy-Authenticate',
+  'Proxy-Authorization',
+  'RTT',
+  'Range',
+  'Referer',
+  'Referrer-Policy',
+  'Refresh',
+  'Retry-After',
+  'Sec-WebSocket-Accept',
+  'Sec-WebSocket-Extensions',
+  'Sec-WebSocket-Key',
+  'Sec-WebSocket-Protocol',
+  'Sec-WebSocket-Version',
+  'Server',
+  'Server-Timing',
+  'Service-Worker-Allowed',
+  'Service-Worker-Navigation-Preload',
+  'Set-Cookie',
+  'SourceMap',
+  'Strict-Transport-Security',
+  'Supports-Loading-Mode',
+  'TE',
+  'Timing-Allow-Origin',
+  'Trailer',
+  'Transfer-Encoding',
+  'Upgrade',
+  'Upgrade-Insecure-Requests',
+  'User-Agent',
+  'Vary',
+  'Via',
+  'WWW-Authenticate',
+  'X-Content-Type-Options',
+  'X-DNS-Prefetch-Control',
+  'X-Frame-Options',
+  'X-Permitted-Cross-Domain-Policies',
+  'X-Powered-By',
+  'X-Requested-With',
+  'X-XSS-Protection'
+]
+
+for (let i = 0; i < wellknownHeaderNames.length; ++i) {
+  const key = wellknownHeaderNames[i]
+  const lowerCasedKey = key.toLowerCase()
+  headerNameLowerCasedRecord[key] = headerNameLowerCasedRecord[lowerCasedKey] =
+    lowerCasedKey
+}
+
+// Note: object prototypes should not be able to be referenced. e.g. `Object#hasOwnProperty`.
+Object.setPrototypeOf(headerNameLowerCasedRecord, null)
+
+module.exports = {
+  wellknownHeaderNames,
+  headerNameLowerCasedRecord
+}
+
+
+/***/ }),
+
 /***/ 8045:
 /***/ ((module) => {
 
@@ -24522,6 +25622,7 @@ const { InvalidArgumentError } = __nccwpck_require__(8045)
 const { Blob } = __nccwpck_require__(4300)
 const nodeUtil = __nccwpck_require__(3837)
 const { stringify } = __nccwpck_require__(3477)
+const { headerNameLowerCasedRecord } = __nccwpck_require__(4462)
 
 const [nodeMajor, nodeMinor] = process.versions.node.split('.').map(v => Number(v))
 
@@ -24729,6 +25830,15 @@ const KEEPALIVE_TIMEOUT_EXPR = /timeout=(\d+)/
 function parseKeepAliveTimeout (val) {
   const m = val.toString().match(KEEPALIVE_TIMEOUT_EXPR)
   return m ? parseInt(m[1], 10) * 1000 : null
+}
+
+/**
+ * Retrieves a header name and returns its lowercase value.
+ * @param {string | Buffer} value Header name
+ * @returns {string}
+ */
+function headerNameToString (value) {
+  return headerNameLowerCasedRecord[value] || value.toLowerCase()
 }
 
 function parseHeaders (headers, obj = {}) {
@@ -25002,6 +26112,7 @@ module.exports = {
   isIterable,
   isAsyncIterable,
   isDestroyed,
+  headerNameToString,
   parseRawHeaders,
   parseHeaders,
   parseKeepAliveTimeout,
@@ -29138,6 +30249,9 @@ function httpRedirectFetch (fetchParams, response) {
     // https://fetch.spec.whatwg.org/#cors-non-wildcard-request-header-name
     request.headersList.delete('authorization')
 
+    // https://fetch.spec.whatwg.org/#authentication-entries
+    request.headersList.delete('proxy-authorization', true)
+
     // "Cookie" and "Host" are forbidden request-headers, which undici doesn't implement.
     request.headersList.delete('cookie')
     request.headersList.delete('host')
@@ -31646,14 +32760,18 @@ const { isBlobLike, toUSVString, ReadableStreamFrom } = __nccwpck_require__(3983
 const assert = __nccwpck_require__(9491)
 const { isUint8Array } = __nccwpck_require__(9830)
 
+let supportedHashes = []
+
 // https://nodejs.org/api/crypto.html#determining-if-crypto-support-is-unavailable
 /** @type {import('crypto')|undefined} */
 let crypto
 
 try {
   crypto = __nccwpck_require__(6113)
+  const possibleRelevantHashes = ['sha256', 'sha384', 'sha512']
+  supportedHashes = crypto.getHashes().filter((hash) => possibleRelevantHashes.includes(hash))
+/* c8 ignore next 3 */
 } catch {
-
 }
 
 function responseURL (response) {
@@ -32181,66 +33299,56 @@ function bytesMatch (bytes, metadataList) {
     return true
   }
 
-  // 3. If parsedMetadata is the empty set, return true.
+  // 3. If response is not eligible for integrity validation, return false.
+  // TODO
+
+  // 4. If parsedMetadata is the empty set, return true.
   if (parsedMetadata.length === 0) {
     return true
   }
 
-  // 4. Let metadata be the result of getting the strongest
+  // 5. Let metadata be the result of getting the strongest
   //    metadata from parsedMetadata.
-  const list = parsedMetadata.sort((c, d) => d.algo.localeCompare(c.algo))
-  // get the strongest algorithm
-  const strongest = list[0].algo
-  // get all entries that use the strongest algorithm; ignore weaker
-  const metadata = list.filter((item) => item.algo === strongest)
+  const strongest = getStrongestMetadata(parsedMetadata)
+  const metadata = filterMetadataListByAlgorithm(parsedMetadata, strongest)
 
-  // 5. For each item in metadata:
+  // 6. For each item in metadata:
   for (const item of metadata) {
     // 1. Let algorithm be the alg component of item.
     const algorithm = item.algo
 
     // 2. Let expectedValue be the val component of item.
-    let expectedValue = item.hash
+    const expectedValue = item.hash
 
     // See https://github.com/web-platform-tests/wpt/commit/e4c5cc7a5e48093220528dfdd1c4012dc3837a0e
     // "be liberal with padding". This is annoying, and it's not even in the spec.
 
-    if (expectedValue.endsWith('==')) {
-      expectedValue = expectedValue.slice(0, -2)
-    }
-
     // 3. Let actualValue be the result of applying algorithm to bytes.
     let actualValue = crypto.createHash(algorithm).update(bytes).digest('base64')
 
-    if (actualValue.endsWith('==')) {
-      actualValue = actualValue.slice(0, -2)
+    if (actualValue[actualValue.length - 1] === '=') {
+      if (actualValue[actualValue.length - 2] === '=') {
+        actualValue = actualValue.slice(0, -2)
+      } else {
+        actualValue = actualValue.slice(0, -1)
+      }
     }
 
     // 4. If actualValue is a case-sensitive match for expectedValue,
     //    return true.
-    if (actualValue === expectedValue) {
-      return true
-    }
-
-    let actualBase64URL = crypto.createHash(algorithm).update(bytes).digest('base64url')
-
-    if (actualBase64URL.endsWith('==')) {
-      actualBase64URL = actualBase64URL.slice(0, -2)
-    }
-
-    if (actualBase64URL === expectedValue) {
+    if (compareBase64Mixed(actualValue, expectedValue)) {
       return true
     }
   }
 
-  // 6. Return false.
+  // 7. Return false.
   return false
 }
 
 // https://w3c.github.io/webappsec-subresource-integrity/#grammardef-hash-with-options
 // https://www.w3.org/TR/CSP2/#source-list-syntax
 // https://www.rfc-editor.org/rfc/rfc5234#appendix-B.1
-const parseHashWithOptions = /((?<algo>sha256|sha384|sha512)-(?<hash>[A-z0-9+/]{1}.*={0,2}))( +[\x21-\x7e]?)?/i
+const parseHashWithOptions = /(?<algo>sha256|sha384|sha512)-((?<hash>[A-Za-z0-9+/]+|[A-Za-z0-9_-]+)={0,2}(?:\s|$)( +[!-~]*)?)?/i
 
 /**
  * @see https://w3c.github.io/webappsec-subresource-integrity/#parse-metadata
@@ -32254,8 +33362,6 @@ function parseMetadata (metadata) {
   // 2. Let empty be equal to true.
   let empty = true
 
-  const supportedHashes = crypto.getHashes()
-
   // 3. For each token returned by splitting metadata on spaces:
   for (const token of metadata.split(' ')) {
     // 1. Set empty to false.
@@ -32265,7 +33371,11 @@ function parseMetadata (metadata) {
     const parsedToken = parseHashWithOptions.exec(token)
 
     // 3. If token does not parse, continue to the next token.
-    if (parsedToken === null || parsedToken.groups === undefined) {
+    if (
+      parsedToken === null ||
+      parsedToken.groups === undefined ||
+      parsedToken.groups.algo === undefined
+    ) {
       // Note: Chromium blocks the request at this point, but Firefox
       // gives a warning that an invalid integrity was given. The
       // correct behavior is to ignore these, and subsequently not
@@ -32274,11 +33384,11 @@ function parseMetadata (metadata) {
     }
 
     // 4. Let algorithm be the hash-algo component of token.
-    const algorithm = parsedToken.groups.algo
+    const algorithm = parsedToken.groups.algo.toLowerCase()
 
     // 5. If algorithm is a hash function recognized by the user
     //    agent, add the parsed token to result.
-    if (supportedHashes.includes(algorithm.toLowerCase())) {
+    if (supportedHashes.includes(algorithm)) {
       result.push(parsedToken.groups)
     }
   }
@@ -32289,6 +33399,82 @@ function parseMetadata (metadata) {
   }
 
   return result
+}
+
+/**
+ * @param {{ algo: 'sha256' | 'sha384' | 'sha512' }[]} metadataList
+ */
+function getStrongestMetadata (metadataList) {
+  // Let algorithm be the algo component of the first item in metadataList.
+  // Can be sha256
+  let algorithm = metadataList[0].algo
+  // If the algorithm is sha512, then it is the strongest
+  // and we can return immediately
+  if (algorithm[3] === '5') {
+    return algorithm
+  }
+
+  for (let i = 1; i < metadataList.length; ++i) {
+    const metadata = metadataList[i]
+    // If the algorithm is sha512, then it is the strongest
+    // and we can break the loop immediately
+    if (metadata.algo[3] === '5') {
+      algorithm = 'sha512'
+      break
+    // If the algorithm is sha384, then a potential sha256 or sha384 is ignored
+    } else if (algorithm[3] === '3') {
+      continue
+    // algorithm is sha256, check if algorithm is sha384 and if so, set it as
+    // the strongest
+    } else if (metadata.algo[3] === '3') {
+      algorithm = 'sha384'
+    }
+  }
+  return algorithm
+}
+
+function filterMetadataListByAlgorithm (metadataList, algorithm) {
+  if (metadataList.length === 1) {
+    return metadataList
+  }
+
+  let pos = 0
+  for (let i = 0; i < metadataList.length; ++i) {
+    if (metadataList[i].algo === algorithm) {
+      metadataList[pos++] = metadataList[i]
+    }
+  }
+
+  metadataList.length = pos
+
+  return metadataList
+}
+
+/**
+ * Compares two base64 strings, allowing for base64url
+ * in the second string.
+ *
+* @param {string} actualValue always base64
+ * @param {string} expectedValue base64 or base64url
+ * @returns {boolean}
+ */
+function compareBase64Mixed (actualValue, expectedValue) {
+  if (actualValue.length !== expectedValue.length) {
+    return false
+  }
+  for (let i = 0; i < actualValue.length; ++i) {
+    if (actualValue[i] !== expectedValue[i]) {
+      if (
+        (actualValue[i] === '+' && expectedValue[i] === '-') ||
+        (actualValue[i] === '/' && expectedValue[i] === '_')
+      ) {
+        continue
+      }
+      return false
+    }
+  }
+
+  return true
 }
 
 // https://w3c.github.io/webappsec-upgrade-insecure-requests/#upgrade-request
@@ -32706,7 +33892,8 @@ module.exports = {
   urlHasHttpsScheme,
   urlIsHttpHttpsScheme,
   readAllBytes,
-  normalizeMethodRecord
+  normalizeMethodRecord,
+  parseMetadata
 }
 
 
@@ -34793,12 +35980,17 @@ function parseLocation (statusCode, headers) {
 
 // https://tools.ietf.org/html/rfc7231#section-6.4.4
 function shouldRemoveHeader (header, removeContent, unknownOrigin) {
-  return (
-    (header.length === 4 && header.toString().toLowerCase() === 'host') ||
-    (removeContent && header.toString().toLowerCase().indexOf('content-') === 0) ||
-    (unknownOrigin && header.length === 13 && header.toString().toLowerCase() === 'authorization') ||
-    (unknownOrigin && header.length === 6 && header.toString().toLowerCase() === 'cookie')
-  )
+  if (header.length === 4) {
+    return util.headerNameToString(header) === 'host'
+  }
+  if (removeContent && util.headerNameToString(header).startsWith('content-')) {
+    return true
+  }
+  if (unknownOrigin && (header.length === 13 || header.length === 6 || header.length === 19)) {
+    const name = util.headerNameToString(header)
+    return name === 'authorization' || name === 'cookie' || name === 'proxy-authorization'
+  }
+  return false
 }
 
 // https://tools.ietf.org/html/rfc7231#section-6.4
@@ -41801,7 +42993,7 @@ module.exports = parseParams
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
-// Axios v1.6.7 Copyright (c) 2024 Matt Zabriskie and contributors
+// Axios v1.7.7 Copyright (c) 2024 Matt Zabriskie and contributors
 
 
 const FormData$1 = __nccwpck_require__(1403);
@@ -41813,7 +43005,7 @@ const util = __nccwpck_require__(3837);
 const followRedirects = __nccwpck_require__(7707);
 const zlib = __nccwpck_require__(9796);
 const stream = __nccwpck_require__(2781);
-const EventEmitter = __nccwpck_require__(2361);
+const events = __nccwpck_require__(2361);
 
 function _interopDefaultLegacy (e) { return e && typeof e === 'object' && 'default' in e ? e : { 'default': e }; }
 
@@ -41825,7 +43017,6 @@ const util__default = /*#__PURE__*/_interopDefaultLegacy(util);
 const followRedirects__default = /*#__PURE__*/_interopDefaultLegacy(followRedirects);
 const zlib__default = /*#__PURE__*/_interopDefaultLegacy(zlib);
 const stream__default = /*#__PURE__*/_interopDefaultLegacy(stream);
-const EventEmitter__default = /*#__PURE__*/_interopDefaultLegacy(EventEmitter);
 
 function bind(fn, thisArg) {
   return function wrap() {
@@ -42039,6 +43230,8 @@ const isFormData = (thing) => {
  * @returns {boolean} True if value is a URLSearchParams object, otherwise false
  */
 const isURLSearchParams = kindOfTest('URLSearchParams');
+
+const [isReadableStream, isRequest, isResponse, isHeaders] = ['ReadableStream', 'Request', 'Response', 'Headers'].map(kindOfTest);
 
 /**
  * Trim excess whitespace off the beginning and end of a string
@@ -42428,8 +43621,7 @@ const toObjectSet = (arrayOrString, delimiter) => {
 const noop = () => {};
 
 const toFiniteNumber = (value, defaultValue) => {
-  value = +value;
-  return Number.isFinite(value) ? value : defaultValue;
+  return value != null && Number.isFinite(value = +value) ? value : defaultValue;
 };
 
 const ALPHA = 'abcdefghijklmnopqrstuvwxyz';
@@ -42499,6 +43691,36 @@ const isAsyncFn = kindOfTest('AsyncFunction');
 const isThenable = (thing) =>
   thing && (isObject(thing) || isFunction(thing)) && isFunction(thing.then) && isFunction(thing.catch);
 
+// original code
+// https://github.com/DigitalBrainJS/AxiosPromise/blob/16deab13710ec09779922131f3fa5954320f83ab/lib/utils.js#L11-L34
+
+const _setImmediate = ((setImmediateSupported, postMessageSupported) => {
+  if (setImmediateSupported) {
+    return setImmediate;
+  }
+
+  return postMessageSupported ? ((token, callbacks) => {
+    _global.addEventListener("message", ({source, data}) => {
+      if (source === _global && data === token) {
+        callbacks.length && callbacks.shift()();
+      }
+    }, false);
+
+    return (cb) => {
+      callbacks.push(cb);
+      _global.postMessage(token, "*");
+    }
+  })(`axios@${Math.random()}`, []) : (cb) => setTimeout(cb);
+})(
+  typeof setImmediate === 'function',
+  isFunction(_global.postMessage)
+);
+
+const asap = typeof queueMicrotask !== 'undefined' ?
+  queueMicrotask.bind(_global) : ( typeof process !== 'undefined' && process.nextTick || _setImmediate);
+
+// *********************
+
 const utils$1 = {
   isArray,
   isArrayBuffer,
@@ -42510,6 +43732,10 @@ const utils$1 = {
   isBoolean,
   isObject,
   isPlainObject,
+  isReadableStream,
+  isRequest,
+  isResponse,
+  isHeaders,
   isUndefined,
   isDate,
   isFile,
@@ -42550,7 +43776,9 @@ const utils$1 = {
   isSpecCompliantForm,
   toJSONObject,
   isAsyncFn,
-  isThenable
+  isThenable,
+  setImmediate: _setImmediate,
+  asap
 };
 
 /**
@@ -42578,7 +43806,10 @@ function AxiosError(message, code, config, request, response) {
   code && (this.code = code);
   config && (this.config = config);
   request && (this.request = request);
-  response && (this.response = response);
+  if (response) {
+    this.response = response;
+    this.status = response.status ? response.status : null;
+  }
 }
 
 utils$1.inherits(AxiosError, Error, {
@@ -42598,7 +43829,7 @@ utils$1.inherits(AxiosError, Error, {
       // Axios
       config: utils$1.toJSONObject(this.config),
       code: this.code,
-      status: this.response && this.response.status ? this.response.status : null
+      status: this.status
     };
   }
 });
@@ -43059,6 +44290,8 @@ const platform$1 = {
 
 const hasBrowserEnv = typeof window !== 'undefined' && typeof document !== 'undefined';
 
+const _navigator = typeof navigator === 'object' && navigator || undefined;
+
 /**
  * Determine if we're running in a standard browser environment
  *
@@ -43076,10 +44309,8 @@ const hasBrowserEnv = typeof window !== 'undefined' && typeof document !== 'unde
  *
  * @returns {boolean}
  */
-const hasStandardBrowserEnv = (
-  (product) => {
-    return hasBrowserEnv && ['ReactNative', 'NativeScript', 'NS'].indexOf(product) < 0
-  })(typeof navigator !== 'undefined' && navigator.product);
+const hasStandardBrowserEnv = hasBrowserEnv &&
+  (!_navigator || ['ReactNative', 'NativeScript', 'NS'].indexOf(_navigator.product) < 0);
 
 /**
  * Determine if we're running in a standard browser webWorker environment
@@ -43099,11 +44330,15 @@ const hasStandardBrowserWebWorkerEnv = (() => {
   );
 })();
 
+const origin = hasBrowserEnv && window.location.href || 'http://localhost';
+
 const utils = /*#__PURE__*/Object.freeze({
   __proto__: null,
   hasBrowserEnv: hasBrowserEnv,
   hasStandardBrowserWebWorkerEnv: hasStandardBrowserWebWorkerEnv,
-  hasStandardBrowserEnv: hasStandardBrowserEnv
+  hasStandardBrowserEnv: hasStandardBrowserEnv,
+  navigator: _navigator,
+  origin: origin
 });
 
 const platform = {
@@ -43243,7 +44478,7 @@ const defaults = {
 
   transitional: transitionalDefaults,
 
-  adapter: ['xhr', 'http'],
+  adapter: ['xhr', 'http', 'fetch'],
 
   transformRequest: [function transformRequest(data, headers) {
     const contentType = headers.getContentType() || '';
@@ -43264,7 +44499,8 @@ const defaults = {
       utils$1.isBuffer(data) ||
       utils$1.isStream(data) ||
       utils$1.isFile(data) ||
-      utils$1.isBlob(data)
+      utils$1.isBlob(data) ||
+      utils$1.isReadableStream(data)
     ) {
       return data;
     }
@@ -43306,6 +44542,10 @@ const defaults = {
     const transitional = this.transitional || defaults.transitional;
     const forcedJSONParsing = transitional && transitional.forcedJSONParsing;
     const JSONRequested = this.responseType === 'json';
+
+    if (utils$1.isResponse(data) || utils$1.isReadableStream(data)) {
+      return data;
+    }
 
     if (data && utils$1.isString(data) && ((forcedJSONParsing && !this.responseType) || JSONRequested)) {
       const silentJSONParsing = transitional && transitional.silentJSONParsing;
@@ -43510,6 +44750,10 @@ class AxiosHeaders {
       setHeaders(header, valueOrRewrite);
     } else if(utils$1.isString(header) && (header = header.trim()) && !isValidHeaderName(header)) {
       setHeaders(parseHeaders(header), valueOrRewrite);
+    } else if (utils$1.isHeaders(header)) {
+      for (const [key, value] of header.entries()) {
+        setHeader(value, key, rewrite);
+      }
     } else {
       header != null && setHeader(valueOrRewrite, header, rewrite);
     }
@@ -43822,7 +45066,7 @@ function buildFullPath(baseURL, requestedURL) {
   return requestedURL;
 }
 
-const VERSION = "1.6.7";
+const VERSION = "1.7.7";
 
 function parseProtocol(url) {
   const match = /^([-+\w]{1,25})(:?\/\/|:)/.exec(url);
@@ -43877,88 +45121,6 @@ function fromDataURI(uri, asBlob, options) {
   throw new AxiosError('Unsupported protocol ' + protocol, AxiosError.ERR_NOT_SUPPORT);
 }
 
-/**
- * Throttle decorator
- * @param {Function} fn
- * @param {Number} freq
- * @return {Function}
- */
-function throttle(fn, freq) {
-  let timestamp = 0;
-  const threshold = 1000 / freq;
-  let timer = null;
-  return function throttled(force, args) {
-    const now = Date.now();
-    if (force || now - timestamp > threshold) {
-      if (timer) {
-        clearTimeout(timer);
-        timer = null;
-      }
-      timestamp = now;
-      return fn.apply(null, args);
-    }
-    if (!timer) {
-      timer = setTimeout(() => {
-        timer = null;
-        timestamp = Date.now();
-        return fn.apply(null, args);
-      }, threshold - (now - timestamp));
-    }
-  };
-}
-
-/**
- * Calculate data maxRate
- * @param {Number} [samplesCount= 10]
- * @param {Number} [min= 1000]
- * @returns {Function}
- */
-function speedometer(samplesCount, min) {
-  samplesCount = samplesCount || 10;
-  const bytes = new Array(samplesCount);
-  const timestamps = new Array(samplesCount);
-  let head = 0;
-  let tail = 0;
-  let firstSampleTS;
-
-  min = min !== undefined ? min : 1000;
-
-  return function push(chunkLength) {
-    const now = Date.now();
-
-    const startedAt = timestamps[tail];
-
-    if (!firstSampleTS) {
-      firstSampleTS = now;
-    }
-
-    bytes[head] = chunkLength;
-    timestamps[head] = now;
-
-    let i = tail;
-    let bytesCount = 0;
-
-    while (i !== head) {
-      bytesCount += bytes[i++];
-      i = i % samplesCount;
-    }
-
-    head = (head + 1) % samplesCount;
-
-    if (head === tail) {
-      tail = (tail + 1) % samplesCount;
-    }
-
-    if (now - firstSampleTS < min) {
-      return;
-    }
-
-    const passed = startedAt && now - startedAt;
-
-    return passed ? Math.round(bytesCount * 1000 / passed) : undefined;
-  };
-}
-
 const kInternals = Symbol('internals');
 
 class AxiosTransformStream extends stream__default["default"].Transform{
@@ -43978,12 +45140,8 @@ class AxiosTransformStream extends stream__default["default"].Transform{
       readableHighWaterMark: options.chunkSize
     });
 
-    const self = this;
-
     const internals = this[kInternals] = {
-      length: options.length,
       timeWindow: options.timeWindow,
-      ticksRate: options.ticksRate,
       chunkSize: options.chunkSize,
       maxRate: options.maxRate,
       minChunkSize: options.minChunkSize,
@@ -43995,8 +45153,6 @@ class AxiosTransformStream extends stream__default["default"].Transform{
       onReadCallback: null
     };
 
-    const _speedometer = speedometer(internals.ticksRate * options.samplesCount, internals.timeWindow);
-
     this.on('newListener', event => {
       if (event === 'progress') {
         if (!internals.isCaptured) {
@@ -44004,38 +45160,6 @@ class AxiosTransformStream extends stream__default["default"].Transform{
         }
       }
     });
-
-    let bytesNotified = 0;
-
-    internals.updateProgress = throttle(function throttledHandler() {
-      const totalBytes = internals.length;
-      const bytesTransferred = internals.bytesSeen;
-      const progressBytes = bytesTransferred - bytesNotified;
-      if (!progressBytes || self.destroyed) return;
-
-      const rate = _speedometer(progressBytes);
-
-      bytesNotified = bytesTransferred;
-
-      process.nextTick(() => {
-        self.emit('progress', {
-          'loaded': bytesTransferred,
-          'total': totalBytes,
-          'progress': totalBytes ? (bytesTransferred / totalBytes) : undefined,
-          'bytes': progressBytes,
-          'rate': rate ? rate : undefined,
-          'estimated': rate && totalBytes && bytesTransferred <= totalBytes ?
-            (totalBytes - bytesTransferred) / rate : undefined
-        });
-      });
-    }, internals.ticksRate);
-
-    const onFinish = () => {
-      internals.updateProgress(true);
-    };
-
-    this.once('end', onFinish);
-    this.once('error', onFinish);
   }
 
   _read(size) {
@@ -44049,7 +45173,6 @@ class AxiosTransformStream extends stream__default["default"].Transform{
   }
 
   _transform(chunk, encoding, callback) {
-    const self = this;
     const internals = this[kInternals];
     const maxRate = internals.maxRate;
 
@@ -44061,16 +45184,14 @@ class AxiosTransformStream extends stream__default["default"].Transform{
     const bytesThreshold = (maxRate / divider);
     const minChunkSize = internals.minChunkSize !== false ? Math.max(internals.minChunkSize, bytesThreshold * 0.01) : 0;
 
-    function pushChunk(_chunk, _callback) {
+    const pushChunk = (_chunk, _callback) => {
       const bytes = Buffer.byteLength(_chunk);
       internals.bytesSeen += bytes;
       internals.bytes += bytes;
 
-      if (internals.isCaptured) {
-        internals.updateProgress();
-      }
+      internals.isCaptured && this.emit('progress', internals.bytesSeen);
 
-      if (self.push(_chunk)) {
+      if (this.push(_chunk)) {
         process.nextTick(_callback);
       } else {
         internals.onReadCallback = () => {
@@ -44078,7 +45199,7 @@ class AxiosTransformStream extends stream__default["default"].Transform{
           process.nextTick(_callback);
         };
       }
-    }
+    };
 
     const transformChunk = (_chunk, _callback) => {
       const chunkSize = Buffer.byteLength(_chunk);
@@ -44134,11 +45255,6 @@ class AxiosTransformStream extends stream__default["default"].Transform{
         callback(null);
       }
     });
-  }
-
-  setLength(length) {
-    this[kInternals].length = +length;
-    return this;
   }
 }
 
@@ -44307,6 +45423,142 @@ const callbackify = (fn, reducer) => {
 
 const callbackify$1 = callbackify;
 
+/**
+ * Calculate data maxRate
+ * @param {Number} [samplesCount= 10]
+ * @param {Number} [min= 1000]
+ * @returns {Function}
+ */
+function speedometer(samplesCount, min) {
+  samplesCount = samplesCount || 10;
+  const bytes = new Array(samplesCount);
+  const timestamps = new Array(samplesCount);
+  let head = 0;
+  let tail = 0;
+  let firstSampleTS;
+
+  min = min !== undefined ? min : 1000;
+
+  return function push(chunkLength) {
+    const now = Date.now();
+
+    const startedAt = timestamps[tail];
+
+    if (!firstSampleTS) {
+      firstSampleTS = now;
+    }
+
+    bytes[head] = chunkLength;
+    timestamps[head] = now;
+
+    let i = tail;
+    let bytesCount = 0;
+
+    while (i !== head) {
+      bytesCount += bytes[i++];
+      i = i % samplesCount;
+    }
+
+    head = (head + 1) % samplesCount;
+
+    if (head === tail) {
+      tail = (tail + 1) % samplesCount;
+    }
+
+    if (now - firstSampleTS < min) {
+      return;
+    }
+
+    const passed = startedAt && now - startedAt;
+
+    return passed ? Math.round(bytesCount * 1000 / passed) : undefined;
+  };
+}
+
+/**
+ * Throttle decorator
+ * @param {Function} fn
+ * @param {Number} freq
+ * @return {Function}
+ */
+function throttle(fn, freq) {
+  let timestamp = 0;
+  let threshold = 1000 / freq;
+  let lastArgs;
+  let timer;
+
+  const invoke = (args, now = Date.now()) => {
+    timestamp = now;
+    lastArgs = null;
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    fn.apply(null, args);
+  };
+
+  const throttled = (...args) => {
+    const now = Date.now();
+    const passed = now - timestamp;
+    if ( passed >= threshold) {
+      invoke(args, now);
+    } else {
+      lastArgs = args;
+      if (!timer) {
+        timer = setTimeout(() => {
+          timer = null;
+          invoke(lastArgs);
+        }, threshold - passed);
+      }
+    }
+  };
+
+  const flush = () => lastArgs && invoke(lastArgs);
+
+  return [throttled, flush];
+}
+
+const progressEventReducer = (listener, isDownloadStream, freq = 3) => {
+  let bytesNotified = 0;
+  const _speedometer = speedometer(50, 250);
+
+  return throttle(e => {
+    const loaded = e.loaded;
+    const total = e.lengthComputable ? e.total : undefined;
+    const progressBytes = loaded - bytesNotified;
+    const rate = _speedometer(progressBytes);
+    const inRange = loaded <= total;
+
+    bytesNotified = loaded;
+
+    const data = {
+      loaded,
+      total,
+      progress: total ? (loaded / total) : undefined,
+      bytes: progressBytes,
+      rate: rate ? rate : undefined,
+      estimated: rate && total && inRange ? (total - loaded) / rate : undefined,
+      event: e,
+      lengthComputable: total != null,
+      [isDownloadStream ? 'download' : 'upload']: true
+    };
+
+    listener(data);
+  }, freq);
+};
+
+const progressEventDecorator = (total, throttled) => {
+  const lengthComputable = total != null;
+
+  return [(loaded) => throttled[0]({
+    lengthComputable,
+    total,
+    loaded
+  }), throttled[1]];
+};
+
+const asyncDecorator = (fn) => (...args) => utils$1.asap(() => fn(...args));
+
 const zlibOptions = {
   flush: zlib__default["default"].constants.Z_SYNC_FLUSH,
   finishFlush: zlib__default["default"].constants.Z_SYNC_FLUSH
@@ -44326,6 +45578,14 @@ const isHttps = /https:?/;
 const supportedProtocols = platform.protocols.map(protocol => {
   return protocol + ':';
 });
+
+const flushOnFinish = (stream, [throttled, flush]) => {
+  stream
+    .on('end', flush)
+    .on('error', flush);
+
+  return throttled;
+};
 
 /**
  * If the proxy or config beforeRedirects functions are defined, call them with the options
@@ -44465,7 +45725,7 @@ const httpAdapter = isHttpAdapterSupported && function httpAdapter(config) {
     }
 
     // temporary internal emitter until the AxiosRequest class will be implemented
-    const emitter = new EventEmitter__default["default"]();
+    const emitter = new events.EventEmitter();
 
     const onFinished = () => {
       if (config.cancelToken) {
@@ -44502,7 +45762,7 @@ const httpAdapter = isHttpAdapterSupported && function httpAdapter(config) {
 
     // Parse url
     const fullPath = buildFullPath(config.baseURL, config.url);
-    const parsed = new URL(fullPath, 'http://localhost');
+    const parsed = new URL(fullPath, platform.hasBrowserEnv ? platform.origin : undefined);
     const protocol = parsed.protocol || supportedProtocols[0];
 
     if (protocol === 'data:') {
@@ -44560,8 +45820,7 @@ const httpAdapter = isHttpAdapterSupported && function httpAdapter(config) {
     // Only set header if it hasn't been set in config
     headers.set('User-Agent', 'axios/' + VERSION, false);
 
-    const onDownloadProgress = config.onDownloadProgress;
-    const onUploadProgress = config.onUploadProgress;
+    const {onUploadProgress, onDownloadProgress} = config;
     const maxRate = config.maxRate;
     let maxUploadRate = undefined;
     let maxDownloadRate = undefined;
@@ -44632,15 +45891,16 @@ const httpAdapter = isHttpAdapterSupported && function httpAdapter(config) {
       }
 
       data = stream__default["default"].pipeline([data, new AxiosTransformStream$1({
-        length: contentLength,
         maxRate: utils$1.toFiniteNumber(maxUploadRate)
       })], utils$1.noop);
 
-      onUploadProgress && data.on('progress', progress => {
-        onUploadProgress(Object.assign(progress, {
-          upload: true
-        }));
-      });
+      onUploadProgress && data.on('progress', flushOnFinish(
+        data,
+        progressEventDecorator(
+          contentLength,
+          progressEventReducer(asyncDecorator(onUploadProgress), false, 3)
+        )
+      ));
     }
 
     // HTTP basic authentication
@@ -44698,7 +45958,7 @@ const httpAdapter = isHttpAdapterSupported && function httpAdapter(config) {
     if (config.socketPath) {
       options.socketPath = config.socketPath;
     } else {
-      options.hostname = parsed.hostname;
+      options.hostname = parsed.hostname.startsWith("[") ? parsed.hostname.slice(1, -1) : parsed.hostname;
       options.port = parsed.port;
       setProxy(options, config.proxy, protocol + '//' + parsed.hostname + (parsed.port ? ':' + parsed.port : '') + options.path);
     }
@@ -44739,17 +45999,18 @@ const httpAdapter = isHttpAdapterSupported && function httpAdapter(config) {
 
       const responseLength = +res.headers['content-length'];
 
-      if (onDownloadProgress) {
+      if (onDownloadProgress || maxDownloadRate) {
         const transformStream = new AxiosTransformStream$1({
-          length: utils$1.toFiniteNumber(responseLength),
           maxRate: utils$1.toFiniteNumber(maxDownloadRate)
         });
 
-        onDownloadProgress && transformStream.on('progress', progress => {
-          onDownloadProgress(Object.assign(progress, {
-            download: true
-          }));
-        });
+        onDownloadProgress && transformStream.on('progress', flushOnFinish(
+          transformStream,
+          progressEventDecorator(
+            responseLength,
+            progressEventReducer(asyncDecorator(onDownloadProgress), true, 3)
+          )
+        ));
 
         streams.push(transformStream);
       }
@@ -44962,51 +46223,12 @@ const httpAdapter = isHttpAdapterSupported && function httpAdapter(config) {
   });
 };
 
-const cookies = platform.hasStandardBrowserEnv ?
-
-  // Standard browser envs support document.cookie
-  {
-    write(name, value, expires, path, domain, secure) {
-      const cookie = [name + '=' + encodeURIComponent(value)];
-
-      utils$1.isNumber(expires) && cookie.push('expires=' + new Date(expires).toGMTString());
-
-      utils$1.isString(path) && cookie.push('path=' + path);
-
-      utils$1.isString(domain) && cookie.push('domain=' + domain);
-
-      secure === true && cookie.push('secure');
-
-      document.cookie = cookie.join('; ');
-    },
-
-    read(name) {
-      const match = document.cookie.match(new RegExp('(^|;\\s*)(' + name + ')=([^;]*)'));
-      return (match ? decodeURIComponent(match[3]) : null);
-    },
-
-    remove(name) {
-      this.write(name, '', Date.now() - 86400000);
-    }
-  }
-
-  :
-
-  // Non-standard browser env (web workers, react-native) lack needed support.
-  {
-    write() {},
-    read() {
-      return null;
-    },
-    remove() {}
-  };
-
 const isURLSameOrigin = platform.hasStandardBrowserEnv ?
 
 // Standard browser envs have full support of the APIs needed to test
 // whether the request URL is of the same origin as current location.
   (function standardBrowserEnv() {
-    const msie = /(msie|trident)/i.test(navigator.userAgent);
+    const msie = platform.navigator && /(msie|trident)/i.test(platform.navigator.userAgent);
     const urlParsingNode = document.createElement('a');
     let originURL;
 
@@ -45064,80 +46286,222 @@ const isURLSameOrigin = platform.hasStandardBrowserEnv ?
     };
   })();
 
-function progressEventReducer(listener, isDownloadStream) {
-  let bytesNotified = 0;
-  const _speedometer = speedometer(50, 250);
+const cookies = platform.hasStandardBrowserEnv ?
 
-  return e => {
-    const loaded = e.loaded;
-    const total = e.lengthComputable ? e.total : undefined;
-    const progressBytes = loaded - bytesNotified;
-    const rate = _speedometer(progressBytes);
-    const inRange = loaded <= total;
+  // Standard browser envs support document.cookie
+  {
+    write(name, value, expires, path, domain, secure) {
+      const cookie = [name + '=' + encodeURIComponent(value)];
 
-    bytesNotified = loaded;
+      utils$1.isNumber(expires) && cookie.push('expires=' + new Date(expires).toGMTString());
 
-    const data = {
-      loaded,
-      total,
-      progress: total ? (loaded / total) : undefined,
-      bytes: progressBytes,
-      rate: rate ? rate : undefined,
-      estimated: rate && total && inRange ? (total - loaded) / rate : undefined,
-      event: e
-    };
+      utils$1.isString(path) && cookie.push('path=' + path);
 
-    data[isDownloadStream ? 'download' : 'upload'] = true;
+      utils$1.isString(domain) && cookie.push('domain=' + domain);
 
-    listener(data);
+      secure === true && cookie.push('secure');
+
+      document.cookie = cookie.join('; ');
+    },
+
+    read(name) {
+      const match = document.cookie.match(new RegExp('(^|;\\s*)(' + name + ')=([^;]*)'));
+      return (match ? decodeURIComponent(match[3]) : null);
+    },
+
+    remove(name) {
+      this.write(name, '', Date.now() - 86400000);
+    }
+  }
+
+  :
+
+  // Non-standard browser env (web workers, react-native) lack needed support.
+  {
+    write() {},
+    read() {
+      return null;
+    },
+    remove() {}
   };
+
+const headersToObject = (thing) => thing instanceof AxiosHeaders$1 ? { ...thing } : thing;
+
+/**
+ * Config-specific merge-function which creates a new config-object
+ * by merging two configuration objects together.
+ *
+ * @param {Object} config1
+ * @param {Object} config2
+ *
+ * @returns {Object} New object resulting from merging config2 to config1
+ */
+function mergeConfig(config1, config2) {
+  // eslint-disable-next-line no-param-reassign
+  config2 = config2 || {};
+  const config = {};
+
+  function getMergedValue(target, source, caseless) {
+    if (utils$1.isPlainObject(target) && utils$1.isPlainObject(source)) {
+      return utils$1.merge.call({caseless}, target, source);
+    } else if (utils$1.isPlainObject(source)) {
+      return utils$1.merge({}, source);
+    } else if (utils$1.isArray(source)) {
+      return source.slice();
+    }
+    return source;
+  }
+
+  // eslint-disable-next-line consistent-return
+  function mergeDeepProperties(a, b, caseless) {
+    if (!utils$1.isUndefined(b)) {
+      return getMergedValue(a, b, caseless);
+    } else if (!utils$1.isUndefined(a)) {
+      return getMergedValue(undefined, a, caseless);
+    }
+  }
+
+  // eslint-disable-next-line consistent-return
+  function valueFromConfig2(a, b) {
+    if (!utils$1.isUndefined(b)) {
+      return getMergedValue(undefined, b);
+    }
+  }
+
+  // eslint-disable-next-line consistent-return
+  function defaultToConfig2(a, b) {
+    if (!utils$1.isUndefined(b)) {
+      return getMergedValue(undefined, b);
+    } else if (!utils$1.isUndefined(a)) {
+      return getMergedValue(undefined, a);
+    }
+  }
+
+  // eslint-disable-next-line consistent-return
+  function mergeDirectKeys(a, b, prop) {
+    if (prop in config2) {
+      return getMergedValue(a, b);
+    } else if (prop in config1) {
+      return getMergedValue(undefined, a);
+    }
+  }
+
+  const mergeMap = {
+    url: valueFromConfig2,
+    method: valueFromConfig2,
+    data: valueFromConfig2,
+    baseURL: defaultToConfig2,
+    transformRequest: defaultToConfig2,
+    transformResponse: defaultToConfig2,
+    paramsSerializer: defaultToConfig2,
+    timeout: defaultToConfig2,
+    timeoutMessage: defaultToConfig2,
+    withCredentials: defaultToConfig2,
+    withXSRFToken: defaultToConfig2,
+    adapter: defaultToConfig2,
+    responseType: defaultToConfig2,
+    xsrfCookieName: defaultToConfig2,
+    xsrfHeaderName: defaultToConfig2,
+    onUploadProgress: defaultToConfig2,
+    onDownloadProgress: defaultToConfig2,
+    decompress: defaultToConfig2,
+    maxContentLength: defaultToConfig2,
+    maxBodyLength: defaultToConfig2,
+    beforeRedirect: defaultToConfig2,
+    transport: defaultToConfig2,
+    httpAgent: defaultToConfig2,
+    httpsAgent: defaultToConfig2,
+    cancelToken: defaultToConfig2,
+    socketPath: defaultToConfig2,
+    responseEncoding: defaultToConfig2,
+    validateStatus: mergeDirectKeys,
+    headers: (a, b) => mergeDeepProperties(headersToObject(a), headersToObject(b), true)
+  };
+
+  utils$1.forEach(Object.keys(Object.assign({}, config1, config2)), function computeConfigValue(prop) {
+    const merge = mergeMap[prop] || mergeDeepProperties;
+    const configValue = merge(config1[prop], config2[prop], prop);
+    (utils$1.isUndefined(configValue) && merge !== mergeDirectKeys) || (config[prop] = configValue);
+  });
+
+  return config;
 }
+
+const resolveConfig = (config) => {
+  const newConfig = mergeConfig({}, config);
+
+  let {data, withXSRFToken, xsrfHeaderName, xsrfCookieName, headers, auth} = newConfig;
+
+  newConfig.headers = headers = AxiosHeaders$1.from(headers);
+
+  newConfig.url = buildURL(buildFullPath(newConfig.baseURL, newConfig.url), config.params, config.paramsSerializer);
+
+  // HTTP basic authentication
+  if (auth) {
+    headers.set('Authorization', 'Basic ' +
+      btoa((auth.username || '') + ':' + (auth.password ? unescape(encodeURIComponent(auth.password)) : ''))
+    );
+  }
+
+  let contentType;
+
+  if (utils$1.isFormData(data)) {
+    if (platform.hasStandardBrowserEnv || platform.hasStandardBrowserWebWorkerEnv) {
+      headers.setContentType(undefined); // Let the browser set it
+    } else if ((contentType = headers.getContentType()) !== false) {
+      // fix semicolon duplication issue for ReactNative FormData implementation
+      const [type, ...tokens] = contentType ? contentType.split(';').map(token => token.trim()).filter(Boolean) : [];
+      headers.setContentType([type || 'multipart/form-data', ...tokens].join('; '));
+    }
+  }
+
+  // Add xsrf header
+  // This is only done if running in a standard browser environment.
+  // Specifically not if we're in a web worker, or react-native.
+
+  if (platform.hasStandardBrowserEnv) {
+    withXSRFToken && utils$1.isFunction(withXSRFToken) && (withXSRFToken = withXSRFToken(newConfig));
+
+    if (withXSRFToken || (withXSRFToken !== false && isURLSameOrigin(newConfig.url))) {
+      // Add xsrf header
+      const xsrfValue = xsrfHeaderName && xsrfCookieName && cookies.read(xsrfCookieName);
+
+      if (xsrfValue) {
+        headers.set(xsrfHeaderName, xsrfValue);
+      }
+    }
+  }
+
+  return newConfig;
+};
 
 const isXHRAdapterSupported = typeof XMLHttpRequest !== 'undefined';
 
 const xhrAdapter = isXHRAdapterSupported && function (config) {
   return new Promise(function dispatchXhrRequest(resolve, reject) {
-    let requestData = config.data;
-    const requestHeaders = AxiosHeaders$1.from(config.headers).normalize();
-    let {responseType, withXSRFToken} = config;
+    const _config = resolveConfig(config);
+    let requestData = _config.data;
+    const requestHeaders = AxiosHeaders$1.from(_config.headers).normalize();
+    let {responseType, onUploadProgress, onDownloadProgress} = _config;
     let onCanceled;
+    let uploadThrottled, downloadThrottled;
+    let flushUpload, flushDownload;
+
     function done() {
-      if (config.cancelToken) {
-        config.cancelToken.unsubscribe(onCanceled);
-      }
+      flushUpload && flushUpload(); // flush events
+      flushDownload && flushDownload(); // flush events
 
-      if (config.signal) {
-        config.signal.removeEventListener('abort', onCanceled);
-      }
-    }
+      _config.cancelToken && _config.cancelToken.unsubscribe(onCanceled);
 
-    let contentType;
-
-    if (utils$1.isFormData(requestData)) {
-      if (platform.hasStandardBrowserEnv || platform.hasStandardBrowserWebWorkerEnv) {
-        requestHeaders.setContentType(false); // Let the browser set it
-      } else if ((contentType = requestHeaders.getContentType()) !== false) {
-        // fix semicolon duplication issue for ReactNative FormData implementation
-        const [type, ...tokens] = contentType ? contentType.split(';').map(token => token.trim()).filter(Boolean) : [];
-        requestHeaders.setContentType([type || 'multipart/form-data', ...tokens].join('; '));
-      }
+      _config.signal && _config.signal.removeEventListener('abort', onCanceled);
     }
 
     let request = new XMLHttpRequest();
 
-    // HTTP basic authentication
-    if (config.auth) {
-      const username = config.auth.username || '';
-      const password = config.auth.password ? unescape(encodeURIComponent(config.auth.password)) : '';
-      requestHeaders.set('Authorization', 'Basic ' + btoa(username + ':' + password));
-    }
-
-    const fullPath = buildFullPath(config.baseURL, config.url);
-
-    request.open(config.method.toUpperCase(), buildURL(fullPath, config.params, config.paramsSerializer), true);
+    request.open(_config.method.toUpperCase(), _config.url, true);
 
     // Set the request timeout in MS
-    request.timeout = config.timeout;
+    request.timeout = _config.timeout;
 
     function onloadend() {
       if (!request) {
@@ -45217,10 +46581,10 @@ const xhrAdapter = isXHRAdapterSupported && function (config) {
 
     // Handle timeout
     request.ontimeout = function handleTimeout() {
-      let timeoutErrorMessage = config.timeout ? 'timeout of ' + config.timeout + 'ms exceeded' : 'timeout exceeded';
-      const transitional = config.transitional || transitionalDefaults;
-      if (config.timeoutErrorMessage) {
-        timeoutErrorMessage = config.timeoutErrorMessage;
+      let timeoutErrorMessage = _config.timeout ? 'timeout of ' + _config.timeout + 'ms exceeded' : 'timeout exceeded';
+      const transitional = _config.transitional || transitionalDefaults;
+      if (_config.timeoutErrorMessage) {
+        timeoutErrorMessage = _config.timeoutErrorMessage;
       }
       reject(new AxiosError(
         timeoutErrorMessage,
@@ -45231,22 +46595,6 @@ const xhrAdapter = isXHRAdapterSupported && function (config) {
       // Clean up request
       request = null;
     };
-
-    // Add xsrf header
-    // This is only done if running in a standard browser environment.
-    // Specifically not if we're in a web worker, or react-native.
-    if(platform.hasStandardBrowserEnv) {
-      withXSRFToken && utils$1.isFunction(withXSRFToken) && (withXSRFToken = withXSRFToken(config));
-
-      if (withXSRFToken || (withXSRFToken !== false && isURLSameOrigin(fullPath))) {
-        // Add xsrf header
-        const xsrfValue = config.xsrfHeaderName && config.xsrfCookieName && cookies.read(config.xsrfCookieName);
-
-        if (xsrfValue) {
-          requestHeaders.set(config.xsrfHeaderName, xsrfValue);
-        }
-      }
-    }
 
     // Remove Content-Type if data is undefined
     requestData === undefined && requestHeaders.setContentType(null);
@@ -45259,26 +46607,31 @@ const xhrAdapter = isXHRAdapterSupported && function (config) {
     }
 
     // Add withCredentials to request if needed
-    if (!utils$1.isUndefined(config.withCredentials)) {
-      request.withCredentials = !!config.withCredentials;
+    if (!utils$1.isUndefined(_config.withCredentials)) {
+      request.withCredentials = !!_config.withCredentials;
     }
 
     // Add responseType to request if needed
     if (responseType && responseType !== 'json') {
-      request.responseType = config.responseType;
+      request.responseType = _config.responseType;
     }
 
     // Handle progress if needed
-    if (typeof config.onDownloadProgress === 'function') {
-      request.addEventListener('progress', progressEventReducer(config.onDownloadProgress, true));
+    if (onDownloadProgress) {
+      ([downloadThrottled, flushDownload] = progressEventReducer(onDownloadProgress, true));
+      request.addEventListener('progress', downloadThrottled);
     }
 
     // Not all browsers support upload events
-    if (typeof config.onUploadProgress === 'function' && request.upload) {
-      request.upload.addEventListener('progress', progressEventReducer(config.onUploadProgress));
+    if (onUploadProgress && request.upload) {
+      ([uploadThrottled, flushUpload] = progressEventReducer(onUploadProgress));
+
+      request.upload.addEventListener('progress', uploadThrottled);
+
+      request.upload.addEventListener('loadend', flushUpload);
     }
 
-    if (config.cancelToken || config.signal) {
+    if (_config.cancelToken || _config.signal) {
       // Handle cancellation
       // eslint-disable-next-line func-names
       onCanceled = cancel => {
@@ -45290,13 +46643,13 @@ const xhrAdapter = isXHRAdapterSupported && function (config) {
         request = null;
       };
 
-      config.cancelToken && config.cancelToken.subscribe(onCanceled);
-      if (config.signal) {
-        config.signal.aborted ? onCanceled() : config.signal.addEventListener('abort', onCanceled);
+      _config.cancelToken && _config.cancelToken.subscribe(onCanceled);
+      if (_config.signal) {
+        _config.signal.aborted ? onCanceled() : _config.signal.addEventListener('abort', onCanceled);
       }
     }
 
-    const protocol = parseProtocol(fullPath);
+    const protocol = parseProtocol(_config.url);
 
     if (protocol && platform.protocols.indexOf(protocol) === -1) {
       reject(new AxiosError('Unsupported protocol ' + protocol + ':', AxiosError.ERR_BAD_REQUEST, config));
@@ -45309,9 +46662,360 @@ const xhrAdapter = isXHRAdapterSupported && function (config) {
   });
 };
 
+const composeSignals = (signals, timeout) => {
+  const {length} = (signals = signals ? signals.filter(Boolean) : []);
+
+  if (timeout || length) {
+    let controller = new AbortController();
+
+    let aborted;
+
+    const onabort = function (reason) {
+      if (!aborted) {
+        aborted = true;
+        unsubscribe();
+        const err = reason instanceof Error ? reason : this.reason;
+        controller.abort(err instanceof AxiosError ? err : new CanceledError(err instanceof Error ? err.message : err));
+      }
+    };
+
+    let timer = timeout && setTimeout(() => {
+      timer = null;
+      onabort(new AxiosError(`timeout ${timeout} of ms exceeded`, AxiosError.ETIMEDOUT));
+    }, timeout);
+
+    const unsubscribe = () => {
+      if (signals) {
+        timer && clearTimeout(timer);
+        timer = null;
+        signals.forEach(signal => {
+          signal.unsubscribe ? signal.unsubscribe(onabort) : signal.removeEventListener('abort', onabort);
+        });
+        signals = null;
+      }
+    };
+
+    signals.forEach((signal) => signal.addEventListener('abort', onabort));
+
+    const {signal} = controller;
+
+    signal.unsubscribe = () => utils$1.asap(unsubscribe);
+
+    return signal;
+  }
+};
+
+const composeSignals$1 = composeSignals;
+
+const streamChunk = function* (chunk, chunkSize) {
+  let len = chunk.byteLength;
+
+  if (!chunkSize || len < chunkSize) {
+    yield chunk;
+    return;
+  }
+
+  let pos = 0;
+  let end;
+
+  while (pos < len) {
+    end = pos + chunkSize;
+    yield chunk.slice(pos, end);
+    pos = end;
+  }
+};
+
+const readBytes = async function* (iterable, chunkSize) {
+  for await (const chunk of readStream(iterable)) {
+    yield* streamChunk(chunk, chunkSize);
+  }
+};
+
+const readStream = async function* (stream) {
+  if (stream[Symbol.asyncIterator]) {
+    yield* stream;
+    return;
+  }
+
+  const reader = stream.getReader();
+  try {
+    for (;;) {
+      const {done, value} = await reader.read();
+      if (done) {
+        break;
+      }
+      yield value;
+    }
+  } finally {
+    await reader.cancel();
+  }
+};
+
+const trackStream = (stream, chunkSize, onProgress, onFinish) => {
+  const iterator = readBytes(stream, chunkSize);
+
+  let bytes = 0;
+  let done;
+  let _onFinish = (e) => {
+    if (!done) {
+      done = true;
+      onFinish && onFinish(e);
+    }
+  };
+
+  return new ReadableStream({
+    async pull(controller) {
+      try {
+        const {done, value} = await iterator.next();
+
+        if (done) {
+         _onFinish();
+          controller.close();
+          return;
+        }
+
+        let len = value.byteLength;
+        if (onProgress) {
+          let loadedBytes = bytes += len;
+          onProgress(loadedBytes);
+        }
+        controller.enqueue(new Uint8Array(value));
+      } catch (err) {
+        _onFinish(err);
+        throw err;
+      }
+    },
+    cancel(reason) {
+      _onFinish(reason);
+      return iterator.return();
+    }
+  }, {
+    highWaterMark: 2
+  })
+};
+
+const isFetchSupported = typeof fetch === 'function' && typeof Request === 'function' && typeof Response === 'function';
+const isReadableStreamSupported = isFetchSupported && typeof ReadableStream === 'function';
+
+// used only inside the fetch adapter
+const encodeText = isFetchSupported && (typeof TextEncoder === 'function' ?
+    ((encoder) => (str) => encoder.encode(str))(new TextEncoder()) :
+    async (str) => new Uint8Array(await new Response(str).arrayBuffer())
+);
+
+const test = (fn, ...args) => {
+  try {
+    return !!fn(...args);
+  } catch (e) {
+    return false
+  }
+};
+
+const supportsRequestStream = isReadableStreamSupported && test(() => {
+  let duplexAccessed = false;
+
+  const hasContentType = new Request(platform.origin, {
+    body: new ReadableStream(),
+    method: 'POST',
+    get duplex() {
+      duplexAccessed = true;
+      return 'half';
+    },
+  }).headers.has('Content-Type');
+
+  return duplexAccessed && !hasContentType;
+});
+
+const DEFAULT_CHUNK_SIZE = 64 * 1024;
+
+const supportsResponseStream = isReadableStreamSupported &&
+  test(() => utils$1.isReadableStream(new Response('').body));
+
+
+const resolvers = {
+  stream: supportsResponseStream && ((res) => res.body)
+};
+
+isFetchSupported && (((res) => {
+  ['text', 'arrayBuffer', 'blob', 'formData', 'stream'].forEach(type => {
+    !resolvers[type] && (resolvers[type] = utils$1.isFunction(res[type]) ? (res) => res[type]() :
+      (_, config) => {
+        throw new AxiosError(`Response type '${type}' is not supported`, AxiosError.ERR_NOT_SUPPORT, config);
+      });
+  });
+})(new Response));
+
+const getBodyLength = async (body) => {
+  if (body == null) {
+    return 0;
+  }
+
+  if(utils$1.isBlob(body)) {
+    return body.size;
+  }
+
+  if(utils$1.isSpecCompliantForm(body)) {
+    const _request = new Request(platform.origin, {
+      method: 'POST',
+      body,
+    });
+    return (await _request.arrayBuffer()).byteLength;
+  }
+
+  if(utils$1.isArrayBufferView(body) || utils$1.isArrayBuffer(body)) {
+    return body.byteLength;
+  }
+
+  if(utils$1.isURLSearchParams(body)) {
+    body = body + '';
+  }
+
+  if(utils$1.isString(body)) {
+    return (await encodeText(body)).byteLength;
+  }
+};
+
+const resolveBodyLength = async (headers, body) => {
+  const length = utils$1.toFiniteNumber(headers.getContentLength());
+
+  return length == null ? getBodyLength(body) : length;
+};
+
+const fetchAdapter = isFetchSupported && (async (config) => {
+  let {
+    url,
+    method,
+    data,
+    signal,
+    cancelToken,
+    timeout,
+    onDownloadProgress,
+    onUploadProgress,
+    responseType,
+    headers,
+    withCredentials = 'same-origin',
+    fetchOptions
+  } = resolveConfig(config);
+
+  responseType = responseType ? (responseType + '').toLowerCase() : 'text';
+
+  let composedSignal = composeSignals$1([signal, cancelToken && cancelToken.toAbortSignal()], timeout);
+
+  let request;
+
+  const unsubscribe = composedSignal && composedSignal.unsubscribe && (() => {
+      composedSignal.unsubscribe();
+  });
+
+  let requestContentLength;
+
+  try {
+    if (
+      onUploadProgress && supportsRequestStream && method !== 'get' && method !== 'head' &&
+      (requestContentLength = await resolveBodyLength(headers, data)) !== 0
+    ) {
+      let _request = new Request(url, {
+        method: 'POST',
+        body: data,
+        duplex: "half"
+      });
+
+      let contentTypeHeader;
+
+      if (utils$1.isFormData(data) && (contentTypeHeader = _request.headers.get('content-type'))) {
+        headers.setContentType(contentTypeHeader);
+      }
+
+      if (_request.body) {
+        const [onProgress, flush] = progressEventDecorator(
+          requestContentLength,
+          progressEventReducer(asyncDecorator(onUploadProgress))
+        );
+
+        data = trackStream(_request.body, DEFAULT_CHUNK_SIZE, onProgress, flush);
+      }
+    }
+
+    if (!utils$1.isString(withCredentials)) {
+      withCredentials = withCredentials ? 'include' : 'omit';
+    }
+
+    // Cloudflare Workers throws when credentials are defined
+    // see https://github.com/cloudflare/workerd/issues/902
+    const isCredentialsSupported = "credentials" in Request.prototype;
+    request = new Request(url, {
+      ...fetchOptions,
+      signal: composedSignal,
+      method: method.toUpperCase(),
+      headers: headers.normalize().toJSON(),
+      body: data,
+      duplex: "half",
+      credentials: isCredentialsSupported ? withCredentials : undefined
+    });
+
+    let response = await fetch(request);
+
+    const isStreamResponse = supportsResponseStream && (responseType === 'stream' || responseType === 'response');
+
+    if (supportsResponseStream && (onDownloadProgress || (isStreamResponse && unsubscribe))) {
+      const options = {};
+
+      ['status', 'statusText', 'headers'].forEach(prop => {
+        options[prop] = response[prop];
+      });
+
+      const responseContentLength = utils$1.toFiniteNumber(response.headers.get('content-length'));
+
+      const [onProgress, flush] = onDownloadProgress && progressEventDecorator(
+        responseContentLength,
+        progressEventReducer(asyncDecorator(onDownloadProgress), true)
+      ) || [];
+
+      response = new Response(
+        trackStream(response.body, DEFAULT_CHUNK_SIZE, onProgress, () => {
+          flush && flush();
+          unsubscribe && unsubscribe();
+        }),
+        options
+      );
+    }
+
+    responseType = responseType || 'text';
+
+    let responseData = await resolvers[utils$1.findKey(resolvers, responseType) || 'text'](response, config);
+
+    !isStreamResponse && unsubscribe && unsubscribe();
+
+    return await new Promise((resolve, reject) => {
+      settle(resolve, reject, {
+        data: responseData,
+        headers: AxiosHeaders$1.from(response.headers),
+        status: response.status,
+        statusText: response.statusText,
+        config,
+        request
+      });
+    })
+  } catch (err) {
+    unsubscribe && unsubscribe();
+
+    if (err && err.name === 'TypeError' && /fetch/i.test(err.message)) {
+      throw Object.assign(
+        new AxiosError('Network Error', AxiosError.ERR_NETWORK, config, request),
+        {
+          cause: err.cause || err
+        }
+      )
+    }
+
+    throw AxiosError.from(err, err && err.code, config, request);
+  }
+});
+
 const knownAdapters = {
   http: httpAdapter,
-  xhr: xhrAdapter
+  xhr: xhrAdapter,
+  fetch: fetchAdapter
 };
 
 utils$1.forEach(knownAdapters, (fn, value) => {
@@ -45455,108 +47159,6 @@ function dispatchRequest(config) {
   });
 }
 
-const headersToObject = (thing) => thing instanceof AxiosHeaders$1 ? thing.toJSON() : thing;
-
-/**
- * Config-specific merge-function which creates a new config-object
- * by merging two configuration objects together.
- *
- * @param {Object} config1
- * @param {Object} config2
- *
- * @returns {Object} New object resulting from merging config2 to config1
- */
-function mergeConfig(config1, config2) {
-  // eslint-disable-next-line no-param-reassign
-  config2 = config2 || {};
-  const config = {};
-
-  function getMergedValue(target, source, caseless) {
-    if (utils$1.isPlainObject(target) && utils$1.isPlainObject(source)) {
-      return utils$1.merge.call({caseless}, target, source);
-    } else if (utils$1.isPlainObject(source)) {
-      return utils$1.merge({}, source);
-    } else if (utils$1.isArray(source)) {
-      return source.slice();
-    }
-    return source;
-  }
-
-  // eslint-disable-next-line consistent-return
-  function mergeDeepProperties(a, b, caseless) {
-    if (!utils$1.isUndefined(b)) {
-      return getMergedValue(a, b, caseless);
-    } else if (!utils$1.isUndefined(a)) {
-      return getMergedValue(undefined, a, caseless);
-    }
-  }
-
-  // eslint-disable-next-line consistent-return
-  function valueFromConfig2(a, b) {
-    if (!utils$1.isUndefined(b)) {
-      return getMergedValue(undefined, b);
-    }
-  }
-
-  // eslint-disable-next-line consistent-return
-  function defaultToConfig2(a, b) {
-    if (!utils$1.isUndefined(b)) {
-      return getMergedValue(undefined, b);
-    } else if (!utils$1.isUndefined(a)) {
-      return getMergedValue(undefined, a);
-    }
-  }
-
-  // eslint-disable-next-line consistent-return
-  function mergeDirectKeys(a, b, prop) {
-    if (prop in config2) {
-      return getMergedValue(a, b);
-    } else if (prop in config1) {
-      return getMergedValue(undefined, a);
-    }
-  }
-
-  const mergeMap = {
-    url: valueFromConfig2,
-    method: valueFromConfig2,
-    data: valueFromConfig2,
-    baseURL: defaultToConfig2,
-    transformRequest: defaultToConfig2,
-    transformResponse: defaultToConfig2,
-    paramsSerializer: defaultToConfig2,
-    timeout: defaultToConfig2,
-    timeoutMessage: defaultToConfig2,
-    withCredentials: defaultToConfig2,
-    withXSRFToken: defaultToConfig2,
-    adapter: defaultToConfig2,
-    responseType: defaultToConfig2,
-    xsrfCookieName: defaultToConfig2,
-    xsrfHeaderName: defaultToConfig2,
-    onUploadProgress: defaultToConfig2,
-    onDownloadProgress: defaultToConfig2,
-    decompress: defaultToConfig2,
-    maxContentLength: defaultToConfig2,
-    maxBodyLength: defaultToConfig2,
-    beforeRedirect: defaultToConfig2,
-    transport: defaultToConfig2,
-    httpAgent: defaultToConfig2,
-    httpsAgent: defaultToConfig2,
-    cancelToken: defaultToConfig2,
-    socketPath: defaultToConfig2,
-    responseEncoding: defaultToConfig2,
-    validateStatus: mergeDirectKeys,
-    headers: (a, b) => mergeDeepProperties(headersToObject(a), headersToObject(b), true)
-  };
-
-  utils$1.forEach(Object.keys(Object.assign({}, config1, config2)), function computeConfigValue(prop) {
-    const merge = mergeMap[prop] || mergeDeepProperties;
-    const configValue = merge(config1[prop], config2[prop], prop);
-    (utils$1.isUndefined(configValue) && merge !== mergeDirectKeys) || (config[prop] = configValue);
-  });
-
-  return config;
-}
-
 const validators$1 = {};
 
 // eslint-disable-next-line func-names
@@ -45681,12 +47283,15 @@ class Axios {
 
         // slice off the Error: ... line
         const stack = dummy.stack ? dummy.stack.replace(/^.+\n/, '') : '';
-
-        if (!err.stack) {
-          err.stack = stack;
-          // match without the 2 top stack lines
-        } else if (stack && !String(err.stack).endsWith(stack.replace(/^.+\n.+\n/, ''))) {
-          err.stack += '\n' + stack;
+        try {
+          if (!err.stack) {
+            err.stack = stack;
+            // match without the 2 top stack lines
+          } else if (stack && !String(err.stack).endsWith(stack.replace(/^.+\n.+\n/, ''))) {
+            err.stack += '\n' + stack;
+          }
+        } catch (e) {
+          // ignore the case where "stack" is an un-writable property
         }
       }
 
@@ -45959,6 +47564,20 @@ class CancelToken {
     }
   }
 
+  toAbortSignal() {
+    const controller = new AbortController();
+
+    const abort = (err) => {
+      controller.abort(err);
+    };
+
+    this.subscribe(abort);
+
+    controller.signal.unsubscribe = () => this.unsubscribe(abort);
+
+    return controller.signal;
+  }
+
   /**
    * Returns an object that contains a new `CancelToken` and a function that, when called,
    * cancels the `CancelToken`.
@@ -46164,7 +47783,7 @@ module.exports = axios;
 /***/ ((module) => {
 
 "use strict";
-module.exports = JSON.parse('{"name":"dotenv","version":"16.4.1","description":"Loads environment variables from .env file","main":"lib/main.js","types":"lib/main.d.ts","exports":{".":{"types":"./lib/main.d.ts","require":"./lib/main.js","default":"./lib/main.js"},"./config":"./config.js","./config.js":"./config.js","./lib/env-options":"./lib/env-options.js","./lib/env-options.js":"./lib/env-options.js","./lib/cli-options":"./lib/cli-options.js","./lib/cli-options.js":"./lib/cli-options.js","./package.json":"./package.json"},"scripts":{"dts-check":"tsc --project tests/types/tsconfig.json","lint":"standard","lint-readme":"standard-markdown","pretest":"npm run lint && npm run dts-check","test":"tap tests/*.js --100 -Rspec","prerelease":"npm test","release":"standard-version"},"repository":{"type":"git","url":"git://github.com/motdotla/dotenv.git"},"funding":"https://github.com/motdotla/dotenv?sponsor=1","keywords":["dotenv","env",".env","environment","variables","config","settings"],"readmeFilename":"README.md","license":"BSD-2-Clause","devDependencies":{"@definitelytyped/dtslint":"^0.0.133","@types/node":"^18.11.3","decache":"^4.6.1","sinon":"^14.0.1","standard":"^17.0.0","standard-markdown":"^7.1.0","standard-version":"^9.5.0","tap":"^16.3.0","tar":"^6.1.11","typescript":"^4.8.4"},"engines":{"node":">=12"},"browser":{"fs":false}}');
+module.exports = JSON.parse('{"name":"dotenv","version":"16.4.5","description":"Loads environment variables from .env file","main":"lib/main.js","types":"lib/main.d.ts","exports":{".":{"types":"./lib/main.d.ts","require":"./lib/main.js","default":"./lib/main.js"},"./config":"./config.js","./config.js":"./config.js","./lib/env-options":"./lib/env-options.js","./lib/env-options.js":"./lib/env-options.js","./lib/cli-options":"./lib/cli-options.js","./lib/cli-options.js":"./lib/cli-options.js","./package.json":"./package.json"},"scripts":{"dts-check":"tsc --project tests/types/tsconfig.json","lint":"standard","lint-readme":"standard-markdown","pretest":"npm run lint && npm run dts-check","test":"tap tests/*.js --100 -Rspec","test:coverage":"tap --coverage-report=lcov","prerelease":"npm test","release":"standard-version"},"repository":{"type":"git","url":"git://github.com/motdotla/dotenv.git"},"funding":"https://dotenvx.com","keywords":["dotenv","env",".env","environment","variables","config","settings"],"readmeFilename":"README.md","license":"BSD-2-Clause","devDependencies":{"@definitelytyped/dtslint":"^0.0.133","@types/node":"^18.11.3","decache":"^4.6.1","sinon":"^14.0.1","standard":"^17.0.0","standard-markdown":"^7.1.0","standard-version":"^9.5.0","tap":"^16.3.0","tar":"^6.1.11","typescript":"^4.8.4"},"engines":{"node":">=12"},"browser":{"fs":false}}');
 
 /***/ }),
 
