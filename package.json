@@ -42,7 +42,7 @@
     "@actions/exec": "^1.1.1",
     "@actions/github": "^6.0.0",
     "@crowdin/crowdin-api-client": "^1.35.0",
-    "axios": "^1.7.7",
+    "axios": "^1.7.8",
     "dotenv": "^16.4.5",
     "pretty": "^2.0.0"
   },
