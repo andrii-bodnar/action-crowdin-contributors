@@ -48,12 +48,12 @@ async function run() {
             includeLanguages: core.getInput('include_languages') === 'true',
             files: core.getMultilineInput('files'),
             placeholderStart: core.getInput('placeholder_start'),
-            placeholderEnd: core.getInput('placeholder_end')
+            placeholderEnd: core.getInput('placeholder_end'),
         };
         const credentialsConfig = {
             projectId: 0,
             token: '',
-            organization: ''
+            organization: '',
         };
         if (process.env.CROWDIN_PROJECT_ID) {
             credentialsConfig.projectId = +process.env.CROWDIN_PROJECT_ID;

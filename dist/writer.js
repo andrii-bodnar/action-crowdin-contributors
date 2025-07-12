@@ -74,8 +74,7 @@ class Writer {
         this.config.files.map((file) => {
             this.logger.log('info', `Writing result to ${file}`);
             let fileContents = fs_1.default.readFileSync(file).toString();
-            if (!fileContents.includes(this.config.placeholderStart) ||
-                !fileContents.includes(this.config.placeholderEnd)) {
+            if (!fileContents.includes(this.config.placeholderStart) || !fileContents.includes(this.config.placeholderEnd)) {
                 this.logger.log('warning', `Unable to locate start or end tag in ${file}`);
                 return;
             }

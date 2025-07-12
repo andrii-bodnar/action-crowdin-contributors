@@ -68,7 +68,7 @@ class Contributors {
         core.info('Downloading the report...');
         const { reportsApi } = new crowdin_api_client_1.default({
             token: this.credentials.token,
-            organization: this.credentials.organization
+            organization: this.credentials.organization,
         });
         let report;
         try {
@@ -76,8 +76,8 @@ class Contributors {
                 name: 'top-members',
                 schema: {
                     unit: 'words',
-                    format: 'json'
-                }
+                    format: 'json',
+                },
             });
         }
         catch (e) {
@@ -106,7 +106,7 @@ class Contributors {
     async prepareData(report) {
         const { usersApi } = new crowdin_api_client_1.default({
             token: this.credentials.token,
-            organization: this.credentials.organization
+            organization: this.credentials.organization,
         });
         const result = [];
         for (const i in report) {
@@ -138,7 +138,7 @@ class Contributors {
                 translated: user.translated,
                 approved: user.approved,
                 picture: picture,
-                languages: user.languages
+                languages: user.languages,
             });
             if (result.length === this.config.maxContributors) {
                 break;
