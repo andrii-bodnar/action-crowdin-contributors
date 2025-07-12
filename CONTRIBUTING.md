@@ -68,9 +68,9 @@ Install the dependencies
 $ npm install
 ```
 
-Build the typescript and package it for distribution
+Package the Action for distribution
 ```bash
-$ npm run build && npm run package
+$ npm run package
 ```
 
 Run the tests :heavy_check_mark:

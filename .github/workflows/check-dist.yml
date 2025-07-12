@@ -47,7 +47,7 @@ jobs:
 
       - name: Rebuild the dist/ directory
         run: |
-          npm run build
+          npm run lint
           npm run package
 
       - name: Compare the expected and actual dist/ directories
