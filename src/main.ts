@@ -19,7 +19,7 @@ async function run(): Promise<void> {
             placeholderEnd: core.getInput('placeholder_end')
         };
 
-        let credentialsConfig: CredentialsConfig = {
+        const credentialsConfig: CredentialsConfig = {
             projectId: 0,
             token: '',
             organization: ''
@@ -54,7 +54,7 @@ function validateCredentials(credentialsConfig: CredentialsConfig): void {
         return;
     }
 
-    let missingVariables = [];
+    const missingVariables = [];
 
     if (!credentialsConfig.projectId) {
         missingVariables.push('CROWDIN_PROJECT_ID');

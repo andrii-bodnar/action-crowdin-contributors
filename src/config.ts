@@ -16,4 +16,4 @@ interface CredentialsConfig {
     organization?: string;
 }
 
-export {ContributorsTableConfig, CredentialsConfig};
+export type {ContributorsTableConfig, CredentialsConfig};

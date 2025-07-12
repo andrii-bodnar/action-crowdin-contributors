@@ -3,8 +3,7 @@ import {jest, expect, describe, beforeEach, afterEach, it} from '@jest/globals';
 import {ContributorsTableConfig, CredentialsConfig} from '../src/config';
 import {User} from '../src/contributors';
 import {Logger} from '../src/logger';
-
-const fs = require('fs');
+import * as fs from 'fs';
 
 jest.mock('fs');
 
@@ -12,8 +11,8 @@ describe('Writer', () => {
     let writer: Writer;
     let credentials: CredentialsConfig;
     let config: ContributorsTableConfig;
-    let logger = {
-        log: (type, message) => {}
+    const logger = {
+        log: () => {}
     } as Logger;
 
     beforeEach(() => {
@@ -54,14 +53,12 @@ describe('Writer', () => {
         let renderReportMock: any;
         let writeFilesMock: any;
         let logMock: any;
-        let fsWriteFileSyncMock: any;
 
         beforeEach(() => {
             report = [{}];
             renderReportMock = jest.spyOn(writer, 'renderReport');
             writeFilesMock = jest.spyOn(writer, 'writeFiles');
             logMock = jest.spyOn(logger, 'log');
-            fsWriteFileSyncMock = jest.spyOn(fs, 'writeFileSync');
         });
 
         it('should update the contributors table and set the table content', () => {
@@ -82,7 +79,7 @@ MIT`;
 ### License
 MIT`;
 
-            fs.readFileSync.mockReturnValue(fileContent);
+            (fs.readFileSync as jest.Mock).mockReturnValue(fileContent);
             renderReportMock.mockReturnValue('<table>...</table>');
 
             writer.updateContributorsTable(report);
@@ -97,7 +94,7 @@ MIT`;
         it('should log a warning message about missing placeholders', () => {
             const fileContent = `### Contributors`;
 
-            fs.readFileSync.mockReturnValue(fileContent);
+            (fs.readFileSync as jest.Mock).mockReturnValue(fileContent);
             renderReportMock.mockReturnValue('<table>...</table>');
 
             writer.updateContributorsTable(report);

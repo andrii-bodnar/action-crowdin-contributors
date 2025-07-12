@@ -38,17 +38,17 @@ export class Writer {
     }
 
     public renderReport(report: any[]): string {
-        let result = [];
+        const result = [];
         let html = '<table><tbody>';
 
         for (let i = 0; i < report.length; i += this.config.contributorsPerLine) {
             result.push(report.slice(i, i + this.config.contributorsPerLine));
         }
 
-        for (let i in result) {
+        for (const i in result) {
             html += '<tr>';
 
-            for (let j in result[i]) {
+            for (const j in result[i]) {
                 let userData = `<img alt="logo" style="width: ${this.config.imageSize}px" src="${result[i][j].picture}"/>
                     <br />
                     <sub><b>${result[i][j].name}</b></sub>`;
@@ -83,7 +83,7 @@ export class Writer {
             return '';
         }
 
-        let languages: string[] = [];
+        const languages: string[] = [];
 
         userData.languages.map((language: Language) => {
             languages.push(`<b><code title="${language.name}">${language.id}</code></b>`);

@@ -113,9 +113,9 @@ export class Contributors {
             organization: this.credentials.organization
         });
 
-        let result: User[] = [];
+        const result: User[] = [];
 
-        for (let i in report) {
+        for (const i in report) {
             const user = report[i];
 
             if (user.user.username === 'REMOVED_USER') {
@@ -143,7 +143,7 @@ export class Contributors {
                 if ('avatarUrl' in crowdinMember.data && crowdinMember.data.avatarUrl) {
                     picture = crowdinMember.data.avatarUrl;
                 }
-            } catch (e) {
+            } catch {
                 //the account might be private, that produces 404 exception
             }
 
