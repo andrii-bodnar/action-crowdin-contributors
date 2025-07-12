@@ -3,10 +3,8 @@ module.exports = {
   moduleFileExtensions: ['js', 'ts'],
   testMatch: ['**/*.test.ts'],
   transform: {
-    '^.+\\.ts$': 'ts-jest'
+    '^.+\\.ts$': 'ts-jest',
   },
-  collectCoverageFrom: [
-    'src/**/*.{js,ts}',
-  ],
-  verbose: true
-}
+  collectCoverageFrom: ['src/**/*.{js,ts}'],
+  verbose: true,
+};
