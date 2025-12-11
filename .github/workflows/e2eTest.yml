@@ -20,6 +20,8 @@ jobs:
           files: ./__tests__/files/contributors.md
           crowdin_project_link: 'https://crowdin.com/project/crowdin'
           include_languages: true
+          svg: true
+          svg_output_path: 'CONTRIBUTORS.svg'
         env:
           CROWDIN_PROJECT_ID: 2
           CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
@@ -35,3 +37,11 @@ jobs:
           echo "${{ steps.contributors.outputs.contributors_table }}"
           echo "json_report:"
           echo "${{ steps.contributors.outputs.json_report }}"
+          echo "svg_path:"
+          echo "${{ steps.contributors.outputs.svg_path }}"
+
+      - name: Upload SVG artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: contributors-svg
+          path: ${{ steps.contributors.outputs.svg_path }}

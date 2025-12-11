@@ -26,9 +26,12 @@ describe('Writer', () => {
       imageSize: 100,
       crowdinProjectLink: 'https://crowdin.com/project',
       includeLanguages: true,
+      excludedUsers: [],
       files: ['README.md'],
       placeholderStart: '<!-- CROWDIN-CONTRIBUTORS-START -->',
       placeholderEnd: '<!-- CROWDIN-CONTRIBUTORS-END -->',
+      svg: false,
+      svgOutputPath: 'CONTRIBUTORS.svg',
     };
     writer = new Writer(credentials, config, logger);
   });

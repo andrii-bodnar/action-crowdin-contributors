@@ -18,6 +18,8 @@ export async function run(): Promise<void> {
       files: core.getMultilineInput('files'),
       placeholderStart: core.getInput('placeholder_start'),
       placeholderEnd: core.getInput('placeholder_end'),
+      svg: core.getInput('svg') === 'true',
+      svgOutputPath: core.getInput('svg_output_path'),
     };
 
     const credentialsConfig: CredentialsConfig = {
