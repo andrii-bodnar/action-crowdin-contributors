@@ -9,6 +9,8 @@ interface ContributorsTableConfig {
   files: string[];
   placeholderStart: string;
   placeholderEnd: string;
+  svg: boolean;
+  svgOutputPath: string;
 }
 
 interface CredentialsConfig {

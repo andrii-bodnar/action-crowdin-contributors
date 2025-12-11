@@ -45,12 +45,22 @@ inputs:
     description: 'Placeholder that marks the end of the contributors table'
     default: '<!-- CROWDIN-CONTRIBUTORS-END -->'
     required: false
+  svg:
+    description: 'Generate table in SVG format'
+    default: 'false'
+    required: false
+  svg_output_path:
+    description: 'Path to the output SVG file'
+    default: 'CONTRIBUTORS.svg'
+    required: false
 
 outputs:
   contributors_table:
     description: 'Generated table with contributors'
   json_report:
     description: 'JSON report with contributors used to render a table'
+  svg_path:
+    description: 'Path to the generated SVG file (when svg mode is enabled)'
 
 runs:
   using: 'node24'

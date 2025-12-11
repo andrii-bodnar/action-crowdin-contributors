@@ -112,4 +112,14 @@ export class Writer {
       fs.writeFileSync(file, fileContents);
     });
   }
+
+  public writeSvgFile(svgContent: string): void {
+    const outputPath = this.config.svgOutputPath;
+
+    this.logger.log('info', `Writing SVG to ${outputPath}`);
+
+    fs.writeFileSync(outputPath, svgContent);
+
+    this.logger.log('info', `SVG file successfully written to ${outputPath}`);
+  }
 }

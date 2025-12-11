@@ -98,6 +98,44 @@ jobs:
           branch: crowdin-contributors/patch
 ```
 
+### Generating SVG
+
+In addition to the HTML table, you can also generate an SVG image with contributors. This is useful when you want a visual graphic that can be embedded anywhere:
+
+```yaml
+name: Crowdin Contributors Action
+
+on:
+  workflow_dispatch:
+
+jobs:
+  crowdin-contributors:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Generate Crowdin Contributors
+        uses: andrii-bodnar/action-crowdin-contributors@v3
+        with:
+          svg: true
+          svg_output_path: 'docs/CONTRIBUTORS.svg'
+          contributors_per_line: 8
+          max_contributors: 32
+          image_size: 64
+        env:
+          CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
+          CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
+```
+
+When `svg: true` is set, the action will generate both the HTML table (in the configured files) and the SVG image. You can then embed the SVG in your README or any other markdown file:
+
+```markdown
+## Contributors
+
+![Crowdin Contributors](docs/CONTRIBUTORS.svg)
+```
+
 ## Options
 
 | Option                  | Default value                         | Description                                                      |
@@ -112,15 +150,18 @@ jobs:
 | `excluded_users`        |                                       | List of usernames to exclude from the contributors table         |
 | `placeholder_start`     | `<!-- CROWDIN-CONTRIBUTORS-START -->` | Placeholder that marks the start of the contributors table       |
 | `placeholder_end`       | `<!-- CROWDIN-CONTRIBUTORS-END -->`   | Placeholder that marks the end of the contributors table         |
+| `svg`                   | false                                 | Generate contributors in SVG format instead of HTML table        |
+| `svg_output_path`       | CONTRIBUTORS.svg                      | Path to the output SVG file (when svg mode is enabled)           |
 
 ## Outputs
 
 This actions provides the following outputs that can be used by other steps in your workflow:
 
-| Output               | Description                                          |
-| -------------------- | ---------------------------------------------------- |
-| `contributors_table` | Generated table with contributors                    |
-| `json_report`        | JSON report with contributors used to render a table |
+| Output               | Description                                               |
+| -------------------- | --------------------------------------------------------- |
+| `contributors_table` | Generated table with contributors                         |
+| `json_report`        | JSON report with contributors used to render a table      |
+| `svg_path`           | Path to the generated SVG file (when svg mode is enabled) |
 
 ## Demo
 

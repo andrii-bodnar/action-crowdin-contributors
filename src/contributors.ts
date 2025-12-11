@@ -4,9 +4,10 @@ import * as fs from 'fs';
 import * as util from 'util';
 import * as core from '@actions/core';
 import { ContributorsTableConfig, CredentialsConfig } from './config.js';
-import { wait } from './wait.js';
+import { SvgGenerator } from './svg-generator.js';
 import { Writer } from './writer.js';
 import { Logger } from './logger.js';
+import { wait } from './wait.js';
 
 export interface User {
   id: number;
@@ -27,12 +28,14 @@ export class Contributors {
   private credentials: CredentialsConfig;
   private config: ContributorsTableConfig;
   private writer: Writer;
+  private svgGenerator: SvgGenerator;
 
   constructor(credentials: CredentialsConfig, config: ContributorsTableConfig) {
     this.credentials = credentials;
     this.config = config;
 
     this.writer = new Writer(credentials, config, new Logger());
+    this.svgGenerator = new SvgGenerator(credentials, config);
   }
 
   public async generate(): Promise<void> {
@@ -45,6 +48,15 @@ export class Contributors {
     const preparedData = await this.prepareData(reportResults);
 
     this.writer.updateContributorsTable(preparedData);
+
+    if (this.config.svg) {
+      core.info('Generating SVG...');
+
+      const svgContent = await this.svgGenerator.generateSvg(preparedData);
+      this.writer.writeSvgFile(svgContent);
+
+      core.setOutput('svg_path', this.config.svgOutputPath);
+    }
 
     await this.addJobSummary(this.writer.getTableContent());
 
