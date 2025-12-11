@@ -96,14 +96,27 @@ npm run all
 
 ### Local Testing
 
-The [`@github/local-action`](https://github.com/github/local-action) utility can be used to test the action locally:
+The [`@github/local-action`](https://github.com/github/local-action) utility can be used to test the action locally.
+
+First, initialize environment variables:
 
 ```bash
 cp .env.example .env
+```
+
+Then, create a local test file:
+
+```bash
+cp __tests__/files/contributors.md local-action.md
+```
+
+Finally, run the action locally:
+
+```bash
 npm run local-action
 ```
 
-You can provide a `.env` file to set environment variables used by the GitHub Actions Toolkit.
+You can now see the result in the `local-action.md` file. You can also view the summary in the `local-summary.md` file, which represents the GitHub step summary.
 
 ### Change action.yml
 

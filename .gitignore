@@ -102,3 +102,6 @@ lib/**/*
 # ide
 .idea
 .vscode
+
+local-action.md
+local-summary.md
