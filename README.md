@@ -165,7 +165,13 @@ This actions provides the following outputs that can be used by other steps in y
 
 ## Demo
 
-The resulting table will look like this:
+The action can generate both HTML table and SVG image.
+
+Generated SVG:
+
+![svg-demo](docs/CONTRIBUTORS.svg)
+
+HTML table:
 
 ![demo](docs/demo.png)
 
