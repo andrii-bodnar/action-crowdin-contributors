@@ -27,6 +27,9 @@ inputs:
   include_languages:
     description: 'Specifies whether to include contributed languages in table'
     required: false
+  excluded_users:
+    description: 'List of usernames to exclude from the contributors table'
+    required: false
   crowdin_project_link:
     description: "Crowdin project link will be added after the contributors' table"
     required: false

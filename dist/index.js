@@ -66236,6 +66236,9 @@ class Contributors {
             if (user.user.username === 'REMOVED_USER') {
                 continue;
             }
+            if (this.config.excludedUsers.includes(user.user.username)) {
+                continue;
+            }
             if (this.config.minWordsContributed !== null &&
                 +user.translated + +user.approved < this.config.minWordsContributed) {
                 continue;
@@ -66305,6 +66308,7 @@ async function run() {
             imageSize: +coreExports.getInput('image_size'),
             crowdinProjectLink: coreExports.getInput('crowdin_project_link').trim(),
             includeLanguages: coreExports.getInput('include_languages') === 'true',
+            excludedUsers: coreExports.getMultilineInput('excluded_users'),
             files: coreExports.getMultilineInput('files'),
             placeholderStart: coreExports.getInput('placeholder_start'),
             placeholderEnd: coreExports.getInput('placeholder_end'),
