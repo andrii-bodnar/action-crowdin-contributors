@@ -66347,6 +66347,7 @@ function validateCredentials(credentialsConfig) {
     }
     throw Error('Missing environment variable(s): ' + missingVariables.join(', '));
 }
+run();
 
 export { run };
 //# sourceMappingURL=index.js.map
