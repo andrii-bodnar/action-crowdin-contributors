@@ -116,6 +116,10 @@ export class Contributors {
         continue;
       }
 
+      if (this.config.excludedUsers.includes(user.user.username)) {
+        continue;
+      }
+
       if (
         this.config.minWordsContributed !== null &&
         +user.translated + +user.approved < this.config.minWordsContributed

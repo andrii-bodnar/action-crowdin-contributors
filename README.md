@@ -109,6 +109,7 @@ jobs:
 | `files`                 | README.md                             | Array of files to update                                         |
 | `crowdin_project_link`  |                                       | Crowdin project link will be added after the contributors' table |
 | `include_languages`     | false                                 | Specifies whether to include contributed languages in table      |
+| `excluded_users`        |                                       | List of usernames to exclude from the contributors table         |
 | `placeholder_start`     | `<!-- CROWDIN-CONTRIBUTORS-START -->` | Placeholder that marks the start of the contributors table       |
 | `placeholder_end`       | `<!-- CROWDIN-CONTRIBUTORS-END -->`   | Placeholder that marks the end of the contributors table         |
 

@@ -14,6 +14,7 @@ export async function run(): Promise<void> {
       imageSize: +core.getInput('image_size'),
       crowdinProjectLink: core.getInput('crowdin_project_link').trim(),
       includeLanguages: core.getInput('include_languages') === 'true',
+      excludedUsers: core.getMultilineInput('excluded_users'),
       files: core.getMultilineInput('files'),
       placeholderStart: core.getInput('placeholder_start'),
       placeholderEnd: core.getInput('placeholder_end'),
