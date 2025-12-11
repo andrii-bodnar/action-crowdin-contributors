@@ -1,7 +1,7 @@
 import * as core from '@actions/core';
 import * as dotenv from 'dotenv';
-import { ContributorsTableConfig, CredentialsConfig } from './config';
-import { Contributors } from './contributors';
+import { ContributorsTableConfig, CredentialsConfig } from './config.js';
+import { Contributors } from './contributors.js';
 
 dotenv.config();
 

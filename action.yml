@@ -7,7 +7,6 @@ branding:
   color: 'yellow'
 
 inputs:
-
   # Contributors table configuration
   max_contributors:
     description: 'Only the specified amount of contributors will be shown'
@@ -26,7 +25,7 @@ inputs:
     default: '100'
     required: false
   include_languages:
-    description: "Specifies whether to include contributed languages in table"
+    description: 'Specifies whether to include contributed languages in table'
     required: false
   crowdin_project_link:
     description: "Crowdin project link will be added after the contributors' table"
@@ -51,5 +50,5 @@ outputs:
     description: 'JSON report with contributors used to render a table'
 
 runs:
-  using: 'node20'
+  using: 'node24'
   main: 'dist/index.js'

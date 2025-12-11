@@ -1,8 +1,8 @@
 import fs from 'fs';
 import pretty from 'pretty';
-import { ContributorsTableConfig, CredentialsConfig } from './config';
-import { Language, User } from './contributors';
-import { Logger } from './logger';
+import { ContributorsTableConfig, CredentialsConfig } from './config.js';
+import { Language, User } from './contributors.js';
+import { Logger } from './logger.js';
 
 export class Writer {
   private credentials: CredentialsConfig;

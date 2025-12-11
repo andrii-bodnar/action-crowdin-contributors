@@ -11,7 +11,7 @@ updates:
       interval: monthly
     groups:
       development-dependencies:
-        dependency-type: "development"
+        dependency-type: 'development'
     ignore:
-      - dependency-name: "*" # Ignore major updates
-        update-types: [ "version-update:semver-major" ]
+      - dependency-name: '*' # Ignore major updates
+        update-types: ['version-update:semver-major']
