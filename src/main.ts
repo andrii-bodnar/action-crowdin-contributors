@@ -5,7 +5,7 @@ import { Contributors } from './contributors.js';
 
 dotenv.config();
 
-async function run(): Promise<void> {
+export async function run(): Promise<void> {
   try {
     const tableConfig: ContributorsTableConfig = {
       maxContributors: +core.getInput('max_contributors'),
@@ -66,5 +66,3 @@ function validateCredentials(credentialsConfig: CredentialsConfig): void {
 
   throw Error('Missing environment variable(s): ' + missingVariables.join(', '));
 }
-
-run();
