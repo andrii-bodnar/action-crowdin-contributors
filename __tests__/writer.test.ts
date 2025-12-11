@@ -3,9 +3,7 @@ import { jest, expect, describe, beforeEach, afterEach, it } from '@jest/globals
 import { ContributorsTableConfig, CredentialsConfig } from '../src/config';
 import { User } from '../src/contributors';
 import { Logger } from '../src/logger';
-import * as fs from 'fs';
-
-jest.mock('fs');
+import fs from 'fs';
 
 describe('Writer', () => {
   let writer: Writer;
@@ -49,16 +47,20 @@ describe('Writer', () => {
   });
 
   describe('updateContributorsTable', () => {
-    let report: any;
-    let renderReportMock: any;
-    let writeFilesMock: any;
-    let logMock: any;
+    let report: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    let renderReportMock: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    let writeFilesMock: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    let logMock: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    let readFileSyncMock: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+    let writeFileSyncMock: any; // eslint-disable-line @typescript-eslint/no-explicit-any
 
     beforeEach(() => {
       report = [{}];
       renderReportMock = jest.spyOn(writer, 'renderReport');
       writeFilesMock = jest.spyOn(writer, 'writeFiles');
       logMock = jest.spyOn(logger, 'log');
+      readFileSyncMock = jest.spyOn(fs, 'readFileSync');
+      writeFileSyncMock = jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
     });
 
     it('should update the contributors table and set the table content', () => {
@@ -79,7 +81,7 @@ MIT`;
 ### License
 MIT`;
 
-      (fs.readFileSync as jest.Mock).mockReturnValue(fileContent);
+      readFileSyncMock.mockReturnValue(fileContent);
       renderReportMock.mockReturnValue('<table>...</table>');
 
       writer.updateContributorsTable(report);
@@ -88,13 +90,13 @@ MIT`;
       expect(logMock).not.toHaveBeenCalledWith('warning', 'Unable to locate start or end tag in README.md');
       expect(writeFilesMock).toHaveBeenCalledWith('<table>...</table>');
       expect(writer.getTableContent()).toBe('<table>...</table>');
-      expect(fs.writeFileSync).toHaveBeenCalledWith('README.md', expectedFileContent);
+      expect(writeFileSyncMock).toHaveBeenCalledWith('README.md', expectedFileContent);
     });
 
     it('should log a warning message about missing placeholders', () => {
       const fileContent = `### Contributors`;
 
-      (fs.readFileSync as jest.Mock).mockReturnValue(fileContent);
+      readFileSyncMock.mockReturnValue(fileContent);
       renderReportMock.mockReturnValue('<table>...</table>');
 
       writer.updateContributorsTable(report);

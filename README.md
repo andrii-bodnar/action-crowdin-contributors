@@ -15,7 +15,7 @@ This action downloads the Top Members report and generates or updates a contribu
 
 ## Usage
 
-Set up a workflow in *.github/workflows/crowdin-contributors.yml* (or add a job to your existing workflows).
+Set up a workflow in _.github/workflows/crowdin-contributors.yml_ (or add a job to your existing workflows).
 
 Read the [Configuring a workflow](https://help.github.com/en/articles/configuring-a-workflow) article for more details on how to create and set up custom workflows.
 
@@ -25,7 +25,7 @@ name: Crowdin Contributors Action
 on:
   # When you push to the `main` branch
   push:
-    branches: [ main ]
+    branches: [main]
   # And optionally, once every 12 hours
   schedule:
     - cron: '0 */12 * * *' # https://crontab.guru/#0_*/12_*_*_*
@@ -34,23 +34,22 @@ on:
 
 jobs:
   crowdin-contributors:
-
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v6
 
-    - name: Generate Crowdin Contributors table
-      uses: andrii-bodnar/action-crowdin-contributors@v2
-      with:
-        contributors_per_line: 8
-        max_contributors: 32
-        image_size: 64
-        min_words_contributed: 256
-      env:
-        CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
-        CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
-        CROWDIN_ORGANIZATION: ${{ secrets.CROWDIN_ORGANIZATION }} # Optional. Only for Crowdin Enterprise
+      - name: Generate Crowdin Contributors table
+        uses: andrii-bodnar/action-crowdin-contributors@v2
+        with:
+          contributors_per_line: 8
+          max_contributors: 32
+          image_size: 64
+          min_words_contributed: 256
+        env:
+          CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
+          CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
+          CROWDIN_ORGANIZATION: ${{ secrets.CROWDIN_ORGANIZATION }} # Optional. Only for Crowdin Enterprise
 ```
 
 ### Creating a PR
@@ -63,7 +62,7 @@ name: Crowdin Contributors Action
 on:
   # When you push to the `main` branch
   push:
-    branches: [ main ]
+    branches: [main]
   # And optionally, once every 12 hours
   schedule:
     - cron: '0 */12 * * *' # https://crontab.guru/#0_*/12_*_*_*
@@ -72,38 +71,37 @@ on:
 
 jobs:
   crowdin-contributors:
-
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v6
 
-    - name: Generate Crowdin Contributors table
-      uses: andrii-bodnar/action-crowdin-contributors@v2
-      with:
-        contributors_per_line: 8
-        max_contributors: 32
-        image_size: 64
-        min_words_contributed: 256
-      env:
-        CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
-        CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
-        CROWDIN_ORGANIZATION: ${{ secrets.CROWDIN_ORGANIZATION }} # Optional. Only for Crowdin Enterprise
+      - name: Generate Crowdin Contributors table
+        uses: andrii-bodnar/action-crowdin-contributors@v2
+        with:
+          contributors_per_line: 8
+          max_contributors: 32
+          image_size: 64
+          min_words_contributed: 256
+        env:
+          CROWDIN_PROJECT_ID: ${{ secrets.CROWDIN_PROJECT_ID }}
+          CROWDIN_PERSONAL_TOKEN: ${{ secrets.CROWDIN_PERSONAL_TOKEN }}
+          CROWDIN_ORGANIZATION: ${{ secrets.CROWDIN_ORGANIZATION }} # Optional. Only for Crowdin Enterprise
 
-    - name: Create Pull Request
-      uses: peter-evans/create-pull-request@v6
-      with:
-        title: Update Crowdin Contributors table
-        body: By [action-crowdin-contributors](https://github.com/andrii-bodnar/action-crowdin-contributors) GitHub action
-        commit-message: Update Crowdin Contributors table
-        committer: Crowdin Bot <support+bot@crowdin.com>
-        branch: crowdin-contributors/patch
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v8
+        with:
+          title: Update Crowdin Contributors table
+          body: By [action-crowdin-contributors](https://github.com/andrii-bodnar/action-crowdin-contributors) GitHub action
+          commit-message: Update Crowdin Contributors table
+          committer: Crowdin Bot <support+bot@crowdin.com>
+          branch: crowdin-contributors/patch
 ```
 
 ## Options
 
 | Option                  | Default value                         | Description                                                      |
-|-------------------------|---------------------------------------|------------------------------------------------------------------|
+| ----------------------- | ------------------------------------- | ---------------------------------------------------------------- |
 | `max_contributors`      | 30                                    | Only the specified amount of contributors will be shown          |
 | `min_words_contributed` | 100                                   | Minimum words contributed (both translated and approved)         |
 | `contributors_per_line` | 7                                     | Maximum number of columns for the contributors table             |
@@ -119,7 +117,7 @@ jobs:
 This actions provides the following outputs that can be used by other steps in your workflow:
 
 | Output               | Description                                          |
-|----------------------|------------------------------------------------------|
+| -------------------- | ---------------------------------------------------- |
 | `contributors_table` | Generated table with contributors                    |
 | `json_report`        | JSON report with contributors used to render a table |
 
@@ -147,7 +145,7 @@ If you want to contribute please read the [Contributing](/CONTRIBUTING.md) guide
 
 <pre>
 The Crowdin Contributors Action is licensed under the MIT License.
-See the LICENSE.md file distributed with this work for additional
+See the LICENSE file distributed with this work for additional
 information regarding copyright ownership.
 
 Except as contained in the LICENSE file, the name(s) of the above copyright

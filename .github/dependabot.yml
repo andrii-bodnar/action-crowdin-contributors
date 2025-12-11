@@ -4,6 +4,10 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    groups:
+      github-actions:
+        patterns:
+          - '*'
 
   - package-ecosystem: npm
     directory: /
@@ -11,7 +15,7 @@ updates:
       interval: monthly
     groups:
       development-dependencies:
-        dependency-type: "development"
+        dependency-type: 'development'
     ignore:
-      - dependency-name: "*" # Ignore major updates
-        update-types: [ "version-update:semver-major" ]
+      - dependency-name: '*' # Ignore major updates
+        update-types: ['version-update:semver-major']

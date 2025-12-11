@@ -1,12 +1,12 @@
-import crowdin from '@crowdin/crowdin-api-client';
+import { Client as CrowdinClient } from '@crowdin/crowdin-api-client';
 import axios from 'axios';
 import * as fs from 'fs';
 import * as util from 'util';
 import * as core from '@actions/core';
-import { ContributorsTableConfig, CredentialsConfig } from './config';
-import { wait } from './wait';
-import { Writer } from './writer';
-import { Logger } from './logger';
+import { ContributorsTableConfig, CredentialsConfig } from './config.js';
+import { wait } from './wait.js';
+import { Writer } from './writer.js';
+import { Logger } from './logger.js';
 
 export interface User {
   id: number;
@@ -55,7 +55,7 @@ export class Contributors {
   private async downloadReport(): Promise<any[]> {
     core.info('Downloading the report...');
 
-    const { reportsApi } = new crowdin({
+    const { reportsApi } = new CrowdinClient({
       token: this.credentials.token,
       organization: this.credentials.organization,
     });
@@ -102,7 +102,7 @@ export class Contributors {
   }
 
   private async prepareData(report: any[]): Promise<User[]> {
-    const { usersApi } = new crowdin({
+    const { usersApi } = new CrowdinClient({
       token: this.credentials.token,
       organization: this.credentials.organization,
     });
