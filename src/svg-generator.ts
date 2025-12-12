@@ -30,7 +30,7 @@ export class SvgGenerator {
     const cellHeight = imageSize + this.TEXT_HEIGHT + this.CELL_PADDING * 2;
 
     const rows = Math.ceil(users.length / perLine);
-    const cols = Math.min(users.length, perLine);
+    const cols = users.length === 0 ? 0 : perLine;
 
     const width = cols * cellWidth;
     const height = rows * cellHeight;
