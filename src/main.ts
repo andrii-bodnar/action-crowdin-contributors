@@ -2,6 +2,7 @@ import * as core from '@actions/core';
 import * as dotenv from 'dotenv';
 import { ContributorsTableConfig, CredentialsConfig } from './config.js';
 import { Contributors } from './contributors.js';
+import { extractCrowdinOrganization } from './utils.js';
 
 dotenv.config();
 
@@ -38,7 +39,7 @@ export async function run(): Promise<void> {
     }
 
     if (process.env.CROWDIN_ORGANIZATION) {
-      credentialsConfig.organization = process.env.CROWDIN_ORGANIZATION;
+      credentialsConfig.organization = extractCrowdinOrganization(process.env.CROWDIN_ORGANIZATION);
       core.setSecret(String(credentialsConfig.organization));
     }
 

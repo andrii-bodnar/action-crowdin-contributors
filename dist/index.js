@@ -66340,14 +66340,18 @@ class Logger {
     }
 }
 
-async function wait(milliseconds) {
+const wait = async (milliseconds) => {
     return new Promise((resolve) => {
         if (isNaN(milliseconds)) {
             throw new Error('milliseconds not a number');
         }
         setTimeout(() => resolve('done!'), milliseconds);
     });
-}
+};
+const extractCrowdinOrganization = (text) => {
+    const match = text.match(/([\w\d-]+)(\.api\.crowdin\.com|\.crowdin\.com|$)/);
+    return match ? match[1] : text;
+};
 
 class Contributors {
     credentials;
@@ -66518,7 +66522,7 @@ async function run() {
             coreExports.setSecret(String(credentialsConfig.token));
         }
         if (process.env.CROWDIN_ORGANIZATION) {
-            credentialsConfig.organization = process.env.CROWDIN_ORGANIZATION;
+            credentialsConfig.organization = extractCrowdinOrganization(process.env.CROWDIN_ORGANIZATION);
             coreExports.setSecret(String(credentialsConfig.organization));
         }
         validateCredentials(credentialsConfig);

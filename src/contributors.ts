@@ -7,7 +7,7 @@ import { ContributorsTableConfig, CredentialsConfig } from './config.js';
 import { SvgGenerator } from './svg-generator.js';
 import { Writer } from './writer.js';
 import { Logger } from './logger.js';
-import { wait } from './wait.js';
+import { wait } from './utils.js';
 
 export interface User {
   id: number;
