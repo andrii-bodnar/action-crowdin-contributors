@@ -11,8 +11,8 @@ export class SvgGenerator {
   private config: ContributorsTableConfig;
   private credentials: CredentialsConfig;
 
-  private readonly CELL_PADDING = 10;
-  private readonly TEXT_HEIGHT = 40;
+  private readonly CELL_PADDING = 20;
+  private readonly TEXT_HEIGHT = 70;
   private readonly FONT_FAMILY = '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif';
 
   constructor(credentials: CredentialsConfig, config: ContributorsTableConfig) {
@@ -91,15 +91,39 @@ export class SvgGenerator {
 
   private renderContributor(user: UserWithBase64, x: number, y: number, size: number): string {
     const centerX = x + size / 2;
-    const textY = y + size + 15;
-    const wordsY = textY + 14;
+    const textY = y + size + 30;
+    const usernameY = textY + 20;
+    const wordsY = usernameY + 20;
     const words = +user.translated + +user.approved;
 
     const clipPathId = `clip-${user.id}`;
     const profileUrl = this.getProfileUrl(user.username);
 
-    const escapedName = this.escapeXml(user.name);
-    const escapedUsername = this.escapeXml(user.username);
+    // Parse display name and username from user.name
+    // Format: "Display Name (username)" or just "Display Name"
+    const nameMatch = user.name.match(/^(.+?)\s*\(([^)]+)\)$/);
+    let displayName: string;
+    let usernameDisplay: string;
+
+    if (nameMatch) {
+      // Format: "Display Name (username)"
+      displayName = nameMatch[1].trim();
+      usernameDisplay = `(${nameMatch[2].trim()})`;
+    } else {
+      // No display name, use username as display name
+      displayName = user.username;
+      usernameDisplay = '';
+    }
+
+    // Truncate display name if too long
+    const maxNameLength = 20;
+    if (displayName.length > maxNameLength) {
+      displayName = displayName.substring(0, maxNameLength - 3) + '...';
+    }
+
+    const escapedDisplayName = this.escapeXml(displayName);
+    const escapedUsername = this.escapeXml(usernameDisplay);
+    const escapedFullName = this.escapeXml(user.name);
 
     let content = `
     <g class="contributor">
@@ -112,7 +136,7 @@ export class SvgGenerator {
     if (profileUrl) {
       content += `
       <a xlink:href="${profileUrl}" target="_blank">
-        <title>${escapedName} (@${escapedUsername})</title>
+        <title>${escapedFullName}</title>
         <image 
           x="${x}" 
           y="${y}" 
@@ -122,12 +146,13 @@ export class SvgGenerator {
           clip-path="url(#${clipPathId})"
           preserveAspectRatio="xMidYMid slice"
         />
-        <text x="${centerX}" y="${textY}" class="name">${escapedName}</text>
+        <text x="${centerX}" y="${textY}" class="name">${escapedDisplayName}</text>
+        <text x="${centerX}" y="${usernameY}" class="username">${escapedUsername}</text>
         <text x="${centerX}" y="${wordsY}" class="words">${words.toLocaleString()} words</text>
       </a>`;
     } else {
       content += `
-      <title>${escapedName} (@${escapedUsername})</title>
+      <title>${escapedFullName}</title>
       <image 
         x="${x}" 
         y="${y}" 
@@ -137,8 +162,18 @@ export class SvgGenerator {
         clip-path="url(#${clipPathId})"
         preserveAspectRatio="xMidYMid slice"
       />
-      <text x="${centerX}" y="${textY}" class="name">${escapedName}</text>
+      <text x="${centerX}" y="${textY}" class="name">${escapedDisplayName}</text>`;
+
+      // Only show username if it exists
+      if (escapedUsername) {
+        content += `
+      <text x="${centerX}" y="${usernameY}" class="username">${escapedUsername}</text>
       <text x="${centerX}" y="${wordsY}" class="words">${words.toLocaleString()} words</text>`;
+      } else {
+        // If no username, show words directly below name
+        content += `
+      <text x="${centerX}" y="${usernameY}" class="words">${words.toLocaleString()} words</text>`;
+      }
     }
 
     content += `
@@ -165,31 +200,40 @@ export class SvgGenerator {
       height += 40;
     }
 
-    return `<svg 
-  xmlns="http://www.w3.org/2000/svg" 
+    return `<svg
+  xmlns="http://www.w3.org/2000/svg"
   xmlns:xlink="http://www.w3.org/1999/xlink"
-  width="${width}" 
+  width="${width}"
   height="${height}"
   viewBox="0 0 ${width} ${height}"
 >
   <style>
     .contributor { cursor: pointer; }
-    .name { 
-      font-size: 12px; 
-      font-family: ${this.FONT_FAMILY}; 
-      fill: #24292f;
+    .name {
+      font-size: 14px;
+      font-family: ${this.FONT_FAMILY};
+      font-weight: bold;
+      fill: #6B6B6C;
       text-anchor: middle;
     }
-    .words { 
-      font-size: 10px; 
-      font-family: ${this.FONT_FAMILY}; 
-      fill: #57606a;
+    .username {
+      font-size: 14px;
+      font-family: ${this.FONT_FAMILY};
+      font-weight: bold;
+      fill: #6B6B6C;
+      text-anchor: middle;
+    }
+    .words {
+      font-size: 14px;
+      font-family: ${this.FONT_FAMILY};
+      font-weight: bold;
+      fill: #6B6B6C;
       text-anchor: middle;
     }
     .project-link {
       font-size: 14px;
       font-family: ${this.FONT_FAMILY};
-      fill: #0969da;
+      fill: #3b82f6;
       text-anchor: middle;
     }
     .project-link:hover {

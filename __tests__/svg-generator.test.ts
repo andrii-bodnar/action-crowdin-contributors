@@ -209,8 +209,8 @@ describe('SvgGenerator', () => {
       const result = await svgGenerator.generateSvg(users);
 
       // With 2 per line and 4 users, we should have 2 rows
-      // Width should be 2 * (100 + 20) = 240 (imageSize + padding*2)
-      expect(result).toContain('width="240"');
+      // Width should be 2 * (100 + 40) = 280 (imageSize + padding*2)
+      expect(result).toContain('width="280"');
     });
 
     it('should handle empty users array', async () => {
