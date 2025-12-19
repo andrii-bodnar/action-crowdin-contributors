@@ -60079,11 +60079,57 @@ const {
   mergeConfig
 } = axios;
 
+const wait = async (milliseconds) => {
+    return new Promise((resolve) => {
+        if (isNaN(milliseconds)) {
+            throw new Error('milliseconds not a number');
+        }
+        setTimeout(() => resolve('done!'), milliseconds);
+    });
+};
+const extractCrowdinOrganization = (text) => {
+    const match = text.match(/([\w\d-]+)(\.api\.crowdin\.com|\.crowdin\.com|$)/);
+    return match ? match[1] : text;
+};
+const formatUserName = (fullName, username, maxNameLength = 20) => {
+    // Parse display name and username from fullName
+    // If fullName is empty or same as username: show only username
+    // If fullName exists and different from username: show "DisplayName (username)"
+    const trimmedFullName = fullName.trim();
+    let displayName;
+    let usernameDisplay;
+    if (!trimmedFullName || trimmedFullName === username) {
+        // No display name or same as username: show only username
+        displayName = username;
+        usernameDisplay = '';
+    }
+    else {
+        // Has display name different from username
+        // Check if it already contains username in parentheses
+        const nameMatch = trimmedFullName.match(/^(.+?)\s*\(([^)]+)\)\s*$/);
+        if (nameMatch) {
+            // Already has format "Display Name (username)"
+            displayName = nameMatch[1].trim();
+            usernameDisplay = `(${nameMatch[2].trim()})`;
+        }
+        else {
+            // Display name without parentheses, add username
+            displayName = trimmedFullName;
+            usernameDisplay = `(${username})`;
+        }
+    }
+    // Truncate display name if too long
+    if (displayName.length > maxNameLength) {
+        displayName = displayName.substring(0, maxNameLength) + '...';
+    }
+    return { displayName, usernameDisplay };
+};
+
 class SvgGenerator {
     config;
     credentials;
-    CELL_PADDING = 10;
-    TEXT_HEIGHT = 40;
+    CELL_PADDING = 20;
+    TEXT_HEIGHT = 70;
     FONT_FAMILY = '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif';
     constructor(credentials, config) {
         this.credentials = credentials;
@@ -60145,13 +60191,16 @@ class SvgGenerator {
     }
     renderContributor(user, x, y, size) {
         const centerX = x + size / 2;
-        const textY = y + size + 15;
-        const wordsY = textY + 14;
+        const textY = y + size + 30;
+        const usernameY = textY + 20;
+        const wordsY = usernameY + 20;
         const words = +user.translated + +user.approved;
         const clipPathId = `clip-${user.id}`;
         const profileUrl = this.getProfileUrl(user.username);
-        const escapedName = this.escapeXml(user.name);
-        const escapedUsername = this.escapeXml(user.username);
+        const { displayName, usernameDisplay } = formatUserName(user.name, user.username);
+        const escapedDisplayName = this.escapeXml(displayName);
+        const escapedUsername = this.escapeXml(usernameDisplay);
+        const escapedFullName = this.escapeXml(user.name);
         let content = `
     <g class="contributor">
       <defs>
@@ -60162,7 +60211,7 @@ class SvgGenerator {
         if (profileUrl) {
             content += `
       <a xlink:href="${profileUrl}" target="_blank">
-        <title>${escapedName} (@${escapedUsername})</title>
+        <title>${escapedFullName}</title>
         <image 
           x="${x}" 
           y="${y}" 
@@ -60172,13 +60221,14 @@ class SvgGenerator {
           clip-path="url(#${clipPathId})"
           preserveAspectRatio="xMidYMid slice"
         />
-        <text x="${centerX}" y="${textY}" class="name">${escapedName}</text>
+        <text x="${centerX}" y="${textY}" class="name">${escapedDisplayName}</text>
+        <text x="${centerX}" y="${usernameY}" class="username">${escapedUsername}</text>
         <text x="${centerX}" y="${wordsY}" class="words">${words.toLocaleString()} words</text>
       </a>`;
         }
         else {
             content += `
-      <title>${escapedName} (@${escapedUsername})</title>
+      <title>${escapedFullName}</title>
       <image 
         x="${x}" 
         y="${y}" 
@@ -60188,8 +60238,18 @@ class SvgGenerator {
         clip-path="url(#${clipPathId})"
         preserveAspectRatio="xMidYMid slice"
       />
-      <text x="${centerX}" y="${textY}" class="name">${escapedName}</text>
+      <text x="${centerX}" y="${textY}" class="name">${escapedDisplayName}</text>`;
+            // Only show username if it exists
+            if (escapedUsername) {
+                content += `
+      <text x="${centerX}" y="${usernameY}" class="username">${escapedUsername}</text>
       <text x="${centerX}" y="${wordsY}" class="words">${words.toLocaleString()} words</text>`;
+            }
+            else {
+                // If no username, show words directly below name
+                content += `
+      <text x="${centerX}" y="${usernameY}" class="words">${words.toLocaleString()} words</text>`;
+            }
         }
         content += `
     </g>`;
@@ -60211,31 +60271,40 @@ class SvgGenerator {
   </a>`;
             height += 40;
         }
-        return `<svg 
-  xmlns="http://www.w3.org/2000/svg" 
+        return `<svg
+  xmlns="http://www.w3.org/2000/svg"
   xmlns:xlink="http://www.w3.org/1999/xlink"
-  width="${width}" 
+  width="${width}"
   height="${height}"
   viewBox="0 0 ${width} ${height}"
 >
   <style>
     .contributor { cursor: pointer; }
-    .name { 
-      font-size: 12px; 
-      font-family: ${this.FONT_FAMILY}; 
-      fill: #24292f;
+    .name {
+      font-size: 14px;
+      font-family: ${this.FONT_FAMILY};
+      font-weight: bold;
+      fill: #6B6B6C;
       text-anchor: middle;
     }
-    .words { 
-      font-size: 10px; 
-      font-family: ${this.FONT_FAMILY}; 
-      fill: #57606a;
+    .username {
+      font-size: 14px;
+      font-family: ${this.FONT_FAMILY};
+      font-weight: bold;
+      fill: #6B6B6C;
+      text-anchor: middle;
+    }
+    .words {
+      font-size: 14px;
+      font-family: ${this.FONT_FAMILY};
+      font-weight: bold;
+      fill: #6B6B6C;
       text-anchor: middle;
     }
     .project-link {
       font-size: 14px;
       font-family: ${this.FONT_FAMILY};
-      fill: #0969da;
+      fill: #3b82f6;
       text-anchor: middle;
     }
     .project-link:hover {
@@ -66271,9 +66340,22 @@ class Writer {
         for (const i in result) {
             html += '<tr>';
             for (const j in result[i]) {
-                let userData = `<img alt="logo" style="width: ${this.config.imageSize}px" src="${result[i][j].picture}"/>
+                const { displayName, usernameDisplay } = formatUserName(result[i][j].name, result[i][j].username);
+                let userData;
+                if (usernameDisplay) {
+                    // Display name and username on separate lines
+                    userData = `<img alt="logo" style="width: ${this.config.imageSize}px" src="${result[i][j].picture}"/>
                     <br />
-                    <sub><b>${result[i][j].name}</b></sub>`;
+                    <sub><b>${displayName}</b></sub>
+                    <br />
+                    <sub><b>${usernameDisplay}</b></sub>`;
+                }
+                else {
+                    // Only username, single line
+                    userData = `<img alt="logo" style="width: ${this.config.imageSize}px" src="${result[i][j].picture}"/>
+                    <br />
+                    <sub><b>${displayName}</b></sub>`;
+                }
                 if (!this.credentials.organization) {
                     userData = `<a href="https://crowdin.com/profile/${result[i][j].username}">${userData}</a>`;
                 }
@@ -66339,19 +66421,6 @@ class Logger {
         }
     }
 }
-
-const wait = async (milliseconds) => {
-    return new Promise((resolve) => {
-        if (isNaN(milliseconds)) {
-            throw new Error('milliseconds not a number');
-        }
-        setTimeout(() => resolve('done!'), milliseconds);
-    });
-};
-const extractCrowdinOrganization = (text) => {
-    const match = text.match(/([\w\d-]+)(\.api\.crowdin\.com|\.crowdin\.com|$)/);
-    return match ? match[1] : text;
-};
 
 class Contributors {
     credentials;
