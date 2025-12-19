@@ -60143,17 +60143,10 @@ class SvgGenerator {
     </svg>`;
         return `data:image/svg+xml;base64,${Buffer.from(placeholderSvg).toString('base64')}`;
     }
-    renderContributor(user, x, y, size) {
-        const centerX = x + size / 2;
-        const textY = y + size + 30;
-        const usernameY = textY + 20;
-        const wordsY = usernameY + 20;
-        const words = +user.translated + +user.approved;
-        const clipPathId = `clip-${user.id}`;
-        const profileUrl = this.getProfileUrl(user.username);
-        // Parse display name and username from user.name
+    parseDisplayNameAndUsername(fullName, username, maxNameLength = 20) {
+        // Parse display name and username from fullName
         // Format: "Display Name (username)" or just "Display Name"
-        const nameMatch = user.name.match(/^(.+?)\s*\(([^)]+)\)$/);
+        const nameMatch = fullName.match(/^(.+?)\s*\(([^)]+)\)$/);
         let displayName;
         let usernameDisplay;
         if (nameMatch) {
@@ -60163,14 +60156,24 @@ class SvgGenerator {
         }
         else {
             // No display name, use username as display name
-            displayName = user.username;
+            displayName = username;
             usernameDisplay = '';
         }
         // Truncate display name if too long
-        const maxNameLength = 20;
         if (displayName.length > maxNameLength) {
             displayName = displayName.substring(0, maxNameLength - 3) + '...';
         }
+        return { displayName, usernameDisplay };
+    }
+    renderContributor(user, x, y, size) {
+        const centerX = x + size / 2;
+        const textY = y + size + 30;
+        const usernameY = textY + 20;
+        const wordsY = usernameY + 20;
+        const words = +user.translated + +user.approved;
+        const clipPathId = `clip-${user.id}`;
+        const profileUrl = this.getProfileUrl(user.username);
+        const { displayName, usernameDisplay } = this.parseDisplayNameAndUsername(user.name, user.username);
         const escapedDisplayName = this.escapeXml(displayName);
         const escapedUsername = this.escapeXml(usernameDisplay);
         const escapedFullName = this.escapeXml(user.name);
