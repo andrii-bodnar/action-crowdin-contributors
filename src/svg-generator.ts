@@ -2,6 +2,7 @@ import axios from 'axios';
 import * as core from '@actions/core';
 import { ContributorsTableConfig, CredentialsConfig } from './config.js';
 import { User } from './contributors.js';
+import { formatUserName } from './utils.js';
 
 interface UserWithBase64 extends User {
   pictureBase64: string;
@@ -89,35 +90,6 @@ export class SvgGenerator {
     return `data:image/svg+xml;base64,${Buffer.from(placeholderSvg).toString('base64')}`;
   }
 
-  private parseDisplayNameAndUsername(
-    fullName: string,
-    username: string,
-    maxNameLength: number = 20,
-  ): { displayName: string; usernameDisplay: string } {
-    // Parse display name and username from fullName
-    // Format: "Display Name (username)" or just "Display Name"
-    const nameMatch = fullName.match(/^(.+?)\s*\(([^)]+)\)$/);
-    let displayName: string;
-    let usernameDisplay: string;
-
-    if (nameMatch) {
-      // Format: "Display Name (username)"
-      displayName = nameMatch[1].trim();
-      usernameDisplay = `(${nameMatch[2].trim()})`;
-    } else {
-      // No display name, use username as display name
-      displayName = username;
-      usernameDisplay = '';
-    }
-
-    // Truncate display name if too long
-    if (displayName.length > maxNameLength) {
-      displayName = displayName.substring(0, maxNameLength - 3) + '...';
-    }
-
-    return { displayName, usernameDisplay };
-  }
-
   private renderContributor(user: UserWithBase64, x: number, y: number, size: number): string {
     const centerX = x + size / 2;
     const textY = y + size + 30;
@@ -128,7 +100,7 @@ export class SvgGenerator {
     const clipPathId = `clip-${user.id}`;
     const profileUrl = this.getProfileUrl(user.username);
 
-    const { displayName, usernameDisplay } = this.parseDisplayNameAndUsername(user.name, user.username);
+    const { displayName, usernameDisplay } = formatUserName(user.name, user.username);
 
     const escapedDisplayName = this.escapeXml(displayName);
     const escapedUsername = this.escapeXml(usernameDisplay);

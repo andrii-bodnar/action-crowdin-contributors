@@ -116,7 +116,7 @@ MIT`;
       const report = [
         {
           picture: 'picture1',
-          name: 'name1',
+          name: 'Display Name 1',
           username: 'username1',
           translated: '10',
           approved: '5',
@@ -124,7 +124,7 @@ MIT`;
         },
         {
           picture: 'picture2',
-          name: 'name2',
+          name: 'Display Name 2',
           username: 'username2',
           translated: '20',
           approved: '15',
@@ -138,14 +138,18 @@ MIT`;
       <td align="center" valign="top">
         <img alt="logo" style="width: 100px" src="picture1" />
         <br />
-        <sub><b>name1</b></sub>
+        <sub><b>Display Name 1</b></sub>
+        <br />
+        <sub><b>(username1)</b></sub>
         <br />
         <sub><b>15 words</b></sub>
       </td>
       <td align="center" valign="top">
         <img alt="logo" style="width: 100px" src="picture2" />
         <br />
-        <sub><b>name2</b></sub>
+        <sub><b>Display Name 2</b></sub>
+        <br />
+        <sub><b>(username2)</b></sub>
         <br />
         <sub><b>35 words</b></sub>
       </td>
@@ -160,7 +164,7 @@ MIT`;
       const report = [
         {
           picture: 'https://i2.wp.com/crowdin.com/images/user-picture.png?ssl=1',
-          name: 'name1',
+          name: 'Display Name 1',
           username: 'username1',
           translated: '10',
           approved: '100',
@@ -171,7 +175,7 @@ MIT`;
         },
         {
           picture: 'https://i2.wp.com/crowdin.com/images/user-picture.png?ssl=1',
-          name: 'name2',
+          name: 'Display Name 2',
           username: 'username2',
           translated: '20',
           approved: '15',
@@ -190,7 +194,9 @@ MIT`;
       <td align="center" valign="top">
         <a href="https://crowdin.com/profile/username1"><img alt="logo" style="width: 100px" src="https://i2.wp.com/crowdin.com/images/user-picture.png?ssl=1" />
           <br />
-          <sub><b>name1</b></sub></a>
+          <sub><b>Display Name 1</b></sub>
+          <br />
+          <sub><b>(username1)</b></sub></a>
         <br />
         <sub><b>110 words</b></sub>
         <br /><sub><b><code title="Ukrainian">uk</code></b>, <b><code title="Estonian">et</code></b></sub>
@@ -198,7 +204,9 @@ MIT`;
       <td align="center" valign="top">
         <a href="https://crowdin.com/profile/username2"><img alt="logo" style="width: 100px" src="https://i2.wp.com/crowdin.com/images/user-picture.png?ssl=1" />
           <br />
-          <sub><b>name2</b></sub></a>
+          <sub><b>Display Name 2</b></sub>
+          <br />
+          <sub><b>(username2)</b></sub></a>
         <br />
         <sub><b>35 words</b></sub>
         <br /><sub><b><code title="French">fr</code></b>, <b><code title="German">de</code></b></sub>

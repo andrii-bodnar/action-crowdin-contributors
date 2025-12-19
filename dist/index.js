@@ -60079,6 +60079,52 @@ const {
   mergeConfig
 } = axios;
 
+const wait = async (milliseconds) => {
+    return new Promise((resolve) => {
+        if (isNaN(milliseconds)) {
+            throw new Error('milliseconds not a number');
+        }
+        setTimeout(() => resolve('done!'), milliseconds);
+    });
+};
+const extractCrowdinOrganization = (text) => {
+    const match = text.match(/([\w\d-]+)(\.api\.crowdin\.com|\.crowdin\.com|$)/);
+    return match ? match[1] : text;
+};
+const formatUserName = (fullName, username, maxNameLength = 20) => {
+    // Parse display name and username from fullName
+    // If fullName is empty or same as username: show only username
+    // If fullName exists and different from username: show "DisplayName (username)"
+    const trimmedFullName = fullName.trim();
+    let displayName;
+    let usernameDisplay;
+    if (!trimmedFullName || trimmedFullName === username) {
+        // No display name or same as username: show only username
+        displayName = username;
+        usernameDisplay = '';
+    }
+    else {
+        // Has display name different from username
+        // Check if it already contains username in parentheses
+        const nameMatch = trimmedFullName.match(/^(.+?)\s*\(([^)]+)\)\s*$/);
+        if (nameMatch) {
+            // Already has format "Display Name (username)"
+            displayName = nameMatch[1].trim();
+            usernameDisplay = `(${nameMatch[2].trim()})`;
+        }
+        else {
+            // Display name without parentheses, add username
+            displayName = trimmedFullName;
+            usernameDisplay = `(${username})`;
+        }
+    }
+    // Truncate display name if too long
+    if (displayName.length > maxNameLength) {
+        displayName = displayName.substring(0, maxNameLength) + '...';
+    }
+    return { displayName, usernameDisplay };
+};
+
 class SvgGenerator {
     config;
     credentials;
@@ -60143,28 +60189,6 @@ class SvgGenerator {
     </svg>`;
         return `data:image/svg+xml;base64,${Buffer.from(placeholderSvg).toString('base64')}`;
     }
-    parseDisplayNameAndUsername(fullName, username, maxNameLength = 20) {
-        // Parse display name and username from fullName
-        // Format: "Display Name (username)" or just "Display Name"
-        const nameMatch = fullName.match(/^(.+?)\s*\(([^)]+)\)$/);
-        let displayName;
-        let usernameDisplay;
-        if (nameMatch) {
-            // Format: "Display Name (username)"
-            displayName = nameMatch[1].trim();
-            usernameDisplay = `(${nameMatch[2].trim()})`;
-        }
-        else {
-            // No display name, use username as display name
-            displayName = username;
-            usernameDisplay = '';
-        }
-        // Truncate display name if too long
-        if (displayName.length > maxNameLength) {
-            displayName = displayName.substring(0, maxNameLength - 3) + '...';
-        }
-        return { displayName, usernameDisplay };
-    }
     renderContributor(user, x, y, size) {
         const centerX = x + size / 2;
         const textY = y + size + 30;
@@ -60173,7 +60197,7 @@ class SvgGenerator {
         const words = +user.translated + +user.approved;
         const clipPathId = `clip-${user.id}`;
         const profileUrl = this.getProfileUrl(user.username);
-        const { displayName, usernameDisplay } = this.parseDisplayNameAndUsername(user.name, user.username);
+        const { displayName, usernameDisplay } = formatUserName(user.name, user.username);
         const escapedDisplayName = this.escapeXml(displayName);
         const escapedUsername = this.escapeXml(usernameDisplay);
         const escapedFullName = this.escapeXml(user.name);
@@ -66316,9 +66340,22 @@ class Writer {
         for (const i in result) {
             html += '<tr>';
             for (const j in result[i]) {
-                let userData = `<img alt="logo" style="width: ${this.config.imageSize}px" src="${result[i][j].picture}"/>
+                const { displayName, usernameDisplay } = formatUserName(result[i][j].name, result[i][j].username);
+                let userData;
+                if (usernameDisplay) {
+                    // Display name and username on separate lines
+                    userData = `<img alt="logo" style="width: ${this.config.imageSize}px" src="${result[i][j].picture}"/>
                     <br />
-                    <sub><b>${result[i][j].name}</b></sub>`;
+                    <sub><b>${displayName}</b></sub>
+                    <br />
+                    <sub><b>${usernameDisplay}</b></sub>`;
+                }
+                else {
+                    // Only username, single line
+                    userData = `<img alt="logo" style="width: ${this.config.imageSize}px" src="${result[i][j].picture}"/>
+                    <br />
+                    <sub><b>${displayName}</b></sub>`;
+                }
                 if (!this.credentials.organization) {
                     userData = `<a href="https://crowdin.com/profile/${result[i][j].username}">${userData}</a>`;
                 }
@@ -66384,19 +66421,6 @@ class Logger {
         }
     }
 }
-
-const wait = async (milliseconds) => {
-    return new Promise((resolve) => {
-        if (isNaN(milliseconds)) {
-            throw new Error('milliseconds not a number');
-        }
-        setTimeout(() => resolve('done!'), milliseconds);
-    });
-};
-const extractCrowdinOrganization = (text) => {
-    const match = text.match(/([\w\d-]+)(\.api\.crowdin\.com|\.crowdin\.com|$)/);
-    return match ? match[1] : text;
-};
 
 class Contributors {
     credentials;

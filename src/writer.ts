@@ -3,6 +3,7 @@ import pretty from 'pretty';
 import { ContributorsTableConfig, CredentialsConfig } from './config.js';
 import { Language, User } from './contributors.js';
 import { Logger } from './logger.js';
+import { formatUserName } from './utils.js';
 
 export class Writer {
   private credentials: CredentialsConfig;
@@ -49,9 +50,22 @@ export class Writer {
       html += '<tr>';
 
       for (const j in result[i]) {
-        let userData = `<img alt="logo" style="width: ${this.config.imageSize}px" src="${result[i][j].picture}"/>
+        const { displayName, usernameDisplay } = formatUserName(result[i][j].name, result[i][j].username);
+
+        let userData: string;
+        if (usernameDisplay) {
+          // Display name and username on separate lines
+          userData = `<img alt="logo" style="width: ${this.config.imageSize}px" src="${result[i][j].picture}"/>
                     <br />
-                    <sub><b>${result[i][j].name}</b></sub>`;
+                    <sub><b>${displayName}</b></sub>
+                    <br />
+                    <sub><b>${usernameDisplay}</b></sub>`;
+        } else {
+          // Only username, single line
+          userData = `<img alt="logo" style="width: ${this.config.imageSize}px" src="${result[i][j].picture}"/>
+                    <br />
+                    <sub><b>${displayName}</b></sub>`;
+        }
 
         if (!this.credentials.organization) {
           userData = `<a href="https://crowdin.com/profile/${result[i][j].username}">${userData}</a>`;
