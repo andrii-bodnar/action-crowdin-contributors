@@ -98,7 +98,7 @@ export class SvgGenerator {
     const words = +user.translated + +user.approved;
 
     const clipPathId = `clip-${user.id}`;
-    const profileUrl = this.getProfileUrl(user.username);
+    const profileUrl = this.getProfileUrl(user.id, user.username);
 
     const { displayName, usernameDisplay } = formatUserName(user.name, user.username);
 
@@ -163,9 +163,9 @@ export class SvgGenerator {
     return content;
   }
 
-  private getProfileUrl(username: string): string | null {
+  private getProfileUrl(userid: number, username: string): string | null {
     if (this.credentials.organization) {
-      return null;
+      return `https://${this.credentials.organization}.crowdin.com/u/users#${userid}`;
     }
     return `https://crowdin.com/profile/${username}`;
   }

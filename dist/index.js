@@ -60196,7 +60196,7 @@ class SvgGenerator {
         const wordsY = usernameY + 20;
         const words = +user.translated + +user.approved;
         const clipPathId = `clip-${user.id}`;
-        const profileUrl = this.getProfileUrl(user.username);
+        const profileUrl = this.getProfileUrl(user.id, user.username);
         const { displayName, usernameDisplay } = formatUserName(user.name, user.username);
         const escapedDisplayName = this.escapeXml(displayName);
         const escapedUsername = this.escapeXml(usernameDisplay);
@@ -60255,9 +60255,9 @@ class SvgGenerator {
     </g>`;
         return content;
     }
-    getProfileUrl(username) {
+    getProfileUrl(userid, username) {
         if (this.credentials.organization) {
-            return null;
+            return `https://${this.credentials.organization}.crowdin.com/u/users#${userid}`;
         }
         return `https://crowdin.com/profile/${username}`;
     }
@@ -66358,6 +66358,9 @@ class Writer {
                 }
                 if (!this.credentials.organization) {
                     userData = `<a href="https://crowdin.com/profile/${result[i][j].username}">${userData}</a>`;
+                }
+                else {
+                    userData = `<a href="https://${this.credentials.organization}.crowdin.com/u/users#${result[i][j].id}">${userData}</a>`;
                 }
                 const languages = this.formatLanguages(result[i][j]);
                 html += `<td align="center" valign="top">

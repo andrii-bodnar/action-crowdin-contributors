@@ -69,6 +69,8 @@ export class Writer {
 
         if (!this.credentials.organization) {
           userData = `<a href="https://crowdin.com/profile/${result[i][j].username}">${userData}</a>`;
+        } else {
+          userData = `<a href="https://${this.credentials.organization}.crowdin.com/u/users#${result[i][j].id}">${userData}</a>`;
         }
 
         const languages = this.formatLanguages(result[i][j]);
