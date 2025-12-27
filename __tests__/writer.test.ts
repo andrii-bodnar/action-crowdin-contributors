@@ -115,6 +115,7 @@ MIT`;
     it('should render the report', () => {
       const report = [
         {
+          id: 1,
           picture: 'picture1',
           name: 'Display Name 1',
           username: 'username1',
@@ -123,6 +124,7 @@ MIT`;
           languages: [],
         },
         {
+          id: 2,
           picture: 'picture2',
           name: 'Display Name 2',
           username: 'username2',
@@ -136,20 +138,20 @@ MIT`;
   <tbody>
     <tr>
       <td align="center" valign="top">
-        <img alt="logo" style="width: 100px" src="picture1" />
-        <br />
-        <sub><b>Display Name 1</b></sub>
-        <br />
-        <sub><b>(username1)</b></sub>
+        <a href="https://organization.crowdin.com/u/users#1"><img alt="logo" style="width: 100px" src="picture1" />
+          <br />
+          <sub><b>Display Name 1</b></sub>
+          <br />
+          <sub><b>(username1)</b></sub></a>
         <br />
         <sub><b>15 words</b></sub>
       </td>
       <td align="center" valign="top">
-        <img alt="logo" style="width: 100px" src="picture2" />
-        <br />
-        <sub><b>Display Name 2</b></sub>
-        <br />
-        <sub><b>(username2)</b></sub>
+        <a href="https://organization.crowdin.com/u/users#2"><img alt="logo" style="width: 100px" src="picture2" />
+          <br />
+          <sub><b>Display Name 2</b></sub>
+          <br />
+          <sub><b>(username2)</b></sub></a>
         <br />
         <sub><b>35 words</b></sub>
       </td>
@@ -163,6 +165,7 @@ MIT`;
     it('should render the report with languages for crowdin.com', () => {
       const report = [
         {
+          id: 1,
           picture: 'https://i2.wp.com/crowdin.com/images/user-picture.png?ssl=1',
           name: 'Display Name 1',
           username: 'username1',
@@ -174,6 +177,7 @@ MIT`;
           ],
         },
         {
+          id: 2,
           picture: 'https://i2.wp.com/crowdin.com/images/user-picture.png?ssl=1',
           name: 'Display Name 2',
           username: 'username2',
