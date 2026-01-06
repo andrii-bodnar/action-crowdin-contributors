@@ -25693,7 +25693,11 @@ function requireIoUtil () {
 	(function (exports$1) {
 		var __createBinding = (ioUtil && ioUtil.__createBinding) || (Object.create ? (function(o, m, k, k2) {
 		    if (k2 === undefined) k2 = k;
-		    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+		    var desc = Object.getOwnPropertyDescriptor(m, k);
+		    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+		      desc = { enumerable: true, get: function() { return m[k]; } };
+		    }
+		    Object.defineProperty(o, k2, desc);
 		}) : (function(o, m, k, k2) {
 		    if (k2 === undefined) k2 = k;
 		    o[k2] = m[k];
@@ -25703,13 +25707,23 @@ function requireIoUtil () {
 		}) : function(o, v) {
 		    o["default"] = v;
 		});
-		var __importStar = (ioUtil && ioUtil.__importStar) || function (mod) {
-		    if (mod && mod.__esModule) return mod;
-		    var result = {};
-		    if (mod != null) for (var k in mod) if (k !== "default" && Object.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-		    __setModuleDefault(result, mod);
-		    return result;
-		};
+		var __importStar = (ioUtil && ioUtil.__importStar) || (function () {
+		    var ownKeys = function(o) {
+		        ownKeys = Object.getOwnPropertyNames || function (o) {
+		            var ar = [];
+		            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+		            return ar;
+		        };
+		        return ownKeys(o);
+		    };
+		    return function (mod) {
+		        if (mod && mod.__esModule) return mod;
+		        var result = {};
+		        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+		        __setModuleDefault(result, mod);
+		        return result;
+		    };
+		})();
 		var __awaiter = (ioUtil && ioUtil.__awaiter) || function (thisArg, _arguments, P, generator) {
 		    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
 		    return new (P || (P = Promise))(function (resolve, reject) {
@@ -25721,21 +25735,49 @@ function requireIoUtil () {
 		};
 		var _a;
 		Object.defineProperty(exports$1, "__esModule", { value: true });
-		exports$1.getCmdPath = exports$1.tryGetExecutablePath = exports$1.isRooted = exports$1.isDirectory = exports$1.exists = exports$1.READONLY = exports$1.UV_FS_O_EXLOCK = exports$1.IS_WINDOWS = exports$1.unlink = exports$1.symlink = exports$1.stat = exports$1.rmdir = exports$1.rm = exports$1.rename = exports$1.readlink = exports$1.readdir = exports$1.open = exports$1.mkdir = exports$1.lstat = exports$1.copyFile = exports$1.chmod = void 0;
+		exports$1.READONLY = exports$1.UV_FS_O_EXLOCK = exports$1.IS_WINDOWS = exports$1.unlink = exports$1.symlink = exports$1.stat = exports$1.rmdir = exports$1.rm = exports$1.rename = exports$1.readdir = exports$1.open = exports$1.mkdir = exports$1.lstat = exports$1.copyFile = exports$1.chmod = void 0;
+		exports$1.readlink = readlink;
+		exports$1.exists = exists;
+		exports$1.isDirectory = isDirectory;
+		exports$1.isRooted = isRooted;
+		exports$1.tryGetExecutablePath = tryGetExecutablePath;
+		exports$1.getCmdPath = getCmdPath;
 		const fs = __importStar(fs__default);
 		const path = __importStar(require$$1$3);
 		_a = fs.promises
 		// export const {open} = 'fs'
-		, exports$1.chmod = _a.chmod, exports$1.copyFile = _a.copyFile, exports$1.lstat = _a.lstat, exports$1.mkdir = _a.mkdir, exports$1.open = _a.open, exports$1.readdir = _a.readdir, exports$1.readlink = _a.readlink, exports$1.rename = _a.rename, exports$1.rm = _a.rm, exports$1.rmdir = _a.rmdir, exports$1.stat = _a.stat, exports$1.symlink = _a.symlink, exports$1.unlink = _a.unlink;
+		, exports$1.chmod = _a.chmod, exports$1.copyFile = _a.copyFile, exports$1.lstat = _a.lstat, exports$1.mkdir = _a.mkdir, exports$1.open = _a.open, exports$1.readdir = _a.readdir, exports$1.rename = _a.rename, exports$1.rm = _a.rm, exports$1.rmdir = _a.rmdir, exports$1.stat = _a.stat, exports$1.symlink = _a.symlink, exports$1.unlink = _a.unlink;
 		// export const {open} = 'fs'
 		exports$1.IS_WINDOWS = process.platform === 'win32';
+		/**
+		 * Custom implementation of readlink to ensure Windows junctions
+		 * maintain trailing backslash for backward compatibility with Node.js < 24
+		 *
+		 * In Node.js 20, Windows junctions (directory symlinks) always returned paths
+		 * with trailing backslashes. Node.js 24 removed this behavior, which breaks
+		 * code that relied on this format for path operations.
+		 *
+		 * This implementation restores the Node 20 behavior by adding a trailing
+		 * backslash to all junction results on Windows.
+		 */
+		function readlink(fsPath) {
+		    return __awaiter(this, void 0, void 0, function* () {
+		        const result = yield fs.promises.readlink(fsPath);
+		        // On Windows, restore Node 20 behavior: add trailing backslash to all results
+		        // since junctions on Windows are always directory links
+		        if (exports$1.IS_WINDOWS && !result.endsWith('\\')) {
+		            return `${result}\\`;
+		        }
+		        return result;
+		    });
+		}
 		// See https://github.com/nodejs/node/blob/d0153aee367422d0858105abec186da4dff0a0c5/deps/uv/include/uv/win.h#L691
 		exports$1.UV_FS_O_EXLOCK = 0x10000000;
 		exports$1.READONLY = fs.constants.O_RDONLY;
 		function exists(fsPath) {
 		    return __awaiter(this, void 0, void 0, function* () {
 		        try {
-		            yield exports$1.stat(fsPath);
+		            yield (0, exports$1.stat)(fsPath);
 		        }
 		        catch (err) {
 		            if (err.code === 'ENOENT') {
@@ -25746,14 +25788,12 @@ function requireIoUtil () {
 		        return true;
 		    });
 		}
-		exports$1.exists = exists;
-		function isDirectory(fsPath, useStat = false) {
-		    return __awaiter(this, void 0, void 0, function* () {
-		        const stats = useStat ? yield exports$1.stat(fsPath) : yield exports$1.lstat(fsPath);
+		function isDirectory(fsPath_1) {
+		    return __awaiter(this, arguments, void 0, function* (fsPath, useStat = false) {
+		        const stats = useStat ? yield (0, exports$1.stat)(fsPath) : yield (0, exports$1.lstat)(fsPath);
 		        return stats.isDirectory();
 		    });
 		}
-		exports$1.isDirectory = isDirectory;
 		/**
 		 * On OSX/Linux, true if path starts with '/'. On Windows, true for paths like:
 		 * \, \hello, \\hello\share, C:, and C:\hello (and corresponding alternate separator cases).
@@ -25769,7 +25809,6 @@ function requireIoUtil () {
 		    }
 		    return p.startsWith('/');
 		}
-		exports$1.isRooted = isRooted;
 		/**
 		 * Best effort attempt to determine whether a file exists and is executable.
 		 * @param filePath    file path to check
@@ -25781,7 +25820,7 @@ function requireIoUtil () {
 		        let stats = undefined;
 		        try {
 		            // test file exists
-		            stats = yield exports$1.stat(filePath);
+		            stats = yield (0, exports$1.stat)(filePath);
 		        }
 		        catch (err) {
 		            if (err.code !== 'ENOENT') {
@@ -25809,7 +25848,7 @@ function requireIoUtil () {
 		            filePath = originalFilePath + extension;
 		            stats = undefined;
 		            try {
-		                stats = yield exports$1.stat(filePath);
+		                stats = yield (0, exports$1.stat)(filePath);
 		            }
 		            catch (err) {
 		                if (err.code !== 'ENOENT') {
@@ -25823,7 +25862,7 @@ function requireIoUtil () {
 		                    try {
 		                        const directory = path.dirname(filePath);
 		                        const upperName = path.basename(filePath).toUpperCase();
-		                        for (const actualName of yield exports$1.readdir(directory)) {
+		                        for (const actualName of yield (0, exports$1.readdir)(directory)) {
 		                            if (upperName === actualName.toUpperCase()) {
 		                                filePath = path.join(directory, actualName);
 		                                break;
@@ -25846,7 +25885,6 @@ function requireIoUtil () {
 		        return '';
 		    });
 		}
-		exports$1.tryGetExecutablePath = tryGetExecutablePath;
 		function normalizeSeparators(p) {
 		    p = p || '';
 		    if (exports$1.IS_WINDOWS) {
@@ -25863,15 +25901,18 @@ function requireIoUtil () {
 		//   256 128 64 32 16 8 4 2 1
 		function isUnixExecutable(stats) {
 		    return ((stats.mode & 1) > 0 ||
-		        ((stats.mode & 8) > 0 && stats.gid === process.getgid()) ||
-		        ((stats.mode & 64) > 0 && stats.uid === process.getuid()));
+		        ((stats.mode & 8) > 0 &&
+		            process.getgid !== undefined &&
+		            stats.gid === process.getgid()) ||
+		        ((stats.mode & 64) > 0 &&
+		            process.getuid !== undefined &&
+		            stats.uid === process.getuid()));
 		}
 		// Get the path of cmd.exe in windows
 		function getCmdPath() {
 		    var _a;
 		    return (_a = process.env['COMSPEC']) !== null && _a !== void 0 ? _a : `cmd.exe`;
 		}
-		exports$1.getCmdPath = getCmdPath;
 		
 	} (ioUtil));
 	return ioUtil;
@@ -25884,7 +25925,11 @@ function requireIo () {
 	hasRequiredIo = 1;
 	var __createBinding = (io && io.__createBinding) || (Object.create ? (function(o, m, k, k2) {
 	    if (k2 === undefined) k2 = k;
-	    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+	    var desc = Object.getOwnPropertyDescriptor(m, k);
+	    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+	      desc = { enumerable: true, get: function() { return m[k]; } };
+	    }
+	    Object.defineProperty(o, k2, desc);
 	}) : (function(o, m, k, k2) {
 	    if (k2 === undefined) k2 = k;
 	    o[k2] = m[k];
@@ -25894,13 +25939,23 @@ function requireIo () {
 	}) : function(o, v) {
 	    o["default"] = v;
 	});
-	var __importStar = (io && io.__importStar) || function (mod) {
-	    if (mod && mod.__esModule) return mod;
-	    var result = {};
-	    if (mod != null) for (var k in mod) if (k !== "default" && Object.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-	    __setModuleDefault(result, mod);
-	    return result;
-	};
+	var __importStar = (io && io.__importStar) || (function () {
+	    var ownKeys = function(o) {
+	        ownKeys = Object.getOwnPropertyNames || function (o) {
+	            var ar = [];
+	            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+	            return ar;
+	        };
+	        return ownKeys(o);
+	    };
+	    return function (mod) {
+	        if (mod && mod.__esModule) return mod;
+	        var result = {};
+	        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+	        __setModuleDefault(result, mod);
+	        return result;
+	    };
+	})();
 	var __awaiter = (io && io.__awaiter) || function (thisArg, _arguments, P, generator) {
 	    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
 	    return new (P || (P = Promise))(function (resolve, reject) {
@@ -25911,7 +25966,12 @@ function requireIo () {
 	    });
 	};
 	Object.defineProperty(io, "__esModule", { value: true });
-	io.findInPath = io.which = io.mkdirP = io.rmRF = io.mv = io.cp = void 0;
+	io.cp = cp;
+	io.mv = mv;
+	io.rmRF = rmRF;
+	io.mkdirP = mkdirP;
+	io.which = which;
+	io.findInPath = findInPath;
 	const assert_1 = require$$0$4;
 	const path = __importStar(require$$1$3);
 	const ioUtil = __importStar(requireIoUtil());
@@ -25923,8 +25983,8 @@ function requireIo () {
 	 * @param     dest      destination path
 	 * @param     options   optional. See CopyOptions.
 	 */
-	function cp(source, dest, options = {}) {
-	    return __awaiter(this, void 0, void 0, function* () {
+	function cp(source_1, dest_1) {
+	    return __awaiter(this, arguments, void 0, function* (source, dest, options = {}) {
 	        const { force, recursive, copySourceDirectory } = readCopyOptions(options);
 	        const destStat = (yield ioUtil.exists(dest)) ? yield ioUtil.stat(dest) : null;
 	        // Dest is an existing file, but not forcing
@@ -25956,7 +26016,6 @@ function requireIo () {
 	        }
 	    });
 	}
-	io.cp = cp;
 	/**
 	 * Moves a path.
 	 *
@@ -25964,8 +26023,8 @@ function requireIo () {
 	 * @param     dest      destination path
 	 * @param     options   optional. See MoveOptions.
 	 */
-	function mv(source, dest, options = {}) {
-	    return __awaiter(this, void 0, void 0, function* () {
+	function mv(source_1, dest_1) {
+	    return __awaiter(this, arguments, void 0, function* (source, dest, options = {}) {
 	        if (yield ioUtil.exists(dest)) {
 	            let destExists = true;
 	            if (yield ioUtil.isDirectory(dest)) {
@@ -25986,7 +26045,6 @@ function requireIo () {
 	        yield ioUtil.rename(source, dest);
 	    });
 	}
-	io.mv = mv;
 	/**
 	 * Remove a path recursively with force
 	 *
@@ -26015,7 +26073,6 @@ function requireIo () {
 	        }
 	    });
 	}
-	io.rmRF = rmRF;
 	/**
 	 * Make a directory.  Creates the full path with folders in between
 	 * Will throw if it fails
@@ -26025,11 +26082,10 @@ function requireIo () {
 	 */
 	function mkdirP(fsPath) {
 	    return __awaiter(this, void 0, void 0, function* () {
-	        assert_1.ok(fsPath, 'a path argument must be provided');
+	        (0, assert_1.ok)(fsPath, 'a path argument must be provided');
 	        yield ioUtil.mkdir(fsPath, { recursive: true });
 	    });
 	}
-	io.mkdirP = mkdirP;
 	/**
 	 * Returns path of a tool had the tool actually been invoked.  Resolves via paths.
 	 * If you check and the tool does not exist, it will throw.
@@ -26063,7 +26119,6 @@ function requireIo () {
 	        return '';
 	    });
 	}
-	io.which = which;
 	/**
 	 * Returns a list of all occurrences of the given tool on the system path.
 	 *
@@ -26120,7 +26175,6 @@ function requireIo () {
 	        return matches;
 	    });
 	}
-	io.findInPath = findInPath;
 	function readCopyOptions(options) {
 	    const force = options.force == null ? true : options.force;
 	    const recursive = Boolean(options.recursive);
@@ -26190,7 +26244,11 @@ function requireToolrunner () {
 	hasRequiredToolrunner = 1;
 	var __createBinding = (toolrunner && toolrunner.__createBinding) || (Object.create ? (function(o, m, k, k2) {
 	    if (k2 === undefined) k2 = k;
-	    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+	    var desc = Object.getOwnPropertyDescriptor(m, k);
+	    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+	      desc = { enumerable: true, get: function() { return m[k]; } };
+	    }
+	    Object.defineProperty(o, k2, desc);
 	}) : (function(o, m, k, k2) {
 	    if (k2 === undefined) k2 = k;
 	    o[k2] = m[k];
@@ -26200,13 +26258,23 @@ function requireToolrunner () {
 	}) : function(o, v) {
 	    o["default"] = v;
 	});
-	var __importStar = (toolrunner && toolrunner.__importStar) || function (mod) {
-	    if (mod && mod.__esModule) return mod;
-	    var result = {};
-	    if (mod != null) for (var k in mod) if (k !== "default" && Object.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-	    __setModuleDefault(result, mod);
-	    return result;
-	};
+	var __importStar = (toolrunner && toolrunner.__importStar) || (function () {
+	    var ownKeys = function(o) {
+	        ownKeys = Object.getOwnPropertyNames || function (o) {
+	            var ar = [];
+	            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+	            return ar;
+	        };
+	        return ownKeys(o);
+	    };
+	    return function (mod) {
+	        if (mod && mod.__esModule) return mod;
+	        var result = {};
+	        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+	        __setModuleDefault(result, mod);
+	        return result;
+	    };
+	})();
 	var __awaiter = (toolrunner && toolrunner.__awaiter) || function (thisArg, _arguments, P, generator) {
 	    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
 	    return new (P || (P = Promise))(function (resolve, reject) {
@@ -26217,7 +26285,8 @@ function requireToolrunner () {
 	    });
 	};
 	Object.defineProperty(toolrunner, "__esModule", { value: true });
-	toolrunner.argStringToArray = toolrunner.ToolRunner = void 0;
+	toolrunner.ToolRunner = void 0;
+	toolrunner.argStringToArray = argStringToArray;
 	const os = __importStar(require$$0$2);
 	const events = __importStar(require$$4$1);
 	const child = __importStar(require$$2$2);
@@ -26449,10 +26518,7 @@ function requireToolrunner () {
 	            }
 	        }
 	        reverse += '"';
-	        return reverse
-	            .split('')
-	            .reverse()
-	            .join('');
+	        return reverse.split('').reverse().join('');
 	    }
 	    _uvQuoteCmdArg(arg) {
 	        // Tool runner wraps child_process.spawn() and needs to apply the same quoting as
@@ -26528,10 +26594,7 @@ function requireToolrunner () {
 	            }
 	        }
 	        reverse += '"';
-	        return reverse
-	            .split('')
-	            .reverse()
-	            .join('');
+	        return reverse.split('').reverse().join('');
 	    }
 	    _cloneExecOptions(options) {
 	        options = options || {};
@@ -26735,7 +26798,6 @@ function requireToolrunner () {
 	    }
 	    return args;
 	}
-	toolrunner.argStringToArray = argStringToArray;
 	class ExecState extends events.EventEmitter {
 	    constructor(options, toolPath) {
 	        super();
@@ -26764,7 +26826,7 @@ function requireToolrunner () {
 	            this._setResult();
 	        }
 	        else if (this.processExited) {
-	            this.timeout = timers_1.setTimeout(ExecState.HandleTimeout, this.delay, this);
+	            this.timeout = (0, timers_1.setTimeout)(ExecState.HandleTimeout, this.delay, this);
 	        }
 	    }
 	    _debug(message) {
@@ -26797,8 +26859,7 @@ function requireToolrunner () {
 	            return;
 	        }
 	        if (!state.processClosed && state.processExited) {
-	            const message = `The STDIO streams did not close within ${state.delay /
-	                1000} seconds of the exit event from process '${state.toolPath}'. This may indicate a child process inherited the STDIO streams and has not yet exited.`;
+	            const message = `The STDIO streams did not close within ${state.delay / 1000} seconds of the exit event from process '${state.toolPath}'. This may indicate a child process inherited the STDIO streams and has not yet exited.`;
 	            state._debug(message);
 	        }
 	        state._setResult();
@@ -26815,7 +26876,11 @@ function requireExec () {
 	hasRequiredExec = 1;
 	var __createBinding = (exec && exec.__createBinding) || (Object.create ? (function(o, m, k, k2) {
 	    if (k2 === undefined) k2 = k;
-	    Object.defineProperty(o, k2, { enumerable: true, get: function() { return m[k]; } });
+	    var desc = Object.getOwnPropertyDescriptor(m, k);
+	    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+	      desc = { enumerable: true, get: function() { return m[k]; } };
+	    }
+	    Object.defineProperty(o, k2, desc);
 	}) : (function(o, m, k, k2) {
 	    if (k2 === undefined) k2 = k;
 	    o[k2] = m[k];
@@ -26825,13 +26890,23 @@ function requireExec () {
 	}) : function(o, v) {
 	    o["default"] = v;
 	});
-	var __importStar = (exec && exec.__importStar) || function (mod) {
-	    if (mod && mod.__esModule) return mod;
-	    var result = {};
-	    if (mod != null) for (var k in mod) if (k !== "default" && Object.hasOwnProperty.call(mod, k)) __createBinding(result, mod, k);
-	    __setModuleDefault(result, mod);
-	    return result;
-	};
+	var __importStar = (exec && exec.__importStar) || (function () {
+	    var ownKeys = function(o) {
+	        ownKeys = Object.getOwnPropertyNames || function (o) {
+	            var ar = [];
+	            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+	            return ar;
+	        };
+	        return ownKeys(o);
+	    };
+	    return function (mod) {
+	        if (mod && mod.__esModule) return mod;
+	        var result = {};
+	        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+	        __setModuleDefault(result, mod);
+	        return result;
+	    };
+	})();
 	var __awaiter = (exec && exec.__awaiter) || function (thisArg, _arguments, P, generator) {
 	    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
 	    return new (P || (P = Promise))(function (resolve, reject) {
@@ -26842,7 +26917,8 @@ function requireExec () {
 	    });
 	};
 	Object.defineProperty(exec, "__esModule", { value: true });
-	exec.getExecOutput = exec.exec = void 0;
+	exec.exec = exec$1;
+	exec.getExecOutput = getExecOutput;
 	const string_decoder_1 = require$$6;
 	const tr = __importStar(requireToolrunner());
 	/**
@@ -26868,7 +26944,6 @@ function requireExec () {
 	        return runner.exec();
 	    });
 	}
-	exec.exec = exec$1;
 	/**
 	 * Exec a command and get the output.
 	 * Output will be streamed to the live console.
@@ -26880,8 +26955,8 @@ function requireExec () {
 	 * @returns   Promise<ExecOutput>   exit code, stdout, and stderr
 	 */
 	function getExecOutput(commandLine, args, options) {
-	    var _a, _b;
 	    return __awaiter(this, void 0, void 0, function* () {
+	        var _a, _b;
 	        let stdout = '';
 	        let stderr = '';
 	        //Using string decoder covers the case where a mult-byte character is split
@@ -26913,7 +26988,6 @@ function requireExec () {
 	        };
 	    });
 	}
-	exec.getExecOutput = getExecOutput;
 	
 	return exec;
 }
@@ -48870,15 +48944,16 @@ function requireCore () {
 		        this.fetchAllFlag = false;
 		        this.token = credentials.token;
 		        this.organization = credentials.organization;
+		        this.apiDomain = credentials.apiDomain || CrowdinApi.CROWDIN_API_DOMAIN;
 		        if (credentials.baseUrl) {
 		            this.url = credentials.baseUrl;
 		        }
 		        else {
 		            if (this.organization) {
-		                this.url = `https://${this.organization}.${CrowdinApi.CROWDIN_URL_SUFFIX}`;
+		                this.url = `https://${this.organization}.${this.apiDomain}/api/v2`;
 		            }
 		            else {
-		                this.url = `https://${CrowdinApi.CROWDIN_URL_SUFFIX}`;
+		                this.url = `https://${this.apiDomain}/api/v2`;
 		            }
 		        }
 		        let retryConfig;
@@ -48906,10 +48981,10 @@ function requireCore () {
 		        }
 		        else {
 		            if (this.organization) {
-		                url = `https://${this.organization}.api.crowdin.com/api/graphql`;
+		                url = `https://${this.organization}.${this.apiDomain}/api/graphql`;
 		            }
 		            else {
-		                url = 'https://api.crowdin.com/api/graphql';
+		                url = `https://${this.apiDomain}/api/graphql`;
 		            }
 		        }
 		        return this.post(url, req, this.defaultConfig());
@@ -49039,7 +49114,7 @@ function requireCore () {
 		    }
 		}
 		exports$1.CrowdinApi = CrowdinApi;
-		CrowdinApi.CROWDIN_URL_SUFFIX = 'api.crowdin.com/api/v2';
+		CrowdinApi.CROWDIN_API_DOMAIN = 'api.crowdin.com';
 		CrowdinApi.AXIOS_INSTANCE = new axiosProvider_1.AxiosProvider().axios;
 		CrowdinApi.FETCH_INSTANCE = new fetchClient_1.FetchClient();
 		let deprecationEmittedForOptionalParams = false;
