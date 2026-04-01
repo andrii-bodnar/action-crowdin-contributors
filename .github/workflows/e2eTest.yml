@@ -41,7 +41,7 @@ jobs:
           echo "${{ steps.contributors.outputs.svg_path }}"
 
       - name: Upload SVG artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: contributors-svg
           path: ${{ steps.contributors.outputs.svg_path }}
