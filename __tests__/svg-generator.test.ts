@@ -1,22 +1,24 @@
-import { SvgGenerator } from '../src/svg-generator';
 import { expect, describe, beforeEach, it, jest, afterEach } from '@jest/globals';
-import { ContributorsTableConfig, CredentialsConfig } from '../src/config';
-import { User } from '../src/contributors';
+import type { ContributorsTableConfig, CredentialsConfig } from '../src/config';
+import type { User } from '../src/contributors';
+import type { SvgGenerator as SvgGeneratorType } from '../src/svg-generator';
 
-jest.mock('@actions/core', () => ({
+jest.unstable_mockModule('@actions/core', () => ({
   info: jest.fn(),
   warning: jest.fn(),
 }));
 
 const mockGet = jest.fn<() => Promise<{ data: Buffer; headers: { 'content-type': string } }>>();
-jest.mock('axios', () => ({
+jest.unstable_mockModule('axios', () => ({
   default: {
     get: mockGet,
   },
 }));
 
+const { SvgGenerator } = await import('../src/svg-generator');
+
 describe('SvgGenerator', () => {
-  let svgGenerator: SvgGenerator;
+  let svgGenerator: SvgGeneratorType;
   let credentials: CredentialsConfig;
   let config: ContributorsTableConfig;
 
