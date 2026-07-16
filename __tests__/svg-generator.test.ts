@@ -223,6 +223,124 @@ describe('SvgGenerator', () => {
       expect(result).toContain('height="0"');
     });
 
+    it('should render contributed languages when includeLanguages is enabled', async () => {
+      const users: User[] = [
+        {
+          id: 1,
+          username: 'user1',
+          name: 'User One',
+          translated: '100',
+          approved: '50',
+          picture: 'https://example.com/avatar1.png',
+          languages: [
+            { id: 'uk', name: 'Ukrainian' },
+            { id: 'fr', name: 'French' },
+          ],
+        },
+      ];
+
+      const result = await svgGenerator.generateSvg(users);
+
+      expect(result).toContain('class="languages"');
+      expect(result).toContain('uk, fr');
+      expect(result).toContain('<title>Ukrainian, French</title>');
+    });
+
+    it('should not render languages when includeLanguages is disabled', async () => {
+      config.includeLanguages = false;
+      svgGenerator = new SvgGenerator(credentials, config);
+
+      const users: User[] = [
+        {
+          id: 1,
+          username: 'user1',
+          name: 'User One',
+          translated: '100',
+          approved: '50',
+          picture: 'https://example.com/avatar1.png',
+          languages: [
+            { id: 'uk', name: 'Ukrainian' },
+            { id: 'fr', name: 'French' },
+          ],
+        },
+      ];
+
+      const result = await svgGenerator.generateSvg(users);
+
+      expect(result).not.toContain('class="languages"');
+      expect(result).not.toContain('uk, fr');
+      // Base cell height: imageSize (100) + text height (70) + padding (40)
+      expect(result).toContain('height="210"');
+    });
+
+    it('should not render the languages line for users without languages', async () => {
+      const users: User[] = [
+        {
+          id: 1,
+          username: 'user1',
+          name: 'User One',
+          translated: '100',
+          approved: '50',
+          picture: 'https://example.com/avatar1.png',
+          languages: [],
+        },
+      ];
+
+      const result = await svgGenerator.generateSvg(users);
+
+      expect(result).not.toContain('class="languages"');
+      expect(result).toContain('height="210"');
+    });
+
+    it('should increase cell height when languages are rendered', async () => {
+      const users: User[] = [
+        {
+          id: 1,
+          username: 'user1',
+          name: 'User One',
+          translated: '100',
+          approved: '50',
+          picture: 'https://example.com/avatar1.png',
+          languages: [{ id: 'uk', name: 'Ukrainian' }],
+        },
+      ];
+
+      const result = await svgGenerator.generateSvg(users);
+
+      // Base cell height (210) + languages line (20)
+      expect(result).toContain('height="230"');
+    });
+
+    it('should truncate long language lists with a +N suffix', async () => {
+      const users: User[] = [
+        {
+          id: 1,
+          username: 'user1',
+          name: 'User One',
+          translated: '100',
+          approved: '50',
+          picture: 'https://example.com/avatar1.png',
+          languages: [
+            { id: 'aa', name: 'Lang A' },
+            { id: 'bb', name: 'Lang B' },
+            { id: 'cc', name: 'Lang C' },
+            { id: 'dd', name: 'Lang D' },
+            { id: 'ee', name: 'Lang E' },
+            { id: 'ff', name: 'Lang F' },
+            { id: 'gg', name: 'Lang G' },
+            { id: 'hh', name: 'Lang H' },
+          ],
+        },
+      ];
+
+      const result = await svgGenerator.generateSvg(users);
+
+      expect(result).toContain('aa, bb, cc, dd, ee +3');
+      expect(result).not.toContain('ee, ff');
+      // The tooltip still lists all languages
+      expect(result).toContain('<title>Lang A, Lang B, Lang C, Lang D, Lang E, Lang F, Lang G, Lang H</title>');
+    });
+
     it('should use placeholder when avatar fetch fails', async () => {
       mockGet.mockRejectedValueOnce(new Error('Network error'));
 

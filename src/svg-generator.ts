@@ -1,7 +1,7 @@
 import axios from 'axios';
 import * as core from '@actions/core';
 import { ContributorsTableConfig, CredentialsConfig } from './config.js';
-import { User } from './contributors.js';
+import { Language, User } from './contributors.js';
 import { formatUserName } from './utils.js';
 
 interface UserWithBase64 extends User {
@@ -14,6 +14,9 @@ export class SvgGenerator {
 
   private readonly CELL_PADDING = 20;
   private readonly TEXT_HEIGHT = 70;
+  private readonly LANGUAGES_LINE_HEIGHT = 20;
+  // Approximate character width of the 12px languages font, used to fit the line into the cell
+  private readonly LANGUAGES_CHAR_WIDTH = 7;
   private readonly FONT_FAMILY = '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif';
 
   constructor(credentials: CredentialsConfig, config: ContributorsTableConfig) {
@@ -27,8 +30,11 @@ export class SvgGenerator {
 
     const imageSize = this.config.imageSize;
     const perLine = this.config.contributorsPerLine;
+    const showLanguages =
+      this.config.includeLanguages && users.some((user) => user.languages && user.languages.length > 0);
     const cellWidth = imageSize + this.CELL_PADDING * 2;
-    const cellHeight = imageSize + this.TEXT_HEIGHT + this.CELL_PADDING * 2;
+    const cellHeight =
+      imageSize + this.TEXT_HEIGHT + (showLanguages ? this.LANGUAGES_LINE_HEIGHT : 0) + this.CELL_PADDING * 2;
 
     const rows = Math.ceil(users.length / perLine);
     const cols = users.length === 0 ? 0 : perLine;
@@ -95,6 +101,7 @@ export class SvgGenerator {
     const textY = y + size + 30;
     const usernameY = textY + 20;
     const wordsY = usernameY + 20;
+    const languagesY = wordsY + this.LANGUAGES_LINE_HEIGHT;
     const words = +user.translated + +user.approved;
 
     const clipPathId = `clip-${user.id}`;
@@ -129,7 +136,7 @@ export class SvgGenerator {
         />
         <text x="${centerX}" y="${textY}" class="name">${escapedDisplayName}</text>
         <text x="${centerX}" y="${usernameY}" class="username">${escapedUsername}</text>
-        <text x="${centerX}" y="${wordsY}" class="words">${words.toLocaleString()} words</text>
+        <text x="${centerX}" y="${wordsY}" class="words">${words.toLocaleString()} words</text>${this.renderLanguages(user, centerX, languagesY, size)}
       </a>`;
     } else {
       content += `
@@ -149,11 +156,11 @@ export class SvgGenerator {
       if (escapedUsername) {
         content += `
       <text x="${centerX}" y="${usernameY}" class="username">${escapedUsername}</text>
-      <text x="${centerX}" y="${wordsY}" class="words">${words.toLocaleString()} words</text>`;
+      <text x="${centerX}" y="${wordsY}" class="words">${words.toLocaleString()} words</text>${this.renderLanguages(user, centerX, languagesY, size)}`;
       } else {
         // If no username, show words directly below name
         content += `
-      <text x="${centerX}" y="${usernameY}" class="words">${words.toLocaleString()} words</text>`;
+      <text x="${centerX}" y="${usernameY}" class="words">${words.toLocaleString()} words</text>${this.renderLanguages(user, centerX, wordsY, size)}`;
       }
     }
 
@@ -161,6 +168,33 @@ export class SvgGenerator {
     </g>`;
 
     return content;
+  }
+
+  private renderLanguages(user: User, centerX: number, y: number, size: number): string {
+    if (!this.config.includeLanguages || !user.languages || user.languages.length === 0) {
+      return '';
+    }
+
+    const cellWidth = size + this.CELL_PADDING * 2;
+    const maxChars = Math.floor(cellWidth / this.LANGUAGES_CHAR_WIDTH);
+
+    const ids = user.languages.map((language: Language) => language.id);
+
+    // Fit as many language ids as possible into the cell, the rest is shown as "+N"
+    let shown = 1;
+    while (shown < ids.length && ids.slice(0, shown + 1).join(', ').length <= maxChars) {
+      shown++;
+    }
+
+    let display = ids.slice(0, shown).join(', ');
+    if (shown < ids.length) {
+      display += ` +${ids.length - shown}`;
+    }
+
+    const title = user.languages.map((language: Language) => language.name).join(', ');
+
+    return `
+      <text x="${centerX}" y="${y}" class="languages"><title>${this.escapeXml(title)}</title>${this.escapeXml(display)}</text>`;
   }
 
   private getProfileUrl(username: string): string | null {
@@ -208,6 +242,12 @@ export class SvgGenerator {
       font-size: 14px;
       font-family: ${this.FONT_FAMILY};
       font-weight: bold;
+      fill: #6B6B6C;
+      text-anchor: middle;
+    }
+    .languages {
+      font-size: 12px;
+      font-family: ${this.FONT_FAMILY};
       fill: #6B6B6C;
       text-anchor: middle;
     }

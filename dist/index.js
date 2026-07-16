@@ -65066,6 +65066,9 @@ class SvgGenerator {
     credentials;
     CELL_PADDING = 20;
     TEXT_HEIGHT = 70;
+    LANGUAGES_LINE_HEIGHT = 20;
+    // Approximate character width of the 12px languages font, used to fit the line into the cell
+    LANGUAGES_CHAR_WIDTH = 7;
     FONT_FAMILY = '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif';
     constructor(credentials, config) {
         this.credentials = credentials;
@@ -65076,8 +65079,9 @@ class SvgGenerator {
         const usersWithImages = await this.fetchAvatars(users);
         const imageSize = this.config.imageSize;
         const perLine = this.config.contributorsPerLine;
+        const showLanguages = this.config.includeLanguages && users.some((user) => user.languages && user.languages.length > 0);
         const cellWidth = imageSize + this.CELL_PADDING * 2;
-        const cellHeight = imageSize + this.TEXT_HEIGHT + this.CELL_PADDING * 2;
+        const cellHeight = imageSize + this.TEXT_HEIGHT + (showLanguages ? this.LANGUAGES_LINE_HEIGHT : 0) + this.CELL_PADDING * 2;
         const rows = Math.ceil(users.length / perLine);
         const cols = users.length === 0 ? 0 : perLine;
         const width = cols * cellWidth;
@@ -65130,6 +65134,7 @@ class SvgGenerator {
         const textY = y + size + 30;
         const usernameY = textY + 20;
         const wordsY = usernameY + 20;
+        const languagesY = wordsY + this.LANGUAGES_LINE_HEIGHT;
         const words = +user.translated + +user.approved;
         const clipPathId = `clip-${user.id}`;
         const profileUrl = this.getProfileUrl(user.username);
@@ -65159,7 +65164,7 @@ class SvgGenerator {
         />
         <text x="${centerX}" y="${textY}" class="name">${escapedDisplayName}</text>
         <text x="${centerX}" y="${usernameY}" class="username">${escapedUsername}</text>
-        <text x="${centerX}" y="${wordsY}" class="words">${words.toLocaleString()} words</text>
+        <text x="${centerX}" y="${wordsY}" class="words">${words.toLocaleString()} words</text>${this.renderLanguages(user, centerX, languagesY, size)}
       </a>`;
         }
         else {
@@ -65179,17 +65184,37 @@ class SvgGenerator {
             if (escapedUsername) {
                 content += `
       <text x="${centerX}" y="${usernameY}" class="username">${escapedUsername}</text>
-      <text x="${centerX}" y="${wordsY}" class="words">${words.toLocaleString()} words</text>`;
+      <text x="${centerX}" y="${wordsY}" class="words">${words.toLocaleString()} words</text>${this.renderLanguages(user, centerX, languagesY, size)}`;
             }
             else {
                 // If no username, show words directly below name
                 content += `
-      <text x="${centerX}" y="${usernameY}" class="words">${words.toLocaleString()} words</text>`;
+      <text x="${centerX}" y="${usernameY}" class="words">${words.toLocaleString()} words</text>${this.renderLanguages(user, centerX, wordsY, size)}`;
             }
         }
         content += `
     </g>`;
         return content;
+    }
+    renderLanguages(user, centerX, y, size) {
+        if (!this.config.includeLanguages || !user.languages || user.languages.length === 0) {
+            return '';
+        }
+        const cellWidth = size + this.CELL_PADDING * 2;
+        const maxChars = Math.floor(cellWidth / this.LANGUAGES_CHAR_WIDTH);
+        const ids = user.languages.map((language) => language.id);
+        // Fit as many language ids as possible into the cell, the rest is shown as "+N"
+        let shown = 1;
+        while (shown < ids.length && ids.slice(0, shown + 1).join(', ').length <= maxChars) {
+            shown++;
+        }
+        let display = ids.slice(0, shown).join(', ');
+        if (shown < ids.length) {
+            display += ` +${ids.length - shown}`;
+        }
+        const title = user.languages.map((language) => language.name).join(', ');
+        return `
+      <text x="${centerX}" y="${y}" class="languages"><title>${this.escapeXml(title)}</title>${this.escapeXml(display)}</text>`;
     }
     getProfileUrl(username) {
         if (this.credentials.organization) {
@@ -65234,6 +65259,12 @@ class SvgGenerator {
       font-size: 14px;
       font-family: ${this.FONT_FAMILY};
       font-weight: bold;
+      fill: #6B6B6C;
+      text-anchor: middle;
+    }
+    .languages {
+      font-size: 12px;
+      font-family: ${this.FONT_FAMILY};
       fill: #6B6B6C;
       text-anchor: middle;
     }
