@@ -9,7 +9,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: ./
         id: contributors
         with:
@@ -41,7 +41,7 @@ jobs:
           echo "${{ steps.contributors.outputs.svg_path }}"
 
       - name: Upload SVG artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: contributors-svg
           path: ${{ steps.contributors.outputs.svg_path }}
