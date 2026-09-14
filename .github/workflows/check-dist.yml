@@ -21,11 +21,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Cache node modules
         id: cache-npm
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         env:
           cache-name: cache-node-modules
         with:
@@ -38,7 +38,7 @@ jobs:
             ${{ runner.os }}-
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: 24
 
@@ -60,7 +60,7 @@ jobs:
         id: diff
 
       # If index.js was different than expected, upload the expected version as an artifact
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         if: ${{ failure() && steps.diff.conclusion == 'failure' }}
         with:
           name: dist
