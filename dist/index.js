@@ -32,10 +32,10 @@ import require$$5$2 from 'node:async_hooks';
 import require$$1$4 from 'node:console';
 import require$$1$5 from 'node:dns';
 import require$$5$3 from 'string_decoder';
-import 'child_process';
+import require$$4 from 'child_process';
 import 'timers';
-import stream, { Readable } from 'stream';
 import require$$2$1 from 'url';
+import stream, { Readable } from 'stream';
 import require$$1$6 from 'tty';
 import http2 from 'http2';
 import zlib from 'zlib';
@@ -2483,11 +2483,77 @@ function requireRequest$1 () {
 	    }
 	  }
 
-	  onUpgrade (statusCode, headers, socket) {
+	  /**
+	   * @param {number|null} statusCode
+	   * @param {Buffer[]|null} headers
+	   * @param {import('node:stream').Duplex} socket
+	   * @param {string} [statusText]
+	   */
+	  onUpgrade (statusCode, headers, socket, statusText = '') {
+	    this.onFinally();
+
 	    assert(!this.aborted);
 	    assert(!this.completed);
 
-	    return this[kHandler].onUpgrade(statusCode, headers, socket)
+	    if (statusCode !== null) {
+	      this.#publishUpgradeHeaders(statusCode, headers, statusText);
+	    }
+
+	    const result = this[kHandler].onUpgrade(statusCode, headers, socket);
+
+	    if (!this.aborted) {
+	      this.completed = true;
+	      if (statusCode !== null) {
+	        this.#publishUpgradeTrailers();
+	      }
+	    }
+
+	    return result
+	  }
+
+	  /**
+	   * @param {number} statusCode
+	   * @param {import('node:http2').IncomingHttpHeaders} headers
+	   * @param {(headers: import('node:http2').IncomingHttpHeaders) => Buffer[]} parseHeaders
+	   * @param {string} [statusText]
+	   */
+	  onUpgradeResponse (statusCode, headers, parseHeaders, statusText = '') {
+	    assert(!this.aborted);
+	    assert(this.completed);
+
+	    if (channels.headers.hasSubscribers) {
+	      this.#publishUpgradeHeaders(statusCode, parseHeaders(headers), statusText);
+	    }
+	    this.#publishUpgradeTrailers();
+	  }
+
+	  /**
+	   * @param {Error} error
+	   */
+	  onUpgradeError (error) {
+	    assert(!this.aborted);
+	    assert(this.completed);
+
+	    if (channels.error.hasSubscribers) {
+	      channels.error.publish({ request: this, error });
+	    }
+	  }
+
+	  /**
+	   * @param {number} statusCode
+	   * @param {Buffer[]} headers
+	   * @param {string} statusText
+	   */
+	  #publishUpgradeHeaders (statusCode, headers, statusText) {
+	    if (channels.headers.hasSubscribers) {
+	      channels.headers.publish({ request: this, response: { statusCode, headers, statusText } });
+	    }
+	  }
+
+	  #publishUpgradeTrailers () {
+	    if (channels.trailers.hasSubscribers) {
+	      channels.trailers.publish({ request: this, trailers: [] });
+	    }
 	  }
 
 	  onComplete (trailers) {
@@ -2570,7 +2636,13 @@ function requireRequest$1 () {
 	      } else if (typeof val[i] === 'object') {
 	        throw new InvalidArgumentError(`invalid ${key} header`)
 	      } else {
-	        arr.push(`${val[i]}`);
+	        // Coerce primitives (and reject unsafe coercions such as functions
+	        // with a crafted toString/Symbol.toPrimitive).
+	        const str = `${val[i]}`;
+	        if (!isValidHeaderValue(str)) {
+	          throw new InvalidArgumentError(`invalid ${key} header`)
+	        }
+	        arr.push(str);
 	      }
 	    }
 	    val = arr;
@@ -2581,7 +2653,12 @@ function requireRequest$1 () {
 	  } else if (val === null) {
 	    val = '';
 	  } else {
+	    // Coerce primitives (and reject unsafe coercions such as functions
+	    // with a crafted toString/Symbol.toPrimitive).
 	    val = `${val}`;
+	    if (!isValidHeaderValue(val)) {
+	      throw new InvalidArgumentError(`invalid ${key} header`)
+	    }
 	  }
 
 	  if (headerName === 'host') {
@@ -8637,6 +8714,7 @@ function requireClientH1 () {
 	  RequestContentLengthMismatchError,
 	  ResponseContentLengthMismatchError,
 	  RequestAbortedError,
+	  InvalidArgumentError,
 	  HeadersTimeoutError,
 	  HeadersOverflowError,
 	  SocketError,
@@ -9058,7 +9136,7 @@ function requireClientH1 () {
 	  }
 
 	  onUpgrade (head) {
-	    const { upgrade, client, socket, headers, statusCode } = this;
+	    const { upgrade, client, socket, headers, statusCode, statusText } = this;
 
 	    assert(upgrade);
 	    assert(client[kSocket] === socket);
@@ -9093,9 +9171,10 @@ function requireClientH1 () {
 	    client.emit('disconnect', client[kUrl], [client], new InformationalError('upgrade'));
 
 	    try {
-	      request.onUpgrade(statusCode, headers, socket);
-	    } catch (err) {
-	      util.destroy(socket, err);
+	      request.onUpgrade(statusCode, headers, socket, statusText);
+	    } catch (error) {
+	      util.errorRequest(client, request, error);
+	      util.destroy(socket, error);
 	    }
 
 	    client[kResume]();
@@ -9502,7 +9581,7 @@ function requireClientH1 () {
 
 	function clearIdleSocketValidation (socket) {
 	  if (socket[kIdleSocketValidationTimeout]) {
-	    clearTimeout(socket[kIdleSocketValidationTimeout]);
+	    clearImmediate(socket[kIdleSocketValidationTimeout]);
 	    socket[kIdleSocketValidationTimeout] = null;
 	  }
 
@@ -9511,15 +9590,23 @@ function requireClientH1 () {
 
 	function scheduleIdleSocketValidation (client, socket) {
 	  socket[kIdleSocketValidation] = 1;
-	  socket[kIdleSocketValidationTimeout] = setTimeout(() => {
+	  // Yield to the check phase (after poll) so unsolicited bytes / FIN / RST
+	  // already pending on this idle keep-alive socket are processed before the
+	  // next request is written (GHSA-35p6-xmwp-9g52).
+	  //
+	  // setTimeout(0) pays Node's ~1ms timer floor on every sequential reuse
+	  // (#5493). setImmediate avoids that, but an *unref'd* Immediate lets poll
+	  // block for ~500ms when the event loop is otherwise idle (#5600 / #5606).
+	  // A ref'd Immediate both keeps the pending request alive and makes poll
+	  // return immediately — the hybrid those issues asked for.
+	  socket[kIdleSocketValidationTimeout] = setImmediate(() => {
 	    socket[kIdleSocketValidationTimeout] = null;
 	    socket[kIdleSocketValidation] = 2;
 
 	    if (client[kSocket] === socket && !socket.destroyed) {
 	      client[kResume]();
 	    }
-	  }, 0);
-	  socket[kIdleSocketValidationTimeout].unref?.();
+	  });
 	}
 
 	/**
@@ -9620,8 +9707,16 @@ function requireClientH1 () {
 	    }
 	    body = bodyStream.stream;
 	    contentLength = bodyStream.length;
-	  } else if (util.isBlobLike(body) && request.contentType == null && body.type) {
-	    headers.push('content-type', body.type);
+	  } else if (util.isBlobLike(body) && request.contentType == null) {
+	    const contentType = body.type;
+	    if (contentType) {
+	      const contentTypeValue = `${contentType}`;
+	      if (!util.isValidHeaderValue(contentTypeValue)) {
+	        util.errorRequest(client, request, new InvalidArgumentError('invalid content-type header'));
+	        return false
+	      }
+	      headers.push('content-type', contentTypeValue);
+	    }
 	  }
 
 	  if (body && typeof body.read === 'function') {
@@ -9660,12 +9755,22 @@ function requireClientH1 () {
 	  const socket = client[kSocket];
 	  clearIdleSocketValidation(socket);
 
-	  const abort = (err) => {
-	    if (request.aborted || request.completed) {
+	  /**
+	   * @param {Error} [error]
+	   */
+	  const abort = (error) => {
+	    if (request.aborted) {
 	      return
 	    }
 
-	    util.errorRequest(client, request, err || new RequestAbortedError());
+	    if (request.completed) {
+	      if (request.upgrade || request.method === 'CONNECT') {
+	        util.destroy(socket, new InformationalError('aborted'));
+	      }
+	      return
+	    }
+
+	    util.errorRequest(client, request, error || new RequestAbortedError());
 
 	    util.destroy(body);
 	    util.destroy(socket, new InformationalError('aborted'));
@@ -10123,6 +10228,7 @@ function requireClientH2 () {
 	hasRequiredClientH2 = 1;
 
 	const assert = require$$0$2;
+	const { errorMonitor } = require$$8;
 	const { pipeline } = require$$0$3;
 	const util = requireUtil$7();
 	const {
@@ -10197,6 +10303,15 @@ function requireClientH2 () {
 	  }
 
 	  return result
+	}
+
+	/**
+	 * @param {import('node:http2').IncomingHttpHeaders} headers
+	 * @returns {Buffer[]}
+	 */
+	function parseH2ResponseHeaders (headers) {
+	  const { [HTTP2_HEADER_STATUS]: _statusCode, ...realHeaders } = headers;
+	  return parseH2Headers(realHeaders)
 	}
 
 	async function connectH2 (client, socket) {
@@ -10419,22 +10534,32 @@ function requireClientH2 () {
 	  headers[HTTP2_HEADER_AUTHORITY] = host || `${hostname}${port ? `:${port}` : ''}`;
 	  headers[HTTP2_HEADER_METHOD] = method;
 
-	  const abort = (err) => {
-	    if (request.aborted || request.completed) {
+	  /**
+	   * @param {Error} [error]
+	   */
+	  const abort = (error) => {
+	    if (request.aborted) {
 	      return
 	    }
 
-	    err = err || new RequestAbortedError();
+	    if (request.completed) {
+	      if (method === 'CONNECT' && stream != null) {
+	        util.destroy(stream, error || new RequestAbortedError());
+	      }
+	      return
+	    }
 
-	    util.errorRequest(client, request, err);
+	    error = error || new RequestAbortedError();
+
+	    util.errorRequest(client, request, error);
 
 	    if (stream != null) {
-	      util.destroy(stream, err);
+	      util.destroy(stream, error);
 	    }
 
 	    // We do not destroy the socket as we can continue using the session
 	    // the stream get's destroyed and the session remains to create new streams
-	    util.destroy(body, err);
+	    util.destroy(body, error);
 	    client[kQueue][client[kRunningIdx]++] = null;
 	    client[kResume]();
 	  };
@@ -10453,25 +10578,57 @@ function requireClientH2 () {
 
 	  if (method === 'CONNECT') {
 	    session.ref();
-	    // We are already connected, streams are pending, first request
-	    // will create a new stream. We trigger a request to create the stream and wait until
-	    // `ready` event is triggered
 	    // We disabled endStream to allow the user to write to the stream
 	    stream = session.request(headers, { endStream: false, signal });
+	    let upgradeResponseFinished = false;
 
-	    if (stream.id && !stream.pending) {
-	      request.onUpgrade(null, null, stream);
-	      ++session[kOpenStreams];
-	      client[kQueue][client[kRunningIdx]++] = null;
-	    } else {
-	      stream.once('ready', () => {
+	    /**
+	     * @param {import('node:http2').IncomingHttpHeaders} headers
+	     */
+	    const onResponse = (headers) => {
+	      upgradeResponseFinished = true;
+	      stream.off(errorMonitor, onUpgradeError);
+	      request.onUpgradeResponse(Number(headers[HTTP2_HEADER_STATUS]), headers, parseH2ResponseHeaders);
+	    };
+
+	    /**
+	     * @param {Error} error
+	     */
+	    const onUpgradeError = (error) => {
+	      upgradeResponseFinished = true;
+	      stream.off('response', onResponse);
+	      request.onUpgradeError(error);
+	    };
+
+	    const onReady = () => {
+	      try {
 	        request.onUpgrade(null, null, stream);
-	        ++session[kOpenStreams];
-	        client[kQueue][client[kRunningIdx]++] = null;
-	      });
-	    }
+	      } catch (error) {
+	        stream.off('response', onResponse);
+	        abort(error);
+	        return
+	      }
+
+	      if (request.aborted) {
+	        return
+	      }
+
+	      stream.off('error', abort);
+	      stream.once(errorMonitor, onUpgradeError);
+	      client[kQueue][client[kRunningIdx]++] = null;
+	    };
+
+	    stream.once('response', onResponse);
+	    stream.once('error', abort);
+	    ++session[kOpenStreams];
+	    onReady();
 
 	    stream.once('close', () => {
+	      if (!upgradeResponseFinished && request.completed) {
+	        stream.off('response', onResponse);
+	        stream.off(errorMonitor, onUpgradeError);
+	        request.onUpgradeError(new InformationalError(`HTTP/2: "stream error" received - code ${stream.rstCode}`));
+	      }
 	      session[kOpenStreams] -= 1;
 	      if (session[kOpenStreams] === 0) session.unref();
 	    });
@@ -13056,6 +13213,28 @@ function requireRetryHandler () {
 	  return new Date(retryAfter).getTime() - current
 	}
 
+	function validatePartialResponseContentLength (headers, range, statusCode, retryCount) {
+	  const contentLength = headers['content-length'];
+	  if (contentLength == null) {
+	    return null
+	  }
+
+	  if (!Number.isFinite(range.start) || !Number.isFinite(range.end)) {
+	    return null
+	  }
+
+	  const length = Number(contentLength);
+	  const expectedLength = range.end - range.start + 1;
+	  if (!Number.isFinite(length) || length !== expectedLength) {
+	    return new RequestRetryError('Content-Length mismatch', statusCode, {
+	      headers,
+	      data: { count: retryCount }
+	    })
+	  }
+
+	  return null
+	}
+
 	class RetryHandler {
 	  constructor (opts, handlers) {
 	    const { retryOptions, ...dispatchOpts } = opts;
@@ -13109,6 +13288,7 @@ function requireRetryHandler () {
 	    this.end = null;
 	    this.etag = null;
 	    this.resume = null;
+	    this.headersSent = false;
 
 	    // Handle possible onConnect duplication
 	    this.handler.onConnect(reason => {
@@ -13119,6 +13299,20 @@ function requireRetryHandler () {
 	        this.reason = reason;
 	      }
 	    });
+	  }
+
+	  checkpointResponseEnd (headers, resume) {
+	    if (this.end == null && this.opts.method !== 'HEAD') {
+	      const contentLength = headers['content-length'];
+	      this.end = contentLength != null ? Number(contentLength) - 1 : null;
+
+	      assert(
+	        this.end == null || Number.isFinite(this.end),
+	        'invalid content-length'
+	      );
+	    }
+
+	    this.resume = this.end != null ? resume : null;
 	  }
 
 	  onRequestSent () {
@@ -13209,7 +13403,12 @@ function requireRetryHandler () {
 	    this.retryCount += 1;
 
 	    if (statusCode >= 300) {
-	      if (this.retryOpts.statusCodes.includes(statusCode) === false) {
+	      // Only expose a response if no earlier attempt has reached the caller.
+	      // Otherwise abort this attempt so the error settles the existing body
+	      // instead of replacing it with a new response.
+	      if (!this.headersSent && this.retryOpts.statusCodes.includes(statusCode) === false) {
+	        this.headersSent = true;
+	        this.checkpointResponseEnd(headers, resume);
 	        return this.handler.onHeaders(
 	          statusCode,
 	          rawHeaders,
@@ -13270,10 +13469,23 @@ function requireRetryHandler () {
 	        return false
 	      }
 
+	      const contentLengthError = validatePartialResponseContentLength(headers, contentRange, statusCode, this.retryCount);
+	      if (contentLengthError != null) {
+	        this.abort(contentLengthError);
+	        return false
+	      }
+
 	      const { start, size, end = size - 1 } = contentRange;
 
-	      assert(this.start === start, 'content-range mismatch');
-	      assert(this.end == null || this.end === end, 'content-range mismatch');
+	      if (this.start !== start || (this.end != null && this.end !== end)) {
+	        this.abort(
+	          new RequestRetryError('Content-Range mismatch', statusCode, {
+	            headers,
+	            data: { count: this.retryCount }
+	          })
+	        );
+	        return false
+	      }
 
 	      this.resume = resume;
 	      return true
@@ -13285,12 +13497,19 @@ function requireRetryHandler () {
 	        const range = parseRangeHeader(headers['content-range']);
 
 	        if (range == null) {
+	          this.headersSent = true;
 	          return this.handler.onHeaders(
 	            statusCode,
 	            rawHeaders,
 	            resume,
 	            statusMessage
 	          )
+	        }
+
+	        const contentLengthError = validatePartialResponseContentLength(headers, range, statusCode, this.retryCount);
+	        if (contentLengthError != null) {
+	          this.abort(contentLengthError);
+	          return false
 	        }
 
 	        const { start, size, end = size - 1 } = range;
@@ -13317,6 +13536,7 @@ function requireRetryHandler () {
 	      );
 
 	      this.resume = resume;
+	      this.headersSent = true;
 	      this.etag = headers.etag != null ? headers.etag : null;
 
 	      // Weak etags are not useful for comparison nor cache
@@ -13356,7 +13576,7 @@ function requireRetryHandler () {
 	  }
 
 	  onError (err) {
-	    if (this.aborted || isDisturbed(this.opts.body)) {
+	    if (this.aborted || isDisturbed(this.opts.body) || (this.headersSent && this.resume == null)) {
 	      return this.handler.onError(err)
 	    }
 
@@ -23681,7 +23901,7 @@ function requireUtil$2 () {
 
 	    if (
 	      code < 0x20 || // exclude CTLs (0-31)
-	      code === 0x7F || // DEL
+	      code > 0x7E || // exclude DEL and non-ascii
 	      code === 0x3B // ;
 	    ) {
 	      throw new Error('Invalid cookie path')
@@ -23690,16 +23910,80 @@ function requireUtil$2 () {
 	}
 
 	/**
-	 * I have no idea why these values aren't allowed to be honest,
-	 * but Deno tests these. - Khafra
+	 * <let-dig> ::= <letter> | <digit>
+	 *
+	 * <letter> ::= any one of the 52 alphabetic characters A through Z in
+	 * upper case and a through z in lower case
+	 *
+	 * <digit> ::= any one of the ten digits 0 through 9r
+	 *
+	 * @see https://www.rfc-editor.org/rfc/rfc1034#section-3.5
+	 * @param {number} code
+	 */
+	function isLetterOrDigit (code) {
+	  return (
+	    (code >= 0x30 && code <= 0x39) || // 0-9
+	    (code >= 0x41 && code <= 0x5A) || // A-Z
+	    (code >= 0x61 && code <= 0x7A) // a-z
+	  )
+	}
+
+	/**
+	 * Validates a cookie domain against the "preferred name syntax".
+	 *
+	 * <domain>      ::= <subdomain> | " "
+	 * <subdomain>   ::= <label> | <subdomain> "." <label>
+	 * <label>       ::= <let-dig> [ [ <ldh-str> ] <let-dig> ]
+	 * <ldh-str>     ::= <let-dig-hyp> | <let-dig-hyp> <ldh-str>
+	 * <let-dig-hyp> ::= <let-dig> | "-"
+	 *
+	 * @see https://www.rfc-editor.org/rfc/rfc1034#section-3.5
+	 * @see https://www.rfc-editor.org/rfc/rfc1123#section-2.1
+	 * @see https://www.rfc-editor.org/rfc/rfc1035#section-2.3.4
 	 * @param {string} domain
 	 */
 	function validateCookieDomain (domain) {
-	  if (
-	    domain.startsWith('-') ||
-	    domain.endsWith('.') ||
-	    domain.endsWith('-')
-	  ) {
+	  // <domain> ::= <subdomain> | " "
+	  if (domain === ' ') {
+	    return
+	  }
+
+	  if (domain.length > 255) {
+	    throw new Error('Invalid cookie domain')
+	  }
+
+	  let labelLength = 0;
+
+	  for (let i = 0; i < domain.length; ++i) {
+	    const code = domain.charCodeAt(i);
+
+	    if (code === 0x2E) {
+	      if (labelLength === 0) {
+	        throw new Error('Invalid cookie domain')
+	      }
+
+	      if (domain.charCodeAt(i - 1) === 0x2D) { // "-"
+	        throw new Error('Invalid cookie domain')
+	      }
+
+	      labelLength = 0;
+	      continue
+	    }
+
+	    if (labelLength === 0 && !isLetterOrDigit(code)) {
+	      throw new Error('Invalid cookie domain')
+	    }
+
+	    if (!isLetterOrDigit(code) && code !== 0x2D) { // "-"
+	      throw new Error('Invalid cookie domain')
+	    }
+
+	    if (++labelLength > 63) {
+	      throw new Error('Invalid cookie domain')
+	    }
+	  }
+
+	  if (labelLength === 0 || domain.charCodeAt(domain.length - 1) === 0x2D) { // "-"
 	    throw new Error('Invalid cookie domain')
 	  }
 	}
@@ -23842,7 +24126,13 @@ function requireUtil$2 () {
 
 	    const [key, ...value] = part.split('=');
 
-	    out.push(`${key.trim()}=${value.join('=')}`);
+	    const trimmedKey = key.trim();
+	    const joinedValue = value.join('=');
+
+	    validateCookieName(trimmedKey);
+	    validateCookieValue(joinedValue);
+
+	    out.push(`${trimmedKey}=${joinedValue}`);
 	  }
 
 	  return out.join('; ')
@@ -25433,7 +25723,7 @@ function requireConnection () {
 	        // is specified, the server needs to include the same field and one of
 	        // the selected subprotocol values in its response for the connection to
 	        // be established.
-	        if (!requestProtocols.includes(secProtocol)) {
+	        if (requestProtocols === null || !requestProtocols.includes(secProtocol)) {
 	          failWebsocketConnection(ws, 'Protocol was not set in the opening handshake.');
 	          return
 	        }
@@ -25680,7 +25970,12 @@ function requirePermessageDeflate () {
 
 	        if (this.#maxPayloadSize > 0 && this.#inflate[kLength] > this.#maxPayloadSize) {
 	          callback(new MessageSizeExceededError());
+	          // The inflater may still hold buffered input that can emit a late
+	          // zlib error. Remove the data listener, then deterministically stop
+	          // the stream so a subsequent 'error' cannot fire without a listener
+	          // (which would terminate the process as an unhandled error event).
 	          this.#inflate.removeAllListeners();
+	          this.#inflate.destroy();
 	          this.#inflate = null;
 	          return
 	        }
@@ -27029,6 +27324,49 @@ function requireEventsourceStream () {
 	 */
 	const SPACE = 0x20;
 
+	const DATA = Buffer.from('data');
+	const EVENT = Buffer.from('event');
+	const ID = Buffer.from('id');
+	const RETRY = Buffer.from('retry');
+
+	function isASCIINumberBytes (buffer, start) {
+	  if (start >= buffer.length) {
+	    return false
+	  }
+
+	  for (let i = start; i < buffer.length; i++) {
+	    if (buffer[i] < 0x30 || buffer[i] > 0x39) {
+	      return false
+	    }
+	  }
+
+	  return true
+	}
+
+	function isValidLastEventIdBytes (buffer, start) {
+	  for (let i = start; i < buffer.length; i++) {
+	    if (buffer[i] === 0x00) {
+	      return false
+	    }
+	  }
+
+	  return true
+	}
+
+	function isFieldName (line, length, field) {
+	  if (length !== field.length) {
+	    return false
+	  }
+
+	  for (let i = 0; i < length; i++) {
+	    if (line[i] !== field[i]) {
+	      return false
+	    }
+	  }
+
+	  return true
+	}
+
 	/**
 	 * @typedef {object} EventSourceStreamEvent
 	 * @type {object}
@@ -27069,11 +27407,14 @@ function requireEventsourceStream () {
 	  eventEndCheck = false
 
 	  /**
-	   * @type {Buffer}
+	   * @type {Buffer[]}
 	   */
-	  buffer = null
+	  chunks = []
 
+	  chunkIndex = 0
 	  pos = 0
+	  lineChunkIndex = 0
+	  linePos = 0
 
 	  event = {
 	    data: undefined,
@@ -27112,92 +27453,20 @@ function requireEventsourceStream () {
 	      return
 	    }
 
-	    // Cache the chunk in the buffer, as the data might not be complete while
-	    // processing it
-	    // TODO: Investigate if there is a more performant way to handle
-	    // incoming chunks
-	    // see: https://github.com/nodejs/undici/issues/2630
-	    if (this.buffer) {
-	      this.buffer = Buffer.concat([this.buffer, chunk]);
-	    } else {
-	      this.buffer = chunk;
-	    }
+	    this.chunks.push(chunk);
 
 	    // Strip leading byte-order-mark if we opened the stream and started
 	    // the processing of the incoming data
 	    if (this.checkBOM) {
-	      switch (this.buffer.length) {
-	        case 1:
-	          // Check if the first byte is the same as the first byte of the BOM
-	          if (this.buffer[0] === BOM[0]) {
-	            // If it is, we need to wait for more data
-	            callback();
-	            return
-	          }
-	          // Set the checkBOM flag to false as we don't need to check for the
-	          // BOM anymore
-	          this.checkBOM = false;
-
-	          // The buffer only contains one byte so we need to wait for more data
-	          callback();
-	          return
-	        case 2:
-	          // Check if the first two bytes are the same as the first two bytes
-	          // of the BOM
-	          if (
-	            this.buffer[0] === BOM[0] &&
-	            this.buffer[1] === BOM[1]
-	          ) {
-	            // If it is, we need to wait for more data, because the third byte
-	            // is needed to determine if it is the BOM or not
-	            callback();
-	            return
-	          }
-
-	          // Set the checkBOM flag to false as we don't need to check for the
-	          // BOM anymore
-	          this.checkBOM = false;
-	          break
-	        case 3:
-	          // Check if the first three bytes are the same as the first three
-	          // bytes of the BOM
-	          if (
-	            this.buffer[0] === BOM[0] &&
-	            this.buffer[1] === BOM[1] &&
-	            this.buffer[2] === BOM[2]
-	          ) {
-	            // If it is, we can drop the buffered data, as it is only the BOM
-	            this.buffer = Buffer.alloc(0);
-	            // Set the checkBOM flag to false as we don't need to check for the
-	            // BOM anymore
-	            this.checkBOM = false;
-
-	            // Await more data
-	            callback();
-	            return
-	          }
-	          // If it is not the BOM, we can start processing the data
-	          this.checkBOM = false;
-	          break
-	        default:
-	          // The buffer is longer than 3 bytes, so we can drop the BOM if it is
-	          // present
-	          if (
-	            this.buffer[0] === BOM[0] &&
-	            this.buffer[1] === BOM[1] &&
-	            this.buffer[2] === BOM[2]
-	          ) {
-	            // Remove the BOM from the buffer
-	            this.buffer = this.buffer.subarray(3);
-	          }
-
-	          // Set the checkBOM flag to false as we don't need to check for the
-	          this.checkBOM = false;
-	          break
+	      if (this.handleBOM()) {
+	        callback();
+	        return
 	      }
 	    }
 
-	    while (this.pos < this.buffer.length) {
+	    while (this.hasCurrentByte()) {
+	      const byte = this.currentByte();
+
 	      // If the previous line ended with an end-of-line, we need to check
 	      // if the next character is also an end-of-line.
 	      if (this.eventEndCheck) {
@@ -27210,10 +27479,9 @@ function requireEventsourceStream () {
 	        if (this.crlfCheck) {
 	          // If the current character is a line feed, we can remove it
 	          // from the buffer and reset the crlfCheck flag
-	          if (this.buffer[this.pos] === LF) {
-	            this.buffer = this.buffer.subarray(this.pos + 1);
-	            this.pos = 0;
+	          if (byte === LF) {
 	            this.crlfCheck = false;
+	            this.consumeCurrentByte();
 
 	            // It is possible that the line feed is not the end of the
 	            // event. We need to check if the next character is an
@@ -27229,19 +27497,17 @@ function requireEventsourceStream () {
 	          this.crlfCheck = false;
 	        }
 
-	        if (this.buffer[this.pos] === LF || this.buffer[this.pos] === CR) {
+	        if (byte === LF || byte === CR) {
 	          // If the current character is a carriage return, we need to
 	          // set the crlfCheck flag to true, as we need to check if the
 	          // next character is a line feed so we can remove it from the
 	          // buffer
-	          if (this.buffer[this.pos] === CR) {
+	          if (byte === CR) {
 	            this.crlfCheck = true;
 	          }
 
-	          this.buffer = this.buffer.subarray(this.pos + 1);
-	          this.pos = 0;
-	          if (
-	            this.event.data !== undefined || this.event.event || this.event.id || this.event.retry) {
+	          this.consumeCurrentByte();
+	          if (this.hasPendingEvent()) {
 	            this.processEvent(this.event);
 	          }
 	          this.clearEvent();
@@ -27255,22 +27521,18 @@ function requireEventsourceStream () {
 
 	      // If the current character is an end-of-line, we can process the
 	      // line
-	      if (this.buffer[this.pos] === LF || this.buffer[this.pos] === CR) {
+	      if (byte === LF || byte === CR) {
 	        // If the current character is a carriage return, we need to
 	        // set the crlfCheck flag to true, as we need to check if the
 	        // next character is a line feed
-	        if (this.buffer[this.pos] === CR) {
+	        if (byte === CR) {
 	          this.crlfCheck = true;
 	        }
 
 	        // In any case, we can process the line as we reached an
 	        // end-of-line character
-	        this.parseLine(this.buffer.subarray(0, this.pos), this.event);
-
-	        // Remove the processed line from the buffer
-	        this.buffer = this.buffer.subarray(this.pos + 1);
-	        // Reset the position as we removed the processed line from the buffer
-	        this.pos = 0;
+	        this.parseLine(this.readLine(), this.event);
+	        this.consumeCurrentByte();
 	        // A line was processed and this could be the end of the event. We need
 	        // to check if the next line is empty to determine if the event is
 	        // finished.
@@ -27278,7 +27540,7 @@ function requireEventsourceStream () {
 	        continue
 	      }
 
-	      this.pos++;
+	      this.advanceCursor();
 	    }
 
 	    callback();
@@ -27303,64 +27565,53 @@ function requireEventsourceStream () {
 	      return
 	    }
 
-	    let field = '';
-	    let value = '';
+	    let fieldLength = line.length;
+	    let valueStart = line.length;
 
 	    // If the line contains a U+003A COLON character (:)
 	    if (colonPosition !== -1) {
-	      // Collect the characters on the line before the first U+003A COLON
-	      // character (:), and let field be that string.
-	      // TODO: Investigate if there is a more performant way to extract the
-	      // field
-	      // see: https://github.com/nodejs/undici/issues/2630
-	      field = line.subarray(0, colonPosition).toString('utf8');
+	      fieldLength = colonPosition;
 
 	      // Collect the characters on the line after the first U+003A COLON
 	      // character (:), and let value be that string.
 	      // If value starts with a U+0020 SPACE character, remove it from value.
-	      let valueStart = colonPosition + 1;
+	      valueStart = colonPosition + 1;
 	      if (line[valueStart] === SPACE) {
 	        ++valueStart;
 	      }
-	      // TODO: Investigate if there is a more performant way to extract the
-	      // value
-	      // see: https://github.com/nodejs/undici/issues/2630
-	      value = line.subarray(valueStart).toString('utf8');
-
-	      // Otherwise, the string is not empty but does not contain a U+003A COLON
-	      // character (:)
-	    } else {
-	      // Process the field using the steps described below, using the whole
-	      // line as the field name, and the empty string as the field value.
-	      field = line.toString('utf8');
-	      value = '';
 	    }
 
-	    // Modify the event with the field name and value. The value is also
-	    // decoded as UTF-8
-	    switch (field) {
-	      case 'data':
-	        if (event[field] === undefined) {
-	          event[field] = value;
-	        } else {
-	          event[field] += `\n${value}`;
-	        }
-	        break
-	      case 'retry':
-	        if (isASCIINumber(value)) {
-	          event[field] = value;
-	        }
-	        break
-	      case 'id':
-	        if (isValidLastEventId(value)) {
-	          event[field] = value;
-	        }
-	        break
-	      case 'event':
-	        if (value.length > 0) {
-	          event[field] = value;
-	        }
-	        break
+	    if (isFieldName(line, fieldLength, DATA)) {
+	      const value = line.toString('utf8', valueStart);
+
+	      if (event.data === undefined) {
+	        event.data = value;
+	      } else {
+	        event.data += `\n${value}`;
+	      }
+	      return
+	    }
+
+	    if (isFieldName(line, fieldLength, RETRY)) {
+	      if (isASCIINumberBytes(line, valueStart)) {
+	        event.retry = line.toString('utf8', valueStart);
+	      }
+	      return
+	    }
+
+	    if (isFieldName(line, fieldLength, ID)) {
+	      if (isValidLastEventIdBytes(line, valueStart)) {
+	        event.id = line.toString('utf8', valueStart);
+	      }
+	      return
+	    }
+
+	    if (isFieldName(line, fieldLength, EVENT)) {
+	      const value = line.toString('utf8', valueStart);
+
+	      if (value.length > 0) {
+	        event.event = value;
+	      }
 	    }
 	  }
 
@@ -27390,12 +27641,151 @@ function requireEventsourceStream () {
 	  }
 
 	  clearEvent () {
-	    this.event = {
-	      data: undefined,
-	      event: undefined,
-	      id: undefined,
-	      retry: undefined
-	    };
+	    this.event.data = undefined;
+	    this.event.event = undefined;
+	    this.event.id = undefined;
+	    this.event.retry = undefined;
+	  }
+
+	  hasPendingEvent () {
+	    return this.event.data !== undefined ||
+	      this.event.event !== undefined ||
+	      this.event.id !== undefined ||
+	      this.event.retry !== undefined
+	  }
+
+	  hasCurrentByte () {
+	    return this.chunkIndex < this.chunks.length &&
+	      this.pos < this.chunks[this.chunkIndex].length
+	  }
+
+	  currentByte () {
+	    return this.chunks[this.chunkIndex][this.pos]
+	  }
+
+	  consumeCurrentByte () {
+	    this.advanceCursor();
+	    this.syncLineStartToCursor();
+	  }
+
+	  advanceCursor () {
+	    this.pos++;
+
+	    while (this.chunkIndex < this.chunks.length && this.pos >= this.chunks[this.chunkIndex].length) {
+	      this.chunkIndex++;
+	      this.pos = 0;
+	    }
+	  }
+
+	  syncLineStartToCursor () {
+	    this.lineChunkIndex = this.chunkIndex;
+	    this.linePos = this.pos;
+	    this.dropConsumedChunks();
+	  }
+
+	  dropConsumedChunks () {
+	    while (this.lineChunkIndex > 0) {
+	      this.chunks.shift();
+	      this.lineChunkIndex--;
+	      this.chunkIndex--;
+	    }
+
+	    if (this.chunkIndex === this.chunks.length) {
+	      this.chunks.length = 0;
+	      this.chunkIndex = 0;
+	      this.pos = 0;
+	      this.lineChunkIndex = 0;
+	      this.linePos = 0;
+	    }
+	  }
+
+	  readLine () {
+	    if (this.lineChunkIndex === this.chunkIndex) {
+	      return this.chunks[this.chunkIndex].subarray(this.linePos, this.pos)
+	    }
+
+	    const chunks = [];
+	    let length = 0;
+
+	    for (let i = this.lineChunkIndex; i <= this.chunkIndex; i++) {
+	      const chunk = this.chunks[i];
+	      const start = i === this.lineChunkIndex ? this.linePos : 0;
+	      const end = i === this.chunkIndex ? this.pos : chunk.length;
+	      const slice = chunk.subarray(start, end);
+	      length += slice.length;
+	      chunks.push(slice);
+	    }
+
+	    return Buffer.concat(chunks, length)
+	  }
+
+	  peekBufferedByte (offset) {
+	    let chunkIndex = this.lineChunkIndex;
+	    let pos = this.linePos;
+
+	    while (chunkIndex < this.chunks.length) {
+	      const chunk = this.chunks[chunkIndex];
+	      const remaining = chunk.length - pos;
+
+	      if (offset < remaining) {
+	        return chunk[pos + offset]
+	      }
+
+	      offset -= remaining;
+	      chunkIndex++;
+	      pos = 0;
+	    }
+	  }
+
+	  discardLeadingBytes (count) {
+	    while (count > 0 && this.lineChunkIndex < this.chunks.length) {
+	      const chunk = this.chunks[this.lineChunkIndex];
+	      const remaining = chunk.length - this.linePos;
+
+	      if (count < remaining) {
+	        this.linePos += count;
+	        count = 0;
+	      } else {
+	        count -= remaining;
+	        this.lineChunkIndex++;
+	        this.linePos = 0;
+	      }
+	    }
+
+	    this.chunkIndex = this.lineChunkIndex;
+	    this.pos = this.linePos;
+	    this.dropConsumedChunks();
+	  }
+
+	  handleBOM () {
+	    const first = this.peekBufferedByte(0);
+	    const second = this.peekBufferedByte(1);
+	    const third = this.peekBufferedByte(2);
+
+	    if (second === undefined) {
+	      if (first === BOM[0]) {
+	        return true
+	      }
+
+	      this.checkBOM = false;
+	      return true
+	    }
+
+	    if (third === undefined) {
+	      if (first === BOM[0] && second === BOM[1]) {
+	        return true
+	      }
+
+	      this.checkBOM = false;
+	      return false
+	    }
+
+	    if (first === BOM[0] && second === BOM[1] && third === BOM[2]) {
+	      this.discardLeadingBytes(3);
+	    }
+
+	    this.checkBOM = false;
+	    return !this.hasCurrentByte()
 	  }
 	}
 
@@ -28633,440 +29023,26 @@ function info(message) {
     process.stdout.write(message + os.EOL);
 }
 
-var main = {exports: {}};
-
-var hasRequiredMain;
-
-function requireMain () {
-	if (hasRequiredMain) return main.exports;
-	hasRequiredMain = 1;
-	const fs = fs__default;
-	const path$1 = path;
-	const os = os__default;
-	const crypto = crypto__default;
-
-	// Array of tips to display randomly
-	const TIPS = [
-	  '◈ encrypted .env [www.dotenvx.com]',
-	  '◈ secrets for agents [www.dotenvx.com]',
-	  '⌁ auth for agents [www.vestauth.com]',
-	  '⌘ custom filepath { path: \'/custom/path/.env\' }',
-	  '⌘ enable debugging { debug: true }',
-	  '⌘ override existing { override: true }',
-	  '⌘ suppress logs { quiet: true }',
-	  '⌘ multiple files { path: [\'.env.local\', \'.env\'] }'
-	];
-
-	// Get a random tip from the tips array
-	function _getRandomTip () {
-	  return TIPS[Math.floor(Math.random() * TIPS.length)]
-	}
-
-	function parseBoolean (value) {
-	  if (typeof value === 'string') {
-	    return !['false', '0', 'no', 'off', ''].includes(value.toLowerCase())
-	  }
-	  return Boolean(value)
-	}
-
-	function supportsAnsi () {
-	  return process.stdout.isTTY // && process.env.TERM !== 'dumb'
-	}
-
-	function dim (text) {
-	  return supportsAnsi() ? `\x1b[2m${text}\x1b[0m` : text
-	}
-
-	const LINE = /(?:^|^)\s*(?:export\s+)?([\w.-]+)(?:\s*=\s*?|:\s+?)(\s*'(?:\\'|[^'])*'|\s*"(?:\\"|[^"])*"|\s*`(?:\\`|[^`])*`|[^#\r\n]+)?\s*(?:#.*)?(?:$|$)/mg;
-
-	// Parse src into an Object
-	function parse (src) {
-	  const obj = {};
-
-	  // Convert buffer to string
-	  let lines = src.toString();
-
-	  // Convert line breaks to same format
-	  lines = lines.replace(/\r\n?/mg, '\n');
-
-	  let match;
-	  while ((match = LINE.exec(lines)) != null) {
-	    const key = match[1];
-
-	    // Default undefined or null to empty string
-	    let value = (match[2] || '');
-
-	    // Remove whitespace
-	    value = value.trim();
-
-	    // Check if double quoted
-	    const maybeQuote = value[0];
-
-	    // Remove surrounding quotes
-	    value = value.replace(/^(['"`])([\s\S]*)\1$/mg, '$2');
-
-	    // Expand newlines if double quoted
-	    if (maybeQuote === '"') {
-	      value = value.replace(/\\n/g, '\n');
-	      value = value.replace(/\\r/g, '\r');
-	    }
-
-	    // Add to object
-	    obj[key] = value;
-	  }
-
-	  return obj
-	}
-
-	function _parseVault (options) {
-	  options = options || {};
-
-	  const vaultPath = _vaultPath(options);
-	  options.path = vaultPath; // parse .env.vault
-	  const result = DotenvModule.configDotenv(options);
-	  if (!result.parsed) {
-	    const err = new Error(`MISSING_DATA: Cannot parse ${vaultPath} for an unknown reason`);
-	    err.code = 'MISSING_DATA';
-	    throw err
-	  }
-
-	  // handle scenario for comma separated keys - for use with key rotation
-	  // example: DOTENV_KEY="dotenv://:key_1234@dotenvx.com/vault/.env.vault?environment=prod,dotenv://:key_7890@dotenvx.com/vault/.env.vault?environment=prod"
-	  const keys = _dotenvKey(options).split(',');
-	  const length = keys.length;
-
-	  let decrypted;
-	  for (let i = 0; i < length; i++) {
-	    try {
-	      // Get full key
-	      const key = keys[i].trim();
-
-	      // Get instructions for decrypt
-	      const attrs = _instructions(result, key);
-
-	      // Decrypt
-	      decrypted = DotenvModule.decrypt(attrs.ciphertext, attrs.key);
-
-	      break
-	    } catch (error) {
-	      // last key
-	      if (i + 1 >= length) {
-	        throw error
-	      }
-	      // try next key
-	    }
-	  }
-
-	  // Parse decrypted .env string
-	  return DotenvModule.parse(decrypted)
-	}
-
-	function _warn (message) {
-	  console.error(`⚠ ${message}`);
-	}
-
-	function _debug (message) {
-	  console.log(`┆ ${message}`);
-	}
-
-	function _log (message) {
-	  console.log(`◇ ${message}`);
-	}
-
-	function _dotenvKey (options) {
-	  // prioritize developer directly setting options.DOTENV_KEY
-	  if (options && options.DOTENV_KEY && options.DOTENV_KEY.length > 0) {
-	    return options.DOTENV_KEY
-	  }
-
-	  // secondary infra already contains a DOTENV_KEY environment variable
-	  if (process.env.DOTENV_KEY && process.env.DOTENV_KEY.length > 0) {
-	    return process.env.DOTENV_KEY
-	  }
-
-	  // fallback to empty string
-	  return ''
-	}
-
-	function _instructions (result, dotenvKey) {
-	  // Parse DOTENV_KEY. Format is a URI
-	  let uri;
-	  try {
-	    uri = new URL(dotenvKey);
-	  } catch (error) {
-	    if (error.code === 'ERR_INVALID_URL') {
-	      const err = new Error('INVALID_DOTENV_KEY: Wrong format. Must be in valid uri format like dotenv://:key_1234@dotenvx.com/vault/.env.vault?environment=development');
-	      err.code = 'INVALID_DOTENV_KEY';
-	      throw err
-	    }
-
-	    throw error
-	  }
-
-	  // Get decrypt key
-	  const key = uri.password;
-	  if (!key) {
-	    const err = new Error('INVALID_DOTENV_KEY: Missing key part');
-	    err.code = 'INVALID_DOTENV_KEY';
-	    throw err
-	  }
-
-	  // Get environment
-	  const environment = uri.searchParams.get('environment');
-	  if (!environment) {
-	    const err = new Error('INVALID_DOTENV_KEY: Missing environment part');
-	    err.code = 'INVALID_DOTENV_KEY';
-	    throw err
-	  }
-
-	  // Get ciphertext payload
-	  const environmentKey = `DOTENV_VAULT_${environment.toUpperCase()}`;
-	  const ciphertext = result.parsed[environmentKey]; // DOTENV_VAULT_PRODUCTION
-	  if (!ciphertext) {
-	    const err = new Error(`NOT_FOUND_DOTENV_ENVIRONMENT: Cannot locate environment ${environmentKey} in your .env.vault file.`);
-	    err.code = 'NOT_FOUND_DOTENV_ENVIRONMENT';
-	    throw err
-	  }
-
-	  return { ciphertext, key }
-	}
-
-	function _vaultPath (options) {
-	  let possibleVaultPath = null;
-
-	  if (options && options.path && options.path.length > 0) {
-	    if (Array.isArray(options.path)) {
-	      for (const filepath of options.path) {
-	        if (fs.existsSync(filepath)) {
-	          possibleVaultPath = filepath.endsWith('.vault') ? filepath : `${filepath}.vault`;
-	        }
-	      }
-	    } else {
-	      possibleVaultPath = options.path.endsWith('.vault') ? options.path : `${options.path}.vault`;
-	    }
-	  } else {
-	    possibleVaultPath = path$1.resolve(process.cwd(), '.env.vault');
-	  }
-
-	  if (fs.existsSync(possibleVaultPath)) {
-	    return possibleVaultPath
-	  }
-
-	  return null
-	}
-
-	function _resolveHome (envPath) {
-	  return envPath[0] === '~' ? path$1.join(os.homedir(), envPath.slice(1)) : envPath
-	}
-
-	function _configVault (options) {
-	  const debug = parseBoolean(process.env.DOTENV_CONFIG_DEBUG || (options && options.debug));
-	  const quiet = parseBoolean(process.env.DOTENV_CONFIG_QUIET || (options && options.quiet));
-
-	  if (debug || !quiet) {
-	    _log('loading env from encrypted .env.vault');
-	  }
-
-	  const parsed = DotenvModule._parseVault(options);
-
-	  let processEnv = process.env;
-	  if (options && options.processEnv != null) {
-	    processEnv = options.processEnv;
-	  }
-
-	  DotenvModule.populate(processEnv, parsed, options);
-
-	  return { parsed }
-	}
-
-	function configDotenv (options) {
-	  const dotenvPath = path$1.resolve(process.cwd(), '.env');
-	  let encoding = 'utf8';
-	  let processEnv = process.env;
-	  if (options && options.processEnv != null) {
-	    processEnv = options.processEnv;
-	  }
-	  let debug = parseBoolean(processEnv.DOTENV_CONFIG_DEBUG || (options && options.debug));
-	  let quiet = parseBoolean(processEnv.DOTENV_CONFIG_QUIET || (options && options.quiet));
-
-	  if (options && options.encoding) {
-	    encoding = options.encoding;
-	  } else {
-	    if (debug) {
-	      _debug('no encoding is specified (UTF-8 is used by default)');
-	    }
-	  }
-
-	  let optionPaths = [dotenvPath]; // default, look for .env
-	  if (options && options.path) {
-	    if (!Array.isArray(options.path)) {
-	      optionPaths = [_resolveHome(options.path)];
-	    } else {
-	      optionPaths = []; // reset default
-	      for (const filepath of options.path) {
-	        optionPaths.push(_resolveHome(filepath));
-	      }
-	    }
-	  }
-
-	  // Build the parsed data in a temporary object (because we need to return it).  Once we have the final
-	  // parsed data, we will combine it with process.env (or options.processEnv if provided).
-	  let lastError;
-	  const parsedAll = {};
-	  for (const path of optionPaths) {
-	    try {
-	      // Specifying an encoding returns a string instead of a buffer
-	      const parsed = DotenvModule.parse(fs.readFileSync(path, { encoding }));
-
-	      DotenvModule.populate(parsedAll, parsed, options);
-	    } catch (e) {
-	      if (debug) {
-	        _debug(`failed to load ${path} ${e.message}`);
-	      }
-	      lastError = e;
-	    }
-	  }
-
-	  const populated = DotenvModule.populate(processEnv, parsedAll, options);
-
-	  // handle user settings DOTENV_CONFIG_ options inside .env file(s)
-	  debug = parseBoolean(processEnv.DOTENV_CONFIG_DEBUG || debug);
-	  quiet = parseBoolean(processEnv.DOTENV_CONFIG_QUIET || quiet);
-
-	  if (debug || !quiet) {
-	    const keysCount = Object.keys(populated).length;
-	    const shortPaths = [];
-	    for (const filePath of optionPaths) {
-	      try {
-	        const relative = path$1.relative(process.cwd(), filePath);
-	        shortPaths.push(relative);
-	      } catch (e) {
-	        if (debug) {
-	          _debug(`failed to load ${filePath} ${e.message}`);
-	        }
-	        lastError = e;
-	      }
-	    }
-
-	    _log(`injected env (${keysCount}) from ${shortPaths.join(',')} ${dim(`// tip: ${_getRandomTip()}`)}`);
-	  }
-
-	  if (lastError) {
-	    return { parsed: parsedAll, error: lastError }
-	  } else {
-	    return { parsed: parsedAll }
-	  }
-	}
-
-	// Populates process.env from .env file
-	function config (options) {
-	  // fallback to original dotenv if DOTENV_KEY is not set
-	  if (_dotenvKey(options).length === 0) {
-	    return DotenvModule.configDotenv(options)
-	  }
-
-	  const vaultPath = _vaultPath(options);
-
-	  // dotenvKey exists but .env.vault file does not exist
-	  if (!vaultPath) {
-	    _warn(`you set DOTENV_KEY but you are missing a .env.vault file at ${vaultPath}`);
-
-	    return DotenvModule.configDotenv(options)
-	  }
-
-	  return DotenvModule._configVault(options)
-	}
-
-	function decrypt (encrypted, keyStr) {
-	  const key = Buffer.from(keyStr.slice(-64), 'hex');
-	  let ciphertext = Buffer.from(encrypted, 'base64');
-
-	  const nonce = ciphertext.subarray(0, 12);
-	  const authTag = ciphertext.subarray(-16);
-	  ciphertext = ciphertext.subarray(12, -16);
-
-	  try {
-	    const aesgcm = crypto.createDecipheriv('aes-256-gcm', key, nonce);
-	    aesgcm.setAuthTag(authTag);
-	    return `${aesgcm.update(ciphertext)}${aesgcm.final()}`
-	  } catch (error) {
-	    const isRange = error instanceof RangeError;
-	    const invalidKeyLength = error.message === 'Invalid key length';
-	    const decryptionFailed = error.message === 'Unsupported state or unable to authenticate data';
-
-	    if (isRange || invalidKeyLength) {
-	      const err = new Error('INVALID_DOTENV_KEY: It must be 64 characters long (or more)');
-	      err.code = 'INVALID_DOTENV_KEY';
-	      throw err
-	    } else if (decryptionFailed) {
-	      const err = new Error('DECRYPTION_FAILED: Please check your DOTENV_KEY');
-	      err.code = 'DECRYPTION_FAILED';
-	      throw err
-	    } else {
-	      throw error
-	    }
-	  }
-	}
-
-	// Populate process.env with parsed values
-	function populate (processEnv, parsed, options = {}) {
-	  const debug = Boolean(options && options.debug);
-	  const override = Boolean(options && options.override);
-	  const populated = {};
-
-	  if (typeof parsed !== 'object') {
-	    const err = new Error('OBJECT_REQUIRED: Please check the processEnv argument being passed to populate');
-	    err.code = 'OBJECT_REQUIRED';
-	    throw err
-	  }
-
-	  // Set process.env
-	  for (const key of Object.keys(parsed)) {
-	    if (Object.prototype.hasOwnProperty.call(processEnv, key)) {
-	      if (override === true) {
-	        processEnv[key] = parsed[key];
-	        populated[key] = parsed[key];
-	      }
-
-	      if (debug) {
-	        if (override === true) {
-	          _debug(`"${key}" is already defined and WAS overwritten`);
-	        } else {
-	          _debug(`"${key}" is already defined and was NOT overwritten`);
-	        }
-	      }
-	    } else {
-	      processEnv[key] = parsed[key];
-	      populated[key] = parsed[key];
-	    }
-	  }
-
-	  return populated
-	}
-
-	const DotenvModule = {
-	  configDotenv,
-	  _configVault,
-	  _parseVault,
-	  config,
-	  decrypt,
-	  parse,
-	  populate
-	};
-
-	main.exports.configDotenv = DotenvModule.configDotenv;
-	main.exports._configVault = DotenvModule._configVault;
-	main.exports._parseVault = DotenvModule._parseVault;
-	main.exports.config = DotenvModule.config;
-	main.exports.decrypt = DotenvModule.decrypt;
-	main.exports.parse = DotenvModule.parse;
-	main.exports.populate = DotenvModule.populate;
-
-	main.exports = DotenvModule;
-	return main.exports;
+var dist$1 = {exports: {}};
+
+var hasRequiredDist$1;
+
+function requireDist$1 () {
+	if (hasRequiredDist$1) return dist$1.exports;
+	hasRequiredDist$1 = 1;
+	(function (module) {
+		var I=(e,o)=>()=>{try{return o||e((o={exports:{}}).exports,o),o.exports}catch(t){throw o=0,t}};var S=I((xe,U)=>{function G(e){return typeof e=="string"?!["false","0","no","off",""].includes(e.toLowerCase()):!!e}function X(e=process.env){let o={};for(let t of ["ENCODING","PATH","QUIET","DEBUG","OVERRIDE","FAST"]){let n=e[`DOTENV_${t}`]!=null?e[`DOTENV_${t}`]:e[`DOTENV_CONFIG_${t}`];n!=null&&(o[t.toLowerCase()]=t==="ENCODING"||t==="PATH"?n:G(n));}return o}U.exports={parseBoolean:G,optionsFromEnv:X};});var N=I((ye,x)=>{var Y=fs__default,j=path,z=os__default,{URL:Z,fileURLToPath:ee}=require$$2$1,{parseBoolean:k,optionsFromEnv:B}=S(),te=/(?:^|^)\s*(?:export\s+)?([\w.-]+)(?:\s*=\s*?|:\s+?)(\s*'(?:\\'|[^'])*'|\s*"(?:\\"|[^"])*"|\s*`(?:\\`|[^`])*`|[^#\r\n]+)?\s*(?:#.*)?(?:$|$)/mg,b=new Uint8Array(256);for(let e=48;e<=57;e++)b[e]=1;for(let e=65;e<=90;e++)b[e]=1;for(let e=97;e<=122;e++)b[e]=1;b[45]=1;b[46]=1;b[95]=1;function re(e){let o={},t=e.toString();t=t.replace(/\r\n?/mg,`
+`);let n;for(;(n=te.exec(t))!=null;){let r=n[1],s=n[2]||"";s=s.trim();let i=s[0];s=s.replace(/^(['"`])([\s\S]*)\1$/mg,"$2"),i==='"'&&(s=s.replace(/\\n/g,`
+`),s=s.replace(/\\r/g,"\r")),o[r]=s;}return o}function w(e){return e<=32?e===32||e>=9&&e<=13:e>=160&&(e===160||e===5760||e>=8192&&e<=8202||e===8232||e===8233||e===8239||e===8287||e===12288||e===65279)}function O(e){return e===10||e===8232||e===8233}function oe(e){let o={},t=typeof e=="string"?e:e.toString();t.indexOf("\r")!==-1&&(t=t.replace(/\r\n?/g,`
+`));let n=t.length,r=0;for(;r<n;){let s=t.charCodeAt(r);for(;r<n&&w(s);)r++,s=t.charCodeAt(r);if(r>=n)break;if(s===35){for(;r<n&&!O(t.charCodeAt(r));)r++;continue}let i=-1;if(s===101&&r+6<n&&t.charCodeAt(r+1)===120&&t.charCodeAt(r+2)===112&&t.charCodeAt(r+3)===111&&t.charCodeAt(r+4)===114&&t.charCodeAt(r+5)===116){let C=t.charCodeAt(r+6);if(w(C)){let d=r+7;for(;d<n&&w(t.charCodeAt(d));)d++;b[t.charCodeAt(d)]&&(i=r+6,r=d);}else s=t.charCodeAt(r);}let l=r,u=0;for(;r<n&&(u=t.charCodeAt(r),b[u]);)r++;if(r===l){for(;r<n&&!O(t.charCodeAt(r));)r++;continue}let p=t.slice(l,r),f=r;if(r>=n&&(u=0),w(u))do r++,u=r<n?t.charCodeAt(r):0;while(w(u));if(u===61)r++;else if(u===58&&r===f&&r+1<n&&w(t.charCodeAt(r+1)))r+=2;else {for(r=i===-1?f:i;r<n&&!O(t.charCodeAt(r));)r++;continue}let c=r,a=r;for(;a<n&&w(t.charCodeAt(a));)a++;let g=t.charCodeAt(a),h,y=!1;if(g===39||g===34||g===96){let C=t[a],d=t.indexOf(C,a+1),m=-1,v=-1;for(;d!==-1;){let q=t.charCodeAt(d-1)===92,A=d+1;for(;A<n&&!O(t.charCodeAt(A))&&w(t.charCodeAt(A));)A++;if((A===n||O(t.charCodeAt(A))||t.charCodeAt(A)===35)&&(m=d,v=A),!q)break;d=t.indexOf(C,d+1);}if(m!==-1){if(h=t.slice(a+1,m),r=v,t.charCodeAt(r)===35)for(;r<n&&!O(t.charCodeAt(r));)r++;y=!0;}}if(!y){let C=t.indexOf(`
+`,c);C===-1&&(C=n);let d=t.indexOf("#",c);(d===-1||d>C)&&(d=C);let m=c,v=d;for(;m<v&&w(t.charCodeAt(m));)m++;for(;v>m&&w(t.charCodeAt(v-1));)v--;let q=t.charCodeAt(m);if(v-m>=2&&(q===39||q===34||q===96)&&t.charCodeAt(v-1)===q?h=t.slice(m+1,v-1):h=t.slice(m,v),r=d,d<C)for(;r<n&&!O(t.charCodeAt(r));)r++;}g===34&&(y||a<r)&&h.indexOf("\\")!==-1&&(h=h.replace(/\\n/g,`
+`).replace(/\\r/g,"\r")),o[p]=h;}return o}function ne(e,o){return o&&k(o.fast)?oe(e):re(e)}function T(e){console.log(`\u2506 ${e}`);}function se(e){console.error(`\u25C7 ${e}`);}function V(e){return e[0]==="~"?j.join(z.homedir(),e.slice(1)):e}function ie(e={}){return {...B(),...e}}function ce(e){e=ie(e);let o=j.resolve(process.cwd(),".env"),t="utf8",n=process.env;e&&e.processEnv!=null&&(n=e.processEnv);let r=k(e&&e.debug);e&&e.encoding?t=e.encoding:r&&T("no encoding is specified (UTF-8 is used by default)");let s=[o];if(e&&e.path)if(!Array.isArray(e.path))s=[V(e.path)];else {s=[];for(let c of e.path)s.push(V(c));}let i,l={},u={fast:e.fast};for(let c of s)try{let a=E.parse(Y.readFileSync(c,{encoding:t}),u);E.populate(l,a,e);}catch(a){r&&T(`failed to load ${c} ${a.message}`),i=a;}let p=E.populate(n,l,e),f=k(Object.prototype.hasOwnProperty.call(e,"quiet")?e.quiet:B(n).quiet);if(r||!f){let c=Object.keys(p).length,a=[];for(let g of s)try{let h=j.relative(process.cwd(),g instanceof Z?ee(g):g);a.push(h);}catch(h){r&&T(`failed to load ${g} ${h.message}`),i=h;}se(`injected env (${c}) from ${a.join(",")}`);}return i?{parsed:l,error:i}:{parsed:l}}function ae(e){return E.configDotenv(e)}function le(e,o,t={}){let n=!!(t&&t.debug),r=!!(t&&t.override),s={};if(e===null||typeof e!="object"||o===null||typeof o!="object"){let i=new Error("OBJECT_REQUIRED: Please check the processEnv argument being passed to populate");throw i.code="OBJECT_REQUIRED",i}for(let i of Object.keys(o))Object.prototype.hasOwnProperty.call(e,i)?(r===!0&&(e[i]=o[i],s[i]=o[i]),n&&T(r===!0?`"${i}" is already defined and WAS overwritten`:`"${i}" is already defined and was NOT overwritten`)):(e[i]=o[i],s[i]=o[i]);return s}var E={configDotenv:ce,config:ae,parse:ne,populate:le};x.exports.configDotenv=E.configDotenv;x.exports.config=E.config;x.exports.parse=E.parse;x.exports.populate=E.populate;x.exports=E;});var M=I((Te,W)=>{var _=require$$4,fe=fs__default,L=path;function ue(e){let o=['"'],t=0;for(let n of e){if(n==="\\"){t++;continue}n==='"'?o.push("\\".repeat(t*2+1),'"'):o.push("\\".repeat(t),n),t=0;}return o.push("\\".repeat(t*2),'"'),o.join("")}function H(e,o=1){for(let t=0;t<o;t++){let n=[];for(let r of e){let s=r.charCodeAt(0),i=s>=48&&s<=57||s>=65&&s<=90||s>=97&&s<=122,l="\\/:._-".includes(r);!i&&!l&&s<128&&n.push("^"),n.push(r);}e=n.join("");}return e}function P(e,o){let t=Object.keys(e).reverse().find(n=>n.toUpperCase()===o);return t===void 0?void 0:e[t]}function de(e,o,t){let n=(P(o,"PATHEXT")||".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean),s=n.some(l=>e.toLowerCase().endsWith(l.toLowerCase()))?["",...n]:[...n,""],i=/[\\/]/.test(e)?[t]:[t,...(P(o,"PATH")||"").split(";")];for(let l of i)for(let u of s){let p=L.resolve(t,l.replace(/^"|"$/g,""),e+u);try{if(fe.statSync(p).isFile())return p}catch{}}}function pe(e,o,t){if(process.platform!=="win32")return _.spawn(e,o,t);let n=t.env||process.env,r=de(e,n,t.cwd||process.cwd());if(r&&/\.(?:exe|com)$/i.test(r))return _.spawn(r,o,t);let s=/\.(?:bat|cmd)$/i.test(r||e),i=[H(L.normalize(r||e))];for(let u of o)i.push(H(ue(u),s?2:1));let l=i.join(" ");return _.spawn(P(n,"COMSPEC")||"cmd.exe",["/d","/v:off","/s","/c",`"${l}"`],{...t,windowsVerbatimArguments:!0})}W.exports=pe;});var K=I(($e,F)=>{var he=fs__default,ge=os__default,Q=path,me=require$$4,ve=M(),R=N(),{optionsFromEnv:Ce}=S();function $(){console.log(["Usage: dotenv run [--help] [-q|--quiet] [--debug] [--override] [--fast] [-f|--file <paths>] [--] <command> [args...]","","Run a command with environment variables from a .env file.","Place dotenv options before the command; all following arguments go to the command.","","Options:","  -f, --file <paths>  .env paths, comma-separated or repeated (default: .env)","  -q, --quiet suppress the injected env message","  --debug     enable debug logging","  --override  override existing environment variables","  --fast      use the faster character-scanner parser","","Environment variables (DOTENV_CONFIG_* names remain as fallbacks):","  DOTENV_PATH, DOTENV_ENCODING, DOTENV_QUIET,","  DOTENV_DEBUG, DOTENV_OVERRIDE,","  DOTENV_FAST"].join(`
+`));}function we(e){let o=[],t=!1,n,r,s,i,l=-1;for(let p=0;p<e.length;p++){let f=e[p];if(f==="--"){l=p+1;break}if(f==="--help"||f==="-h")return {help:!0};if(f==="--quiet"||f==="-q"){n=!0;continue}if(f==="--debug"){r=!0;continue}if(f==="--override"){s=!0;continue}if(f==="--fast"){i=!0;continue}if(f==="-f"||f==="--file"||f.startsWith("-f=")||f.startsWith("--file=")){let c=f.indexOf("="),a=c===-1?f:f.slice(0,c),g=c===-1?e[++p]:f.slice(c+1);if(!g||g==="--")return {error:`${a} requires a path`};let h=g.split(",").map(y=>y.trim()).filter(Boolean);if(h.length===0)return {error:`${a} requires a path`};o.push(...h),t=!0;continue}if(f.startsWith("-"))return {error:`unknown option: ${f}`};l=p;break}let u=l===-1?[]:e.slice(l);return {paths:o,pathSet:t,quiet:n,debug:r,override:s,fast:i,command:u}}function Ee(e){return e[0]==="~"?Q.join(ge.homedir(),e.slice(1)):e}function Ae(e){let o=Ce(),t={encoding:o.encoding||"utf8",quiet:o.quiet===!0,debug:o.debug===!0,override:o.override===!0,fast:o.fast===!0,paths:[".env"],defaultPath:!0};return o.path!=null&&(t.paths=[o.path],t.defaultPath=!1),e.pathSet&&(t.paths=e.paths,t.defaultPath=!1),e.quiet!=null&&(t.quiet=e.quiet),e.debug!=null&&(t.debug=e.debug),e.override!=null&&(t.override=e.override),e.fast!=null&&(t.fast=e.fast),t}function be(e){let o={},t=[],n={override:e.override,debug:e.debug};for(let s of e.paths){let i=Q.resolve(process.cwd(),Ee(s));try{let l=R.parse(he.readFileSync(i,{encoding:e.encoding}),{fast:e.fast});R.populate(o,l,n),t.push(s);}catch(l){if(e.debug&&console.log(`\u2506 failed to load ${s} ${l.message}`),!(e.defaultPath&&l.code==="ENOENT"))throw l}}return {injected:R.populate(process.env,o,n),loadedPaths:t}}function J(e){let o=e[0];if(o==="--help"||o==="-h"){$();return}if(o!=="run"){$(),process.exitCode=1;return}let t=we(e.slice(1));if(t.help){$();return}if(t.error){console.error(`dotenv: ${t.error}`),$(),process.exitCode=1;return}if(t.command.length===0){$(),process.exitCode=1;return}let n=Ae(t);try{let c=be(n);if(!n.quiet){let a=`\u25C7 injected env (${Object.keys(c.injected).length})`;c.loadedPaths.length>0&&(a+=` from ${c.loadedPaths.join(", ")}`),console.error(a);}}catch(c){console.error(`dotenv: ${c.message}`),process.exitCode=1;return}let r=!!process.stdin.isTTY,s=process.platform!=="win32"&&!r,i=ve(t.command[0],t.command.slice(1),{stdio:"inherit",detached:s}),l=new Map,u=0;function p(c){if(!(!i.pid||i.exitCode!==null||i.signalCode!==null)){if(process.platform==="win32"){me.spawnSync("taskkill",["/pid",String(i.pid),"/T","/F"],{stdio:"ignore"});return}try{process.kill(s?-i.pid:i.pid,c);}catch(a){if(a.code!=="ESRCH")throw a}}}function f(){for(let[c,a]of l)process.removeListener(c,a);}for(let c of ["SIGINT","SIGTERM","SIGHUP","SIGQUIT"]){let a=()=>{if(c==="SIGINT"){if(u++,r&&process.platform!=="win32"&&u===1)return;if(u>1){p(u===2?"SIGTERM":"SIGKILL");return}}p(c);};l.set(c,a),process.on(c,a);}i.on("error",function(c){f(),console.error(`dotenv: ${c.message}`),process.exitCode=1;}),i.on("exit",function(c,a){f(),typeof c=="number"?process.exit(c):(setInterval(()=>{},1e3),process.kill(process.pid,a));});}F.exports=J;require.main===F&&J(process.argv.slice(2));});var D=N(),Oe=K();module.exports=D;module.exports.config=D.config;module.exports.configDotenv=D.configDotenv;module.exports.parse=D.parse;module.exports.populate=D.populate;require.main===module&&Oe(process.argv.slice(2)); 
+	} (dist$1));
+	return dist$1.exports;
 }
 
-var mainExports = requireMain();
+var distExports$1 = requireDist$1();
 
 var out = {};
 
@@ -44872,7 +44848,7 @@ function requireFollowRedirects () {
 	return followRedirects$1.exports;
 }
 
-/*! Axios v1.18.1 Copyright (c) 2026 Matt Zabriskie and contributors */
+/*! Axios v1.20.0 Copyright (c) 2026 Matt Zabriskie and contributors */
 
 var axios_1;
 var hasRequiredAxios;
@@ -44925,13 +44901,57 @@ function requireAxios () {
 	const hasOwnProperty = (({
 	  hasOwnProperty
 	}) => (obj, prop) => hasOwnProperty.call(obj, prop))(Object.prototype);
+	const isUnsafeObjectKey = prop => typeof prop === 'string' && (prop === '__proto__' || prop === 'constructor' || prop === 'prototype');
 
 	/**
-	 * Walk the prototype chain (excluding the shared Object.prototype) looking for
-	 * an own `prop`. This distinguishes genuine own/inherited members — including
-	 * class accessors and template prototypes — from members injected via
-	 * Object.prototype pollution (e.g. `Object.prototype.username = '...'`), which
-	 * live on Object.prototype itself and are therefore never matched.
+	 * Determine whether an inherited object must be treated as a shared-prototype
+	 * boundary. Cross-realm Object.prototype objects cannot be distinguished
+	 * reliably from application-created null-prototype objects because their
+	 * properties are mutable, so all inherited terminal prototypes are excluded
+	 * as a fail-closed boundary. A null-prototype source still keeps its own
+	 * properties, as produced by mergeConfig and other safe materialization paths.
+	 *
+	 * @param {*} obj The object to inspect
+	 * @param {*} prototype The object's prototype
+	 * @param {boolean} source Whether obj is the original traversal source
+	 *
+	 * @returns {boolean} True when obj is a safe prototype traversal boundary
+	 */
+	const isPrototypeBoundary = (obj, prototype, source) => obj === Object.prototype || !source && prototype === null;
+
+	/**
+	 * Determine whether an object can retain its identity through code paths that
+	 * add, replace, and remove config properties without bypassing unsafe-key
+	 * filtering. Immutable objects, unsafe-key-bearing objects, and objects with
+	 * accessor or restricted data properties must be materialized instead.
+	 *
+	 * @param {*} obj The object to inspect
+	 *
+	 * @returns {boolean} True when every own property is safe and fully mutable
+	 */
+	const isSafeAndFullyMutable = obj => {
+	  if (!Object.isExtensible(obj)) {
+	    return false;
+	  }
+	  const props = Object.getOwnPropertyNames(obj);
+	  if (Object.getOwnPropertySymbols) {
+	    props.push(...Object.getOwnPropertySymbols(obj));
+	  }
+	  return props.every(prop => {
+	    if (isUnsafeObjectKey(prop)) {
+	      return false;
+	    }
+	    const descriptor = Object.getOwnPropertyDescriptor(obj, prop);
+	    return !!descriptor && descriptor.configurable && descriptor.writable === true;
+	  });
+	};
+
+	/**
+	 * Walk the prototype chain (excluding the source realm's Object.prototype)
+	 * looking for an own `prop`. This distinguishes genuine own/inherited members
+	 * — including class accessors and template prototypes — from members injected
+	 * via Object.prototype pollution (e.g. `Object.prototype.username = '...'`),
+	 * which live on Object.prototype itself and are therefore never matched.
 	 *
 	 * @param {*} thing The value whose chain to inspect
 	 * @param {string|symbol} prop The property key to look for
@@ -44941,15 +44961,19 @@ function requireAxios () {
 	const hasOwnInPrototypeChain = (thing, prop) => {
 	  let obj = thing;
 	  const seen = [];
-	  while (obj != null && obj !== Object.prototype) {
+	  while (obj != null) {
 	    if (seen.indexOf(obj) !== -1) {
 	      return false;
 	    }
 	    seen.push(obj);
+	    const prototype = getPrototypeOf(obj);
+	    if (isPrototypeBoundary(obj, prototype, obj === thing)) {
+	      return false;
+	    }
 	    if (hasOwnProperty(obj, prop)) {
 	      return true;
 	    }
-	    obj = getPrototypeOf(obj);
+	    obj = prototype;
 	  }
 	  return false;
 	};
@@ -44966,6 +44990,56 @@ function requireAxios () {
 	 * @returns {*} The resolved value, or undefined when unsafe/absent
 	 */
 	const getSafeProp = (obj, prop) => obj != null && hasOwnInPrototypeChain(obj, prop) ? obj[prop] : undefined;
+
+	/**
+	 * Flatten an object and its application-defined prototype chain into a
+	 * null-prototype object. Members inherited only from the source realm's
+	 * Object.prototype are deliberately excluded, while class/template members
+	 * below that boundary are preserved.
+	 *
+	 * @param {*} thing The value to flatten
+	 *
+	 * @returns {*} A null-prototype copy, or the original value when it is already
+	 * structurally safe or is not an object
+	 */
+	const toSafeFlatObject = thing => {
+	  if (thing == null || typeof thing !== 'object' && typeof thing !== 'function') {
+	    return thing;
+	  }
+	  const sourcePrototype = getPrototypeOf(thing);
+	  if (sourcePrototype === null && isSafeAndFullyMutable(thing)) {
+	    return thing;
+	  }
+	  const result = Object.create(null);
+	  const merged = Object.create(null);
+	  const seen = [];
+	  let current = thing;
+	  while (current != null) {
+	    if (seen.indexOf(current) !== -1) {
+	      break;
+	    }
+	    seen.push(current);
+	    const prototype = current === thing ? sourcePrototype : getPrototypeOf(current);
+	    if (isPrototypeBoundary(current, prototype, current === thing)) {
+	      break;
+	    }
+	    const props = Object.getOwnPropertyNames(current);
+	    if (Object.getOwnPropertySymbols) {
+	      props.push(...Object.getOwnPropertySymbols(current));
+	    }
+	    for (const prop of props) {
+	      if (isUnsafeObjectKey(prop)) {
+	        continue;
+	      }
+	      if (!hasOwnProperty(merged, prop)) {
+	        result[prop] = thing[prop];
+	        merged[prop] = true;
+	      }
+	    }
+	    current = prototype;
+	  }
+	  return result;
+	};
 	const kindOf = (cache => thing => {
 	  const str = toString.call(thing);
 	  return cache[str] || (cache[str] = str.slice(8, -1).toLowerCase());
@@ -45089,9 +45163,9 @@ function requireAxios () {
 	  }
 	  const prototype = getPrototypeOf(val);
 	  return (prototype === null || prototype === Object.prototype || getPrototypeOf(prototype) === null) &&
-	  // Treat any genuine (non-Object.prototype-polluted) Symbol.toStringTag or
-	  // Symbol.iterator as evidence the value is a tagged/iterable type rather
-	  // than a plain object, while ignoring keys injected onto Object.prototype.
+	  // Treat safe own/inherited Symbol.toStringTag or Symbol.iterator members as
+	  // evidence the value is tagged/iterable, while ignoring members reachable
+	  // only through shared or terminal prototype boundaries.
 	  !hasOwnInPrototypeChain(val, toStringTag) && !hasOwnInPrototypeChain(val, iterator);
 	};
 
@@ -45175,6 +45249,7 @@ function requireAxios () {
 	 * @returns {boolean} True if value is a FileList, otherwise false
 	 */
 	const isFileList = kindOfTest('FileList');
+	const isSet = kindOfTest('Set');
 
 	/**
 	 * Determine if a value is a Stream
@@ -45697,11 +45772,20 @@ function requireAxios () {
 	      if (!('toJSON' in source)) {
 	        // add-on descent / delete-on-ascent: preserves path semantics, so DAG nodes serialise at every occurrence (see #7230).
 	        visited.add(source);
-	        const target = isArray(source) ? [] : {};
-	        forEach(source, (value, key) => {
-	          const reducedValue = visit(value);
-	          !isUndefined(reducedValue) && (target[key] = reducedValue);
-	        });
+	        let target;
+	        if (isSet(source)) {
+	          target = [];
+	          for (const value of source) {
+	            const reducedValue = visit(value);
+	            !isUndefined(reducedValue) && target.push(reducedValue);
+	          }
+	        } else {
+	          target = isArray(source) ? [] : {};
+	          forEach(source, (value, key) => {
+	            const reducedValue = visit(value);
+	            !isUndefined(reducedValue) && (target[key] = reducedValue);
+	          });
+	        }
 	        visited.delete(source);
 	        return target;
 	      }
@@ -45829,6 +45913,7 @@ function requireAxios () {
 	  // an alias to avoid ESLint no-prototype-builtins detection
 	  hasOwnInPrototypeChain,
 	  getSafeProp,
+	  toSafeFlatObject,
 	  reduceDescriptors,
 	  freezeMethods,
 	  toObjectSet,
@@ -45875,17 +45960,18 @@ function requireAxios () {
 	    i = line.indexOf(':');
 	    key = line.substring(0, i).trim().toLowerCase();
 	    val = line.substring(i + 1).trim();
-	    if (!key || parsed[key] && ignoreDuplicateOf[key]) {
+	    const hasKey = utils$1.hasOwnProp(parsed, key);
+	    if (!key || hasKey && utils$1.hasOwnProp(ignoreDuplicateOf, key)) {
 	      return;
 	    }
 	    if (key === 'set-cookie') {
-	      if (parsed[key]) {
+	      if (hasKey) {
 	        parsed[key].push(val);
 	      } else {
 	        parsed[key] = [val];
 	      }
 	    } else {
-	      parsed[key] = parsed[key] ? parsed[key] + ', ' + val : val;
+	      parsed[key] = hasKey ? parsed[key] + ', ' + val : val;
 	    }
 	  });
 	  return parsed;
@@ -45932,7 +46018,7 @@ function requireAxios () {
 	  return byteStringHeaders;
 	}
 
-	const $internals = Symbol('internals');
+	const $internals$1 = Symbol('internals');
 	function normalizeHeader(header) {
 	  return header && String(header).trim().toLowerCase();
 	}
@@ -45950,6 +46036,90 @@ function requireAxios () {
 	    tokens[match[1]] = match[2];
 	  }
 	  return tokens;
+	}
+	const parameterNameRE = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+	function trimOWS(value) {
+	  let start = 0;
+	  let end = value.length;
+	  while (start < end) {
+	    const code = value.charCodeAt(start);
+	    if (code !== 0x09 && code !== 0x20) {
+	      break;
+	    }
+	    start += 1;
+	  }
+	  while (end > start) {
+	    const code = value.charCodeAt(end - 1);
+	    if (code !== 0x09 && code !== 0x20) {
+	      break;
+	    }
+	    end -= 1;
+	  }
+	  return start === 0 && end === value.length ? value : value.slice(start, end);
+	}
+	function decodeQuotedString(value) {
+	  const last = value.length - 1;
+	  if (last < 1 || value.charCodeAt(0) !== 0x22 || value.charCodeAt(last) !== 0x22) {
+	    return value;
+	  }
+	  let decoded = '';
+	  for (let i = 1; i < last; i++) {
+	    const code = value.charCodeAt(i);
+	    if (code === 0x22) {
+	      return value;
+	    }
+	    if (code === 0x5c) {
+	      i += 1;
+	      if (i >= last) {
+	        return value;
+	      }
+	    }
+	    decoded += value[i];
+	  }
+	  return decoded;
+	}
+	function parseParameters(value) {
+	  const parameters = Object.create(null);
+	  const str = String(value);
+	  let start = 0;
+	  let quoted = false;
+	  let escaped = false;
+	  function parseParameter(end) {
+	    const part = trimOWS(str.slice(start, end));
+	    const equals = part.indexOf('=');
+	    if (equals < 1) {
+	      return;
+	    }
+	    const name = trimOWS(part.slice(0, equals));
+	    if (!parameterNameRE.test(name)) {
+	      return;
+	    }
+	    const normalizedName = name.toLowerCase();
+	    if (normalizedName === '__proto__' || normalizedName === 'constructor' || normalizedName === 'prototype') {
+	      return;
+	    }
+	    const parameterValue = trimOWS(part.slice(equals + 1));
+	    parameters[normalizedName] = decodeQuotedString(parameterValue);
+	  }
+	  for (let i = 0; i < str.length; i++) {
+	    const code = str.charCodeAt(i);
+	    if (quoted) {
+	      if (escaped) {
+	        escaped = false;
+	      } else if (code === 0x5c) {
+	        escaped = true;
+	      } else if (code === 0x22) {
+	        quoted = false;
+	      }
+	    } else if (code === 0x22) {
+	      quoted = true;
+	    } else if (code === 0x2c || code === 0x3b) {
+	      parseParameter(i);
+	      start = i + 1;
+	    }
+	  }
+	  parseParameter(str.length);
+	  return parameters;
 	}
 	const isValidHeaderName = str => /^[-_a-zA-Z0-9^`|~,!#$%&'*+.]+$/.test(str.trim());
 	function matchHeaderValue(context, value, header, filter, isHeaderNameFilter) {
@@ -46128,7 +46298,8 @@ function requireAxios () {
 	    return Object.entries(this.toJSON()).map(([header, value]) => header + ': ' + value).join('\n');
 	  }
 	  getSetCookie() {
-	    return this.get('set-cookie') || [];
+	    const value = this.get('set-cookie');
+	    return utils$1.isArray(value) ? value : value == null || value === false ? [] : [value];
 	  }
 	  get [Symbol.toStringTag]() {
 	    return 'AxiosHeaders';
@@ -46136,13 +46307,16 @@ function requireAxios () {
 	  static from(thing) {
 	    return thing instanceof this ? thing : new this(thing);
 	  }
+	  static parseParameters(value) {
+	    return parseParameters(value);
+	  }
 	  static concat(first, ...targets) {
 	    const computed = new this(first);
 	    targets.forEach(target => computed.set(target));
 	    return computed;
 	  }
 	  static accessor(header) {
-	    const internals = this[$internals] = this[$internals] = {
+	    const internals = this[$internals$1] = this[$internals$1] = {
 	      accessors: {}
 	    };
 	    const accessors = internals.accessors;
@@ -46230,9 +46404,33 @@ function requireAxios () {
 	  };
 	  return visit(config);
 	}
+	function stringifySafely$1(value) {
+	  try {
+	    return String(value);
+	  } catch (err) {
+	    return '';
+	  }
+	}
+	function aggregateErrorMessage(error) {
+	  const message = error.errors.map(entry => {
+	    try {
+	      return entry && entry.message ? stringifySafely$1(entry.message) : stringifySafely$1(entry);
+	    } catch (err) {
+	      return '';
+	    }
+	  }).filter(Boolean).join('; ');
+	  return message || error.name || 'AggregateError';
+	}
 	class AxiosError extends Error {
 	  static from(error, code, config, request, response, customProps) {
-	    const axiosError = new AxiosError(error.message, code || error.code, config, request, response);
+	    // `AggregateError` (thrown by Node on dual-stack/Happy-Eyeballs connection
+	    // failures) has an empty `message`; its detail lives in `errors[]`. Without
+	    // this, the wrapped error surfaces with a blank message (see #6721).
+	    let message = error.message;
+	    if (!message && utils$1.isArray(error.errors) && error.errors.length) {
+	      message = aggregateErrorMessage(error);
+	    }
+	    const axiosError = new AxiosError(message, code || error.code, config, request, response);
 	    // Match native `Error` `cause` semantics: non-enumerable. The wrapped
 	    // error often carries circular internals (sockets, requests, agents), so
 	    // an enumerable `cause` makes structured loggers (pino/winston) and any
@@ -46336,6 +46534,15 @@ function requireAxios () {
 	AxiosError.ERR_INVALID_URL = 'ERR_INVALID_URL';
 	AxiosError.ERR_FORM_DATA_DEPTH_EXCEEDED = 'ERR_FORM_DATA_DEPTH_EXCEEDED';
 
+	var PlatformBuffer = {
+	  isBufferAvailable() {
+	    return typeof Buffer !== 'undefined';
+	  },
+	  from(value) {
+	    return Buffer.from(value);
+	  }
+	};
+
 	// Default nesting limit shared with the inverse transform (formDataToJSON) so
 	// the FormData <-> JSON round-trip stays symmetric.
 	const DEFAULT_FORM_DATA_MAX_DEPTH = 100;
@@ -46424,23 +46631,17 @@ function requireAxios () {
 
 	  // eslint-disable-next-line no-param-reassign
 	  formData = formData || new (FormData$1 || FormData)();
-
-	  // eslint-disable-next-line no-param-reassign
-	  options = utils$1.toFlatObject(options, {
-	    metaTokens: true,
-	    dots: false,
-	    indexes: false
-	  }, false, function defined(option, source) {
-	    // eslint-disable-next-line no-eq-null,eqeqeq
-	    return !utils$1.isUndefined(source[option]);
-	  });
-	  const metaTokens = options.metaTokens;
+	  const option = (name, fallback) => {
+	    const value = utils$1.getSafeProp(options, name);
+	    return utils$1.isUndefined(value) ? fallback : value;
+	  };
+	  const metaTokens = option('metaTokens', true);
 	  // eslint-disable-next-line no-use-before-define
-	  const visitor = options.visitor || defaultVisitor;
-	  const dots = options.dots;
-	  const indexes = options.indexes;
-	  const _Blob = options.Blob || typeof Blob !== 'undefined' && Blob;
-	  const maxDepth = options.maxDepth === undefined ? DEFAULT_FORM_DATA_MAX_DEPTH : options.maxDepth;
+	  const visitor = option('visitor') || defaultVisitor;
+	  const dots = option('dots', false);
+	  const indexes = option('indexes', false);
+	  const _Blob = option('Blob') || typeof Blob !== 'undefined' && Blob;
+	  const maxDepth = option('maxDepth', DEFAULT_FORM_DATA_MAX_DEPTH);
 	  const useBlob = _Blob && utils$1.isSpecCompliantForm(formData);
 	  const stack = [];
 	  if (!utils$1.isFunction(visitor)) {
@@ -46461,8 +46662,8 @@ function requireAxios () {
 	      if (useBlob && typeof _Blob === 'function') {
 	        return new _Blob([value]);
 	      }
-	      if (typeof Buffer !== 'undefined') {
-	        return Buffer.from(value);
+	      if (PlatformBuffer && PlatformBuffer.isBufferAvailable()) {
+	        return PlatformBuffer.from(value);
 	      }
 	      throw new AxiosError('Blob is not supported. Use a Buffer instead.', AxiosError.ERR_NOT_SUPPORT);
 	    }
@@ -46653,9 +46854,51 @@ function requireAxios () {
 	  return url;
 	}
 
+	const $internals = Symbol('internals');
+
+	// `handlers` is public and may be replaced with a nullish value by user code;
+	// `clear()` has always tolerated that. Treat it as an empty stack rather than
+	// dereferencing it.
+	function countHandlers(handlers) {
+	  return handlers ? handlers.length : 0;
+	}
+	function trimHandlers(handlers) {
+	  if (!handlers) {
+	    return;
+	  }
+	  while (handlers.length && handlers[handlers.length - 1] === null) {
+	    handlers.pop();
+	  }
+	}
+	function syncHandlerEntries(manager, internals) {
+	  const handlers = manager.handlers;
+	  const length = countHandlers(handlers);
+	  if (handlers !== internals.handlersRef) {
+	    internals.handlersRef = handlers;
+	    internals.handlerEntries.clear();
+	  } else if (length !== internals.handlersLength) {
+	    if (!length) {
+	      internals.handlerEntries.clear();
+	    } else {
+	      internals.handlerEntries.forEach(function removeStaleEntry(entry, id) {
+	        if (handlers[entry.index] !== entry.handler) {
+	          internals.handlerEntries.delete(id);
+	        }
+	      });
+	    }
+	  }
+	  internals.handlersLength = length;
+	}
 	class InterceptorManager {
 	  constructor() {
 	    this.handlers = [];
+	    this[$internals] = {
+	      handlersRef: this.handlers,
+	      handlersLength: this.handlers.length,
+	      handlerEntries: new Map(),
+	      iterationDepth: 0,
+	      nextId: 0
+	    };
 	  }
 
 	  /**
@@ -46668,13 +46911,25 @@ function requireAxios () {
 	   * @return {Number} An ID used to remove interceptor later
 	   */
 	  use(fulfilled, rejected, options) {
-	    this.handlers.push({
+	    const handler = {
 	      fulfilled,
 	      rejected,
 	      synchronous: options ? options.synchronous : false,
 	      runWhen: options ? options.runWhen : null
+	    };
+	    const internals = this[$internals];
+	    if (this.handlers == null) {
+	      this.handlers = [];
+	    }
+	    syncHandlerEntries(this, internals);
+	    const id = internals.nextId++;
+	    this.handlers.push(handler);
+	    internals.handlerEntries.set(id, {
+	      handler,
+	      index: this.handlers.length - 1
 	    });
-	    return this.handlers.length - 1;
+	    internals.handlersLength = this.handlers.length;
+	    return id;
 	  }
 
 	  /**
@@ -46685,8 +46940,23 @@ function requireAxios () {
 	   * @returns {void}
 	   */
 	  eject(id) {
-	    if (this.handlers[id]) {
-	      this.handlers[id] = null;
+	    const internals = this[$internals];
+	    syncHandlerEntries(this, internals);
+	    const entry = internals.handlerEntries.get(id);
+	    if (entry) {
+	      internals.handlerEntries.delete(id);
+
+	      // Ignore IDs invalidated by clear or direct replacement of handlers.
+	      if (this.handlers[entry.index] !== entry.handler) {
+	        return;
+	      }
+	      this.handlers[entry.index] = null;
+
+	      // Do not reuse an index while forEach is walking its length snapshot.
+	      if (!internals.iterationDepth) {
+	        trimHandlers(this.handlers);
+	        internals.handlersLength = this.handlers.length;
+	      }
 	    }
 	  }
 
@@ -46698,6 +46968,7 @@ function requireAxios () {
 	  clear() {
 	    if (this.handlers) {
 	      this.handlers = [];
+	      syncHandlerEntries(this, this[$internals]);
 	    }
 	  }
 
@@ -46712,11 +46983,22 @@ function requireAxios () {
 	   * @returns {void}
 	   */
 	  forEach(fn) {
-	    utils$1.forEach(this.handlers, function forEachHandler(h) {
-	      if (h !== null) {
-	        fn(h);
+	    const internals = this[$internals];
+	    syncHandlerEntries(this, internals);
+	    internals.iterationDepth++;
+	    try {
+	      utils$1.forEach(this.handlers, function forEachHandler(h) {
+	        if (h !== null) {
+	          fn(h);
+	        }
+	      });
+	    } finally {
+	      if (! --internals.iterationDepth) {
+	        syncHandlerEntries(this, internals);
+	        trimHandlers(this.handlers);
+	        internals.handlersLength = countHandlers(this.handlers);
 	      }
-	    });
+	    }
 	  }
 	}
 
@@ -46842,12 +47124,18 @@ function requireAxios () {
 	 * @returns An array of strings.
 	 */
 	function parsePropPath(name) {
-	  // foo[x][y][z]
-	  // foo.x.y.z
-	  // foo-x-y-z
-	  // foo x y z
+	  // foo[x][y][z] -> ['foo', 'x', 'y', 'z']
+	  // foo.x.y.z    -> ['foo', 'x', 'y', 'z']
+	  // A path is split on `.` and on `[...]` groups. A segment — whether written
+	  // in dot notation or captured inside brackets — may contain any character
+	  // except `.`, `[` and `]`, so a key like `user-name` or `user name` is kept
+	  // literal instead of being split (#5402). `.`, `[` and `]` keep their existing
+	  // meaning, e.g. `foo[bar.baz]` -> ['foo', 'bar', 'baz'] and `[]` is an array push.
+	  // Excluding `[` from the bracket group also makes the match fail fast at the
+	  // next `[`, so a malformed name cannot rescan to the end of the string from
+	  // every unmatched `[` — parsing stays linear in the length of the name.
 	  const path = [];
-	  const pattern = /\w+|\[(\w*)]/g;
+	  const pattern = /[^.[\]]+|\[([^.[\]]*)]/g;
 	  let match;
 	  while ((match = pattern.exec(name)) !== null) {
 	    throwIfDepthExceeded(path.length);
@@ -46917,6 +47205,8 @@ function requireAxios () {
 	  }
 	  return null;
 	}
+
+	const methodList = Object.freeze(['get', 'delete', 'head', 'options', 'post', 'put', 'patch', 'purge', 'link', 'unlink', 'query']);
 
 	const own = (obj, key) => obj != null && utils$1.hasOwnProp(obj, key) ? obj[key] : undefined;
 
@@ -47034,7 +47324,7 @@ function requireAxios () {
 	    }
 	  }
 	};
-	utils$1.forEach(['delete', 'get', 'head', 'post', 'put', 'patch', 'query'], method => {
+	utils$1.forEach(methodList, method => {
 	  defaults.headers[method] = {};
 	});
 
@@ -47123,24 +47413,70 @@ function requireAxios () {
 	 * @returns {string} The combined URL
 	 */
 	function combineURLs(baseURL, relativeURL) {
-	  return relativeURL ? baseURL.replace(/\/?\/$/, '') + '/' + relativeURL.replace(/^\/+/, '') : baseURL;
+	  if (!relativeURL) {
+	    return baseURL;
+	  }
+	  let end = baseURL.length;
+	  while (end > 0 && baseURL.charCodeAt(end - 1) === 47) {
+	    end--;
+	  }
+	  return baseURL.slice(0, end) + '/' + relativeURL.replace(/^\/+/, '');
+	}
+
+	const urlParserControlCharacters = /[\t\n\r]/g;
+
+	/**
+	 * Match WHATWG URL preprocessing before checking a URL's protocol.
+	 *
+	 * @param {string} url
+	 *
+	 * @returns {string}
+	 */
+	function normalizeURLForProtocolCheck(url) {
+	  if (typeof url !== 'string') {
+	    return url;
+	  }
+	  let start = 0;
+	  while (start < url.length && url.charCodeAt(start) <= 0x20) {
+	    start++;
+	  }
+	  return url.slice(start).replace(urlParserControlCharacters, '');
 	}
 
 	const malformedHttpProtocol = /^https?:(?!\/\/)/i;
-	const httpProtocolControlCharacters = /[\t\n\r]/g;
-	function stripLeadingC0ControlOrSpace(url) {
-	  let i = 0;
-	  while (i < url.length && url.charCodeAt(i) <= 0x20) {
-	    i++;
+
+	// Redact the parts of a URL that can carry secrets before it is embedded in an
+	// error message. AxiosError.toJSON() serializes `message` verbatim and errors
+	// are commonly logged, while the opt-in `config.redact` model only cleans
+	// config keys — it cannot reach the message. Redact only the genuinely
+	// sensitive substrings — userinfo (credentials), query parameter values and
+	// fragment contents — with the same REDACTED marker the config redaction uses,
+	// while keeping the scheme, host, path and parameter names so the offending
+	// request stays accurately identifiable.
+	function redactFragment(fragment) {
+	  if (!fragment) {
+	    return fragment;
 	  }
-	  return url.slice(i);
+	  return fragment.replace(/(^|&)([^=&]*=)?[^&]+/g, (match, separator, parameterName = '') => {
+	    return `${separator}${parameterName}${REDACTED}`;
+	  });
 	}
-	function normalizeURLForProtocolCheck(url) {
-	  return stripLeadingC0ControlOrSpace(url).replace(httpProtocolControlCharacters, '');
+	function redactSensitiveURLParts(url) {
+	  const redactedURL = url.replace(/^(https?:\/{0,2})[^/?#]*@/i, `$1${REDACTED}@`);
+	  const fragmentIndex = redactedURL.indexOf('#');
+	  const urlWithoutFragment = fragmentIndex === -1 ? redactedURL : redactedURL.slice(0, fragmentIndex);
+	  const redactedURLWithoutFragment = urlWithoutFragment.replace(/([?&][^=&#]*=)[^&#]*/g, `$1${REDACTED}`);
+	  if (fragmentIndex === -1) {
+	    return redactedURLWithoutFragment;
+	  }
+	  return `${redactedURLWithoutFragment}#${redactFragment(redactedURL.slice(fragmentIndex + 1))}`;
 	}
 	function assertValidHttpProtocolURL(url, config) {
-	  if (typeof url === 'string' && malformedHttpProtocol.test(normalizeURLForProtocolCheck(url))) {
-	    throw new AxiosError('Invalid URL: missing "//" after protocol', AxiosError.ERR_INVALID_URL, config);
+	  if (typeof url === 'string') {
+	    const normalizedURL = normalizeURLForProtocolCheck(url);
+	    if (malformedHttpProtocol.test(normalizedURL)) {
+	      throw new AxiosError(`Invalid URL ${JSON.stringify(redactSensitiveURLParts(normalizedURL))}: missing "//" after protocol`, AxiosError.ERR_INVALID_URL, config);
+	    }
 	  }
 	}
 
@@ -47260,7 +47596,7 @@ function requireAxios () {
 	  return process.env[key.toLowerCase()] || process.env[key.toUpperCase()] || '';
 	}
 
-	const VERSION = "1.18.1";
+	const VERSION = "1.20.0";
 
 	function parseProtocol(url) {
 	  const match = /^([-+\w]{1,25}):(?:\/\/)?/.exec(url);
@@ -47269,7 +47605,7 @@ function requireAxios () {
 
 	// RFC 2397: data:[<mediatype>][;base64],<data>
 	// mediatype = type/subtype followed by optional ;name=value parameters
-	const DATA_URL_PATTERN = /^([^,;]+\/[^,;]+)?((?:;[^,;=]+=[^,;]+)*)(;base64)?,([\s\S]*)$/;
+	const DATA_URL_PATTERN = /^([^,;/]+\/[^,;/]+)?((?:;[^,;=]+=[^,;]+)*)(;base64)?,([\s\S]*)$/;
 
 	/**
 	 * Parse data uri to a Buffer or Blob
@@ -47318,6 +47654,31 @@ function requireAxios () {
 	    return buffer;
 	  }
 	  throw new AxiosError('Unsupported protocol ' + protocol, AxiosError.ERR_NOT_SUPPORT);
+	}
+
+	const FORM_DATA_CONTENT_HEADERS = ['content-type', 'content-length'];
+
+	/**
+	 * Apply the headers generated by a FormData implementation to the request headers,
+	 * honoring the `formDataHeaderPolicy` option: with 'content-only', copy only the
+	 * content-* headers; otherwise merge all of them.
+	 *
+	 * @param {AxiosHeaders} headers - the request headers to mutate
+	 * @param {Object | null | undefined} formHeaders - headers produced by the FormData implementation
+	 * @param {String} [policy] - the resolved `formDataHeaderPolicy` config value
+	 *
+	 * @returns {void}
+	 */
+	function setFormDataHeaders(headers, formHeaders, policy) {
+	  if (policy !== 'content-only') {
+	    headers.set(formHeaders);
+	    return;
+	  }
+	  Object.entries(formHeaders || {}).forEach(([key, val]) => {
+	    if (FORM_DATA_CONTENT_HEADERS.includes(key.toLowerCase())) {
+	      headers.set(key, val);
+	    }
+	  });
 	}
 
 	const kInternals = Symbol('internals');
@@ -47557,7 +47918,7 @@ function requireAxios () {
 	    this.sessions = Object.create(null);
 	  }
 	  getSession(authority, options) {
-	    options = Object.assign({
+	    options = Object.assign(Object.create(null), {
 	      sessionTimeout: 1000
 	    }, options);
 	    let authoritySessions = this.sessions[authority];
@@ -47624,6 +47985,7 @@ function requireAxios () {
 	      };
 	    }
 	    session.once('close', removeSession);
+	    session.once('error', removeSession);
 	    let entry = [session, options];
 	    authoritySessions ? authoritySessions.push(entry) : authoritySessions = this.sessions[authority] = [entry];
 	    return session;
@@ -47644,11 +48006,116 @@ function requireAxios () {
 	};
 
 	const LOOPBACK_HOSTNAMES = new Set(['localhost', '0.0.0.0']);
+	const trimTrailingDots = value => {
+	  let end = value.length;
+	  while (end && value.charCodeAt(end - 1) === 46) {
+	    end--;
+	  }
+	  return end === value.length ? value : value.slice(0, end);
+	};
 	const isIPv4Loopback = host => {
 	  const parts = host.split('.');
 	  if (parts.length !== 4) return false;
 	  if (parts[0] !== '127') return false;
 	  return parts.every(p => /^\d+$/.test(p) && Number(p) >= 0 && Number(p) <= 255);
+	};
+
+	/**
+	 * Canonicalize an IPv4 address written in shorthand, octal, or hex form into
+	 * dotted-decimal. IPv6 addresses and non-IP strings are returned unchanged so
+	 * the existing IPv4-mapped IPv6 unmap path and the isLoopback path can still
+	 * see them.
+	 *
+	 * Shorthand expansion mirrors Node's URL parser: literal parts fill from the
+	 * left, the final part fills the remaining octets from the right with
+	 * zero-padding on the left.
+	 *   127.1     -> 127.0.0.1
+	 *   127.0.1   -> 127.0.0.1
+	 *   1.2.3     -> 1.2.0.3
+	 *
+	 * Each octet is parsed with an explicit base: 16 for `0x`/`0X` prefix, 8 for
+	 * zero-prefixed multi-digit all-`0-7` parts, 10 otherwise. Zero-prefixed
+	 * decimal-looking parts that contain `8` or `9` are rejected to match Node's
+	 * URL parser, and the comparison layer falls through to non-bypass if either
+	 * side rejects the form (fail-safe).
+	 *
+	 * Returns the input unchanged on any parse failure, out-of-range octet, or
+	 * unusual shape (1-part, 5+ parts) so the comparison layer fails closed.
+	 */
+	const parseIPv4Octet = text => {
+	  if (/^0[xX][0-9a-fA-F]+$/.test(text)) {
+	    const n = parseInt(text.slice(2), 16);
+	    return Number.isFinite(n) ? n : null;
+	  }
+	  if (text.length > 1 && /^0[0-7]+$/.test(text)) {
+	    const n = parseInt(text, 8);
+	    return Number.isFinite(n) ? n : null;
+	  }
+	  if (text.length > 1 && /^0[0-9]+$/.test(text)) {
+	    return null;
+	  }
+	  if (/^[0-9]+$/.test(text)) {
+	    const n = parseInt(text, 10);
+	    return Number.isFinite(n) ? n : null;
+	  }
+	  return null;
+	};
+	const normalizeIPAddress = host => {
+	  if (typeof host !== 'string' || !host || host.indexOf(':') !== -1) {
+	    return host;
+	  }
+	  let h = host;
+	  if (h.charAt(0) === '[' && h.charAt(h.length - 1) === ']') {
+	    h = h.slice(1, -1);
+	  }
+	  h = trimTrailingDots(h);
+
+	  // Allowed characters for any IPv4 shape: digits, dot, 'x', 'X', hex digits.
+	  if (!/^[0-9.xXa-fA-F]+$/.test(h)) return host;
+	  const parts = h.split('.');
+
+	  // No part may be empty (e.g. "127..0.1" or "127.0.0."). Trailing dots are
+	  // already stripped above; this guards against the empty-middle case.
+	  if (parts.some(p => p === '')) return host;
+	  if (parts.length === 4) {
+	    // Full IPv4 form: each part is an octet.
+	    const octets = parts.map(parseIPv4Octet);
+	    if (octets.some(n => n === null || n < 0 || n > 255)) return host;
+	    return octets.join('.');
+	  }
+	  if (parts.length > 4) {
+	    return host;
+	  }
+
+	  // Shorthand: 1..3 parts. Node's URL parser treats a 1-part input as a 32-bit
+	  // integer split into octets, which has surprising semantics (e.g. "127" ->
+	  // "0.0.0.127"). Reject 1-part inputs to keep the helper predictable: the
+	  // fail-safe returns the input unchanged and the comparison layer falls
+	  // through to non-bypass.
+	  if (parts.length === 1) return host;
+
+	  // 2..3 parts: literal parts fill from the left, tail fills remaining octets
+	  // from the right with zero-padding.
+	  const literalOctets = parts.slice(0, -1);
+	  const tail = parts[parts.length - 1];
+	  const tailSlots = 4 - literalOctets.length;
+
+	  // Tail is parsed as a full IPv4 number (hex/octal/decimal) and packed
+	  // low-byte-right into the remaining octets, matching Node's URL parser.
+	  // e.g. 127.65535 (tail 0xFFFF into 3 slots) -> 127.0.255.255;
+	  //      127.0x00ff (tail 0xFF into 3 slots) -> 127.0.0.255;
+	  //      127.0.65535 (tail 0xFFFF into 2 slots) -> 127.0.255.255.
+	  const tailValue = parseIPv4Octet(tail);
+	  if (tailValue === null) return host;
+	  const maxTail = (1 << 8 * tailSlots) - 1;
+	  if (tailValue < 0 || tailValue > maxTail) return host;
+	  const tailOctets = new Array(tailSlots).fill(0);
+	  for (let i = tailSlots - 1, v = tailValue; i >= 0; i--, v >>= 8) {
+	    tailOctets[i] = v & 0xff;
+	  }
+	  const literal = literalOctets.map(parseIPv4Octet);
+	  if (literal.some(n => n === null || n < 0 || n > 255)) return host;
+	  return [...literal, ...tailOctets].join('.');
 	};
 	const isIPv6ZeroGroup = group => /^0{1,4}$/.test(group);
 
@@ -47756,6 +48223,40 @@ function requireAxios () {
 	  }
 	  return host;
 	};
+	const IPV4_OCTET_RE = /^(?:0|[1-9]\d{0,2})$/;
+	const ipv4ToBytes = host => {
+	  const parts = host.split('.');
+	  return parts.length === 4 && parts.every(part => IPV4_OCTET_RE.test(part) && Number(part) <= 255) ? parts.map(Number) : null;
+	};
+	const IPV6_GROUP_RE = /^[0-9a-f]{1,4}$/i;
+	const ipv6ToBytes = host => {
+	  const halves = host.split('::');
+	  if (halves.length > 2) {
+	    return null;
+	  }
+	  const groups = halves[0] ? halves[0].split(':') : [];
+	  if (halves.length === 2) {
+	    const rear = halves[1] ? halves[1].split(':') : [];
+	    const missing = 8 - groups.length - rear.length;
+	    if (missing < 1) {
+	      return null;
+	    }
+	    groups.push(...new Array(missing).fill('0'), ...rear);
+	  }
+	  if (groups.length !== 8 || groups.some(group => !IPV6_GROUP_RE.test(group))) {
+	    return null;
+	  }
+	  return groups.flatMap(group => {
+	    const value = Number.parseInt(group, 16);
+	    return [value >> 8 & 0xff, value & 0xff];
+	  });
+	};
+	const ipToBytes = host => {
+	  if (typeof host !== 'string' || !host) {
+	    return null;
+	  }
+	  return host.indexOf(':') !== -1 ? ipv6ToBytes(host) : ipv4ToBytes(host);
+	};
 	const normalizeNoProxyHost = hostname => {
 	  if (!hostname) {
 	    return hostname;
@@ -47763,7 +48264,101 @@ function requireAxios () {
 	  if (hostname.charAt(0) === '[' && hostname.charAt(hostname.length - 1) === ']') {
 	    hostname = hostname.slice(1, -1);
 	  }
-	  return unmapIPv4MappedIPv6(hostname.replace(/\.+$/, ''));
+	  const trimmed = trimTrailingDots(hostname);
+
+	  // IPv4 shorthand/octal/hex → dotted-decimal; helper is a no-op for inputs
+	  // containing ':' (IPv6 and IPv4-mapped IPv6) so we fall through to unmap.
+	  const ipv4 = normalizeIPAddress(trimmed);
+	  if (ipv4 !== trimmed) {
+	    return ipv4;
+	  }
+	  return unmapIPv4MappedIPv6(trimmed);
+	};
+	const normalizeCidrBase = input => {
+	  let base = input;
+	  const startsBracket = base.charAt(0) === '[';
+	  const endsBracket = base.charAt(base.length - 1) === ']';
+	  const hasBracket = base.includes('[') || base.includes(']');
+	  if (startsBracket || endsBracket) {
+	    if (!startsBracket || !endsBracket) {
+	      return null;
+	    }
+	    base = base.slice(1, -1);
+	    if (base.indexOf(':') === -1 || base.includes('[') || base.includes(']')) {
+	      return null;
+	    }
+	  } else if (hasBracket) {
+	    return null;
+	  }
+	  if (!base || base.charAt(base.length - 1) === '.') {
+	    return null;
+	  }
+	  const wasIPv6 = base.indexOf(':') !== -1;
+	  if (wasIPv6) {
+	    try {
+	      base = new URL(`http://[${base}]/`).hostname.slice(1, -1);
+	    } catch (_err) {
+	      return null;
+	    }
+	  } else {
+	    base = normalizeIPAddress(base);
+	    if (!ipv4ToBytes(base)) {
+	      return null;
+	    }
+	  }
+	  return {
+	    normalized: unmapIPv4MappedIPv6(base),
+	    wasIPv6
+	  };
+	};
+	const CIDR_ENTRY_RE = /^(.+)\/(0|[1-9]\d{0,2})$/;
+	const parseCidrEntry = entry => {
+	  if (entry.indexOf('/') === -1) {
+	    return undefined;
+	  }
+	  const match = CIDR_ENTRY_RE.exec(entry);
+	  if (!match) {
+	    return null;
+	  }
+	  let prefix = Number(match[2]);
+	  const parsedBase = normalizeCidrBase(match[1]);
+	  if (!parsedBase) {
+	    return null;
+	  }
+	  const {
+	    normalized,
+	    wasIPv6
+	  } = parsedBase;
+	  if (wasIPv6 && normalized.indexOf(':') === -1) {
+	    if (prefix < 96) {
+	      return null;
+	    }
+	    prefix -= 96;
+	  }
+	  const bytes = ipToBytes(normalized);
+	  if (!bytes || prefix > bytes.length * 8) {
+	    return null;
+	  }
+	  return {
+	    bytes,
+	    prefix
+	  };
+	};
+	const isInSubnet = (addressBytes, networkBytes, prefix) => {
+	  const fullBytes = prefix >> 3;
+	  for (let i = 0; i < fullBytes; i++) {
+	    if (addressBytes[i] !== networkBytes[i]) {
+	      return false;
+	    }
+	  }
+	  const remainingBits = prefix & 7;
+	  if (remainingBits) {
+	    const mask = 0xff << 8 - remainingBits & 0xff;
+	    if ((addressBytes[fullBytes] & mask) !== (networkBytes[fullBytes] & mask)) {
+	      return false;
+	    }
+	  }
+	  return true;
 	};
 	function shouldBypassProxy(location) {
 	  let parsed;
@@ -47781,9 +48376,17 @@ function requireAxios () {
 	  }
 	  const port = Number.parseInt(parsed.port, 10) || DEFAULT_PORTS[parsed.protocol.split(':', 1)[0]] || 0;
 	  const hostname = normalizeNoProxyHost(parsed.hostname.toLowerCase());
+	  const hostnameBytes = ipToBytes(hostname);
 	  return noProxy.split(/[\s,]+/).some(entry => {
 	    if (!entry) {
 	      return false;
+	    }
+	    if (entry === '*') {
+	      return true;
+	    }
+	    const cidr = parseCidrEntry(entry);
+	    if (cidr !== undefined) {
+	      return cidr !== null && !!hostnameBytes && hostnameBytes.length === cidr.bytes.length && isInSubnet(hostnameBytes, cidr.bytes, cidr.prefix);
 	    }
 	    let [entryHost, entryPort] = parseNoProxyEntry(entry);
 	    entryHost = normalizeNoProxyHost(entryHost);
@@ -47847,7 +48450,7 @@ function requireAxios () {
 	 * Throttle decorator
 	 * @param {Function} fn
 	 * @param {Number} freq
-	 * @return {Function}
+	 * @return {Array<Function>}
 	 */
 	function throttle(fn, freq) {
 	  let timestamp = 0;
@@ -47879,19 +48482,20 @@ function requireAxios () {
 	    }
 	  };
 	  const flush = () => lastArgs && invoke(lastArgs);
-	  return [throttled, flush];
+	  const flushWith = (...args) => invoke(args);
+	  return [throttled, flush, flushWith];
 	}
 
 	const progressEventReducer = (listener, isDownloadStream, freq = 3) => {
 	  let bytesNotified = 0;
 	  const _speedometer = speedometer(50, 250);
 	  return throttle(e => {
-	    if (!e || typeof e.loaded !== 'number') {
+	    if (!e || !utils$1.isNumber(e.loaded)) {
 	      return;
 	    }
 	    const rawLoaded = e.loaded;
 	    const total = e.lengthComputable ? e.total : undefined;
-	    const loaded = total != null ? Math.min(rawLoaded, total) : rawLoaded;
+	    const loaded = Math.max(0, total != null ? Math.min(rawLoaded, total) : rawLoaded);
 	    const progressBytes = Math.max(0, loaded - bytesNotified);
 	    const rate = _speedometer(progressBytes);
 	    bytesNotified = Math.max(bytesNotified, loaded);
@@ -47917,20 +48521,85 @@ function requireAxios () {
 	    loaded
 	  }), throttled[1]];
 	};
-	const asyncDecorator = fn => (...args) => utils$1.asap(() => fn(...args));
+	const asyncDecorator = (fn, scheduler = utils$1.asap) => (...args) => scheduler(() => fn(...args));
 
 	/**
-	 * Estimate decoded byte length of a data:// URL *without* allocating large buffers.
-	 * - For base64: compute exact decoded size using length and padding;
-	 *               handle %XX at the character-count level (no string allocation).
-	 * - For non-base64: compute the exact percent-decoded UTF-8 byte length.
-	 *
-	 * @param {string} url
-	 * @returns {number}
+	 * Estimate data: URL byte lengths *without* allocating large buffers.
+	 * - Fetch percent-decodes a base64 body before decoding it.
+	 * - Node's Buffer.from(body, 'base64') sizes its backing allocation from the
+	 *   raw body, including ignored characters and content after padding.
+	 * - Non-base64 data is percent-decoded and then encoded as UTF-8.
 	 */
 	const isHexDigit = charCode => charCode >= 48 && charCode <= 57 || charCode >= 65 && charCode <= 70 || charCode >= 97 && charCode <= 102;
 	const isPercentEncodedByte = (str, i, len) => i + 2 < len && isHexDigit(str.charCodeAt(i + 1)) && isHexDigit(str.charCodeAt(i + 2));
-	function estimateDataURLDecodedBytes(url) {
+	const hexValue = charCode => charCode <= 57 ? charCode - 48 : (charCode & 0xdf) - 55;
+	const isBase64Char = charCode => charCode >= 65 && charCode <= 90 ||
+	// A-Z
+	charCode >= 97 && charCode <= 122 ||
+	// a-z
+	charCode >= 48 && charCode <= 57 ||
+	// 0-9
+	charCode === 43 ||
+	// +
+	charCode === 47 ||
+	// /
+	charCode === 45 ||
+	// - (base64url)
+	charCode === 95; // _ (base64url)
+
+	const isBase64Whitespace = charCode => charCode === 9 || charCode === 10 || charCode === 12 || charCode === 13 || charCode === 32;
+	const base64Bytes = significant => {
+	  const groups = Math.floor(significant / 4);
+	  const remainder = significant % 4;
+	  return groups * 3 + (remainder === 2 ? 1 : remainder === 3 ? 2 : 0);
+	};
+
+	// Buffer.byteLength(body, 'base64') uses the raw string length as an allocation
+	// upper bound even when Buffer.from later ignores characters or stops at '='.
+	const estimateBase64BufferAllocation = body => {
+	  const len = body.length;
+	  let padding = 0;
+	  if (len > 0 && body.charCodeAt(len - 1) === 61 /* '=' */) {
+	    padding++;
+	    if (len > 1 && body.charCodeAt(len - 2) === 61 /* '=' */) {
+	      padding++;
+	    }
+	  }
+	  return Math.floor((len - padding) * 3 / 4);
+	};
+	const estimatePercentDecodedBase64Bytes = body => {
+	  const len = body.length;
+	  let significant = 0;
+	  let padding = 0;
+	  let invalid = false;
+	  for (let i = 0; i < len; i++) {
+	    let code = body.charCodeAt(i);
+	    if (code === 37 /* '%' */ && isPercentEncodedByte(body, i, len)) {
+	      code = hexValue(body.charCodeAt(i + 1)) * 16 + hexValue(body.charCodeAt(i + 2));
+	      i += 2;
+	    }
+	    if (isBase64Whitespace(code)) {
+	      continue;
+	    }
+	    if (code === 61 /* '=' */) {
+	      padding++;
+	      continue;
+	    }
+	    if (!isBase64Char(code) || padding > 0) {
+	      invalid = true;
+	      continue;
+	    }
+	    significant++;
+	  }
+
+	  // Fetch rejects malformed forgiving-base64 input. Returning the raw-size
+	  // allocation bound keeps that invalid input from becoming a pre-check bypass.
+	  if (invalid || padding > 2 || padding > 0 && (significant + padding) % 4 !== 0 || significant % 4 === 1) {
+	    return estimateBase64BufferAllocation(body);
+	  }
+	  return base64Bytes(significant);
+	};
+	const estimateDataURLBytes = (url, estimateBase64) => {
 	  if (!url || typeof url !== 'string') return 0;
 	  if (!url.startsWith('data:')) return 0;
 	  const comma = url.indexOf(',');
@@ -47939,47 +48608,7 @@ function requireAxios () {
 	  const body = url.slice(comma + 1);
 	  const isBase64 = /;base64/i.test(meta);
 	  if (isBase64) {
-	    let effectiveLen = body.length;
-	    const len = body.length; // cache length
-
-	    for (let i = 0; i < len; i++) {
-	      if (body.charCodeAt(i) === 37 /* '%' */ && i + 2 < len) {
-	        const a = body.charCodeAt(i + 1);
-	        const b = body.charCodeAt(i + 2);
-	        const isHex = isHexDigit(a) && isHexDigit(b);
-	        if (isHex) {
-	          effectiveLen -= 2;
-	          i += 2;
-	        }
-	      }
-	    }
-	    let pad = 0;
-	    let idx = len - 1;
-	    const tailIsPct3D = j => j >= 2 && body.charCodeAt(j - 2) === 37 &&
-	    // '%'
-	    body.charCodeAt(j - 1) === 51 && (
-	    // '3'
-	    body.charCodeAt(j) === 68 || body.charCodeAt(j) === 100); // 'D' or 'd'
-
-	    if (idx >= 0) {
-	      if (body.charCodeAt(idx) === 61 /* '=' */) {
-	        pad++;
-	        idx--;
-	      } else if (tailIsPct3D(idx)) {
-	        pad++;
-	        idx -= 3;
-	      }
-	    }
-	    if (pad === 1 && idx >= 0) {
-	      if (body.charCodeAt(idx) === 61 /* '=' */) {
-	        pad++;
-	      } else if (tailIsPct3D(idx)) {
-	        pad++;
-	      }
-	    }
-	    const groups = Math.floor(effectiveLen / 4);
-	    const bytes = groups * 3 - (pad || 0);
-	    return bytes > 0 ? bytes : 0;
+	    return estimateBase64(body);
 	  }
 
 	  // Compute UTF-8 byte length directly from UTF-16 code units without allocating
@@ -48009,6 +48638,28 @@ function requireAxios () {
 	    }
 	  }
 	  return bytes;
+	};
+
+	/**
+	 * Estimate the percent-decoded payload size used by Fetch data: URLs.
+	 *
+	 * @param {string} url
+	 * @returns {number}
+	 */
+	function estimateDataURLDecodedBytes(url) {
+	  // Fetch removes URL fragments before processing a data: URL.
+	  const fragmentIndex = typeof url === 'string' ? url.indexOf('#') : -1;
+	  return estimateDataURLBytes(fragmentIndex === -1 ? url : url.slice(0, fragmentIndex), estimatePercentDecodedBase64Bytes);
+	}
+
+	/**
+	 * Estimate the Buffer backing allocation used by Node's raw base64 decoder.
+	 *
+	 * @param {string} url
+	 * @returns {number}
+	 */
+	function estimateDataURLBufferAllocation(url) {
+	  return estimateDataURLBytes(url, estimateBase64BufferAllocation);
 	}
 
 	const zlibOptions = {
@@ -48027,28 +48678,26 @@ function requireAxios () {
 	const isZstdSupported = utils$1.isFunction(zlib$1.createZstdDecompress);
 	const ACCEPT_ENCODING = 'gzip, compress, deflate' + (isBrotliSupported ? ', br' : '');
 	const ACCEPT_ENCODING_WITH_ZSTD = ACCEPT_ENCODING + (isZstdSupported ? ', zstd' : '');
+	const scheduleProgress = typeof process !== 'undefined' && process.nextTick ? process.nextTick.bind(process) : utils$1.asap;
 	const {
 	  http: httpFollow,
 	  https: httpsFollow
 	} = followRedirects;
 	const isHttps = /https:?/;
-	const FORM_DATA_CONTENT_HEADERS$1 = ['content-type', 'content-length'];
-	function setFormDataHeaders$1(headers, formHeaders, policy) {
-	  if (policy !== 'content-only') {
-	    headers.set(formHeaders);
-	    return;
-	  }
-	  Object.entries(formHeaders).forEach(([key, val]) => {
-	    if (FORM_DATA_CONTENT_HEADERS$1.includes(key.toLowerCase())) {
-	      headers.set(key, val);
-	    }
-	  });
-	}
 
 	// Symbols used to bind a single 'error' listener to a pooled socket and track
 	// the request currently owning that socket across keep-alive reuse (issue #10780).
 	const kAxiosSocketListener = Symbol('axios.http.socketListener');
 	const kAxiosCurrentReq = Symbol('axios.http.currentReq');
+
+	// A shared listener avoids retaining an adapter context for the lifetime of a
+	// pooled socket. EventEmitter invokes listeners with `this` set to the emitter.
+	function handleSocketError(err) {
+	  const current = this[kAxiosCurrentReq];
+	  if (current && !current.destroyed) {
+	    current.destroy(err);
+	  }
+	}
 
 	// Tags HttpsProxyAgent instances installed by setProxy() so the redirect path
 	// can strip them without clobbering a user-supplied agent that happens to be
@@ -48195,13 +48844,14 @@ function requireAxios () {
 	 * @param {http.ClientRequestArgs} options
 	 * @param {AxiosProxyConfig} configProxy configuration from Axios options object
 	 * @param {string} location
+	 * @param {boolean} [allowEnvProxy=true] whether environment proxy configuration can be used
 	 *
-	 * @returns {http.ClientRequestArgs}
+	 * @returns {boolean} whether a proxy applies to the selected transport
 	 */
-	function setProxy(options, configProxy, location, isRedirect, configHttpsAgent, configHttpAgent) {
+	function setProxy(options, configProxy, location, isRedirect, configHttpsAgent, configHttpAgent, allowEnvProxy = true) {
 	  let proxy = configProxy;
 	  const proxyEnvAgent = getProxyEnvAgent(options, configHttpAgent, configHttpsAgent);
-	  if (!proxy && proxy !== false && !isNodeEnvProxyEnabled(proxyEnvAgent)) {
+	  if (!proxy && proxy !== false && allowEnvProxy && !isNodeEnvProxyEnabled(proxyEnvAgent)) {
 	    const proxyUrl = getProxyForUrl(location);
 	    if (proxyUrl) {
 	      if (!shouldBypassProxy(location)) {
@@ -48336,8 +48986,9 @@ function requireAxios () {
 	  options.beforeRedirects.proxy = function beforeRedirect(redirectOptions) {
 	    // Configure proxy for redirected request, passing the original config proxy to apply
 	    // the exact same logic as if the redirected request was performed by axios directly.
-	    setProxy(redirectOptions, configProxy, redirectOptions.href, true, configHttpsAgent, configHttpAgent);
+	    setProxy(redirectOptions, configProxy, redirectOptions.href, true, configHttpsAgent, configHttpAgent, allowEnvProxy);
 	  };
+	  return Boolean(proxy || configProxy !== false && allowEnvProxy && isNodeEnvProxyEnabled(proxyEnvAgent));
 	}
 	const isHttpAdapterSupported = typeof process !== 'undefined' && utils$1.kindOf(process) === 'process';
 
@@ -48368,7 +49019,7 @@ function requireAxios () {
 	  family
 	}) => {
 	  if (!utils$1.isString(address)) {
-	    throw TypeError('address must be a string');
+	    throw new AxiosError('address must be a string', AxiosError.ERR_BAD_OPTION_VALUE);
 	  }
 	  return {
 	    address,
@@ -48379,6 +49030,32 @@ function requireAxios () {
 	  address,
 	  family
 	});
+	const normalizedLookupCache = new WeakMap();
+	const normalizeLookup = lookup => {
+	  let normalized = normalizedLookupCache.get(lookup);
+	  if (normalized) {
+	    return normalized;
+	  }
+	  const callbackLookup = callbackify(lookup, value => utils$1.isArray(value) ? value : [value]);
+
+	  // Support opt.all, which is required by current Node.js releases.
+	  normalized = (hostname, opt, cb) => {
+	    callbackLookup(hostname, opt, (err, arg0, arg1) => {
+	      if (err) {
+	        return cb(err);
+	      }
+	      let addresses;
+	      try {
+	        addresses = utils$1.isArray(arg0) ? arg0.map(addr => buildAddressEntry(addr)) : [buildAddressEntry(arg0, arg1)];
+	      } catch (error) {
+	        return cb(error);
+	      }
+	      opt.all ? cb(err, addresses) : cb(err, addresses[0].address, addresses[0].family);
+	    });
+	  };
+	  normalizedLookupCache.set(lookup, normalized);
+	  return normalized;
+	};
 	const http2Transport = {
 	  request(options, cb) {
 	    const authority = options.protocol + '//' + options.hostname + ':' + (options.port || (options.protocol === 'https:' ? 443 : 80));
@@ -48431,6 +49108,7 @@ function requireAxios () {
 	    let family = own('family');
 	    let httpVersion = own('httpVersion');
 	    if (httpVersion === undefined) httpVersion = 1;
+	    const rawHttpVersion = httpVersion;
 	    let http2Options = own('http2Options');
 	    const httpAgent = own('httpAgent');
 	    const httpsAgent = own('httpsAgent');
@@ -48447,26 +49125,20 @@ function requireAxios () {
 	    let rejected = false;
 	    let req;
 	    let connectPhaseTimer;
-	    httpVersion = +httpVersion;
+	    try {
+	      httpVersion = +httpVersion;
+	    } catch (err) {
+	      throw new AxiosError('Invalid protocol version: value is not a number', AxiosError.ERR_BAD_OPTION_VALUE, config);
+	    }
 	    if (Number.isNaN(httpVersion)) {
-	      throw TypeError(`Invalid protocol version: '${config.httpVersion}' is not a number`);
+	      throw new AxiosError(`Invalid protocol version: '${rawHttpVersion}' is not a number`, AxiosError.ERR_BAD_OPTION_VALUE, config);
 	    }
 	    if (httpVersion !== 1 && httpVersion !== 2) {
-	      throw TypeError(`Unsupported protocol version '${httpVersion}'`);
+	      throw new AxiosError(`Unsupported protocol version '${httpVersion}'`, AxiosError.ERR_BAD_OPTION_VALUE, config);
 	    }
 	    const isHttp2 = httpVersion === 2;
 	    if (lookup) {
-	      const _lookup = callbackify(lookup, value => utils$1.isArray(value) ? value : [value]);
-	      // hotfix to support opt.all option which is required for node 20.x
-	      lookup = (hostname, opt, cb) => {
-	        _lookup(hostname, opt, (err, arg0, arg1) => {
-	          if (err) {
-	            return cb(err);
-	          }
-	          const addresses = utils$1.isArray(arg0) ? arg0.map(addr => buildAddressEntry(addr)) : [buildAddressEntry(arg0, arg1)];
-	          opt.all ? cb(err, addresses) : cb(err, addresses[0].address, addresses[0].family);
-	        });
-	      };
+	      lookup = normalizeLookup(lookup);
 	    }
 	    const abortEmitter = new events.EventEmitter();
 	    function abort(reason) {
@@ -48543,7 +49215,7 @@ function requireAxios () {
 	      if (maxContentLength > -1) {
 	        // Use the exact string passed to fromDataURI (the configured url); fall back to fullPath if needed.
 	        const dataUrl = String(own('url') || fullPath || '');
-	        const estimated = estimateDataURLDecodedBytes(dataUrl);
+	        const estimated = estimateDataURLBufferAllocation(dataUrl);
 	        if (estimated > maxContentLength) {
 	          return reject(new AxiosError('maxContentLength size of ' + maxContentLength + ' exceeded', AxiosError.ERR_BAD_RESPONSE, config));
 	        }
@@ -48609,7 +49281,7 @@ function requireAxios () {
 	      });
 	      // support for https://www.npmjs.com/package/form-data api
 	    } else if (utils$1.isFormData(data) && utils$1.isFunction(data.getHeaders) && data.getHeaders !== Object.prototype.getHeaders) {
-	      setFormDataHeaders$1(headers, data.getHeaders(), own('formDataHeaderPolicy'));
+	      setFormDataHeaders(headers, data.getHeaders(), own('formDataHeaderPolicy'));
 	      if (!headers.hasContentLength()) {
 	        try {
 	          const knownLength = await util.promisify(data.getLength).call(data);
@@ -48652,7 +49324,7 @@ function requireAxios () {
 	      data = stream$1.pipeline([data, new AxiosTransformStream({
 	        maxRate: utils$1.toFiniteNumber(maxUploadRate)
 	      })], utils$1.noop);
-	      onUploadProgress && data.on('progress', flushOnFinish(data, progressEventDecorator(contentLength, progressEventReducer(asyncDecorator(onUploadProgress), false, 3))));
+	      onUploadProgress && data.on('progress', flushOnFinish(data, progressEventDecorator(contentLength, progressEventReducer(asyncDecorator(onUploadProgress, scheduleProgress), false, 3))));
 	    }
 
 	    // HTTP basic authentication
@@ -48679,6 +49351,11 @@ function requireAxios () {
 	      }));
 	    }
 	    headers.set('Accept-Encoding', utils$1.hasOwnProp(transitional, 'advertiseZstdAcceptEncoding') && transitional.advertiseZstdAcceptEncoding === true ? ACCEPT_ENCODING_WITH_ZSTD : ACCEPT_ENCODING, false);
+	    if (isHttp2 && lookup) {
+	      http2Options = Object.assign(Object.create(null), http2Options, {
+	        lookup
+	      });
+	    }
 
 	    // Null-prototype to block prototype pollution gadgets on properties read
 	    // directly by Node's http.request (e.g. insecureHTTPParser, lookup).
@@ -48695,11 +49372,13 @@ function requireAxios () {
 	      family,
 	      beforeRedirect: dispatchBeforeRedirect,
 	      beforeRedirects: Object.create(null),
-	      http2Options
+	      http2Options,
+	      createConnection: undefined
 	    });
 
 	    // cacheable-lookup integration hotfix
 	    !utils$1.isUndefined(lookup) && (options.lookup = lookup);
+	    let proxyApplied = false;
 	    if (socketPath) {
 	      if (typeof socketPath !== 'string') {
 	        return reject(new AxiosError('socketPath must be a string', AxiosError.ERR_BAD_OPTION_VALUE, config));
@@ -48717,7 +49396,11 @@ function requireAxios () {
 	    } else {
 	      options.hostname = parsed.hostname.startsWith('[') ? parsed.hostname.slice(1, -1) : parsed.hostname;
 	      options.port = parsed.port;
-	      setProxy(options, configProxy, protocol + '//' + parsed.hostname + (parsed.port ? ':' + parsed.port : '') + options.path, false, httpsAgent, httpAgent);
+	      proxyApplied = setProxy(options, configProxy, protocol + '//' + parsed.hostname + (parsed.port ? ':' + parsed.port : '') + options.path, false, httpsAgent, httpAgent,
+	      // The HTTP/2 transport connects independently of HTTP/1 agents, so it
+	      // cannot apply either axios-resolved or agent-local environment proxies.
+	      // Explicit proxy config is still processed and rejected below.
+	      !isHttp2);
 	    }
 	    let transport;
 	    let isNativeTransport = false;
@@ -48733,6 +49416,9 @@ function requireAxios () {
 	      options.agent = isHttpsRequest ? httpsAgent : httpAgent;
 	    }
 	    if (isHttp2) {
+	      if (proxyApplied) {
+	        return reject(new AxiosError('HTTP/2 requests with a proxy are not supported', AxiosError.ERR_NOT_SUPPORT, config));
+	      }
 	      transport = http2Transport;
 	    } else {
 	      const configTransport = own('transport');
@@ -48817,7 +49503,7 @@ function requireAxios () {
 	        const transformStream = new AxiosTransformStream({
 	          maxRate: utils$1.toFiniteNumber(maxDownloadRate)
 	        });
-	        onDownloadProgress && transformStream.on('progress', flushOnFinish(transformStream, progressEventDecorator(responseLength, progressEventReducer(asyncDecorator(onDownloadProgress), true, 3))));
+	        onDownloadProgress && transformStream.on('progress', flushOnFinish(transformStream, progressEventDecorator(responseLength, progressEventReducer(asyncDecorator(onDownloadProgress, scheduleProgress), true, 3))));
 	        streams.push(transformStream);
 	      }
 
@@ -48980,18 +49666,10 @@ function requireAxios () {
 	        socket.setKeepAlive(true, 1000 * 60);
 	      }
 
-	      // Install a single 'error' listener per socket (not per request) to avoid
-	      // accumulating listeners on pooled keep-alive sockets that get reassigned
-	      // to new requests before the previous request's 'close' fires (issue #10780).
-	      // The listener is bound to the socket's currently-active request via a
-	      // symbol, which is swapped as the socket is reassigned.
+	      // Install one shared 'error' listener per socket. The symbol follows the
+	      // currently-active request as pooled sockets are reassigned (issue #10780).
 	      if (!socket[kAxiosSocketListener]) {
-	        socket.on('error', function handleSocketError(err) {
-	          const current = socket[kAxiosCurrentReq];
-	          if (current && !current.destroyed) {
-	            current.destroy(err);
-	          }
-	        });
+	        socket.on('error', handleSocketError);
 	        socket[kAxiosSocketListener] = true;
 	      }
 	      socket[kAxiosCurrentReq] = req;
@@ -49148,6 +49826,12 @@ function requireAxios () {
 	const headersToObject = thing => thing instanceof AxiosHeaders ? {
 	  ...thing
 	} : thing;
+	const ownEnumerableKeys = thing => {
+	  if (Object.getOwnPropertySymbols && Object.getOwnPropertyDescriptor) {
+	    return Object.keys(thing).concat(Object.getOwnPropertySymbols(thing).filter(symbol => Object.getOwnPropertyDescriptor(thing, symbol).enumerable));
+	  }
+	  return Object.keys(thing);
+	};
 
 	/**
 	 * Config-specific merge-function which creates a new config-object
@@ -49247,7 +49931,7 @@ function requireAxios () {
 	    transformResponse: defaultToConfig2,
 	    paramsSerializer: defaultToConfig2,
 	    timeout: defaultToConfig2,
-	    timeoutMessage: defaultToConfig2,
+	    timeoutErrorMessage: defaultToConfig2,
 	    withCredentials: defaultToConfig2,
 	    withXSRFToken: defaultToConfig2,
 	    adapter: defaultToConfig2,
@@ -49270,7 +49954,7 @@ function requireAxios () {
 	    validateStatus: mergeDirectKeys,
 	    headers: (a, b, prop) => mergeDeepProperties(headersToObject(a), headersToObject(b), prop, true)
 	  };
-	  utils$1.forEach(Object.keys({
+	  utils$1.forEach(ownEnumerableKeys({
 	    ...config1,
 	    ...config2
 	  }), function computeConfigValue(prop) {
@@ -49289,19 +49973,6 @@ function requireAxios () {
 	    }
 	  }
 	  return config;
-	}
-
-	const FORM_DATA_CONTENT_HEADERS = ['content-type', 'content-length'];
-	function setFormDataHeaders(headers, formHeaders, policy) {
-	  if (policy !== 'content-only') {
-	    headers.set(formHeaders);
-	    return;
-	  }
-	  Object.entries(formHeaders || {}).forEach(([key, val]) => {
-	    if (FORM_DATA_CONTENT_HEADERS.includes(key.toLowerCase())) {
-	      headers.set(key, val);
-	    }
-	  });
 	}
 
 	/**
@@ -49342,11 +50013,12 @@ function requireAxios () {
 	    }
 	  }
 	  if (utils$1.isFormData(data)) {
+	    const getHeaders = utils$1.getSafeProp(data, 'getHeaders');
 	    if (platform.hasStandardBrowserEnv || platform.hasStandardBrowserWebWorkerEnv || utils$1.isReactNative(data)) {
 	      headers.setContentType(undefined); // browser/web worker/RN handles it
-	    } else if (utils$1.isFunction(data.getHeaders)) {
+	    } else if (utils$1.isFunction(getHeaders)) {
 	      // Node.js FormData (like form-data package)
-	      setFormDataHeaders(headers, data.getHeaders(), own('formDataHeaderPolicy'));
+	      setFormDataHeaders(headers, getHeaders.call(data), own('formDataHeaderPolicy'));
 	    }
 	  }
 
@@ -49386,7 +50058,7 @@ function requireAxios () {
 	    } = _config;
 	    let onCanceled;
 	    let uploadThrottled, downloadThrottled;
-	    let flushUpload, flushDownload;
+	    let flushUpload, flushDownload, flushDownloadWithEvent;
 	    function done() {
 	      flushUpload && flushUpload(); // flush events
 	      flushDownload && flushDownload(); // flush events
@@ -49399,10 +50071,50 @@ function requireAxios () {
 
 	    // Set the request timeout in MS
 	    request.timeout = _config.timeout;
-	    function onloadend() {
+	    function onloadend(event) {
 	      if (!request) {
 	        return;
 	      }
+
+	      // Status 0 means no response was received, which onerror and onabort normally
+	      // reject before this runs. Firefox 152 fires only readystatechange and loadend for
+	      // navigation-canceled requests (https://bugzilla.mozilla.org/show_bug.cgi?id=1505389),
+	      // leaving settle() to resolve them as an empty success. ECONNABORTED is the error
+	      // onabort raised on Firefox 151. Reads over file:, which some environments report as
+	      // status 0 on success, are excluded by the request URL's scheme after browser-style
+	      // preprocessing, by the page origin's scheme for relative URLs (which inherit it), or
+	      // by responseURL where implemented.
+	      if (request.status === 0 && (parseProtocol(normalizeURLForProtocolCheck(_config.url)) || parseProtocol(platform.origin)) !== 'file' && !(request.responseURL && request.responseURL.startsWith('file:'))) {
+	        reject(new AxiosError('Request aborted', AxiosError.ECONNABORTED, config, request));
+	        done();
+
+	        // Clean up request
+	        request = null;
+	        return;
+	      }
+
+	      // When loadend is still dispatching, flushing with it gives progress
+	      // listeners a final delivery whose event has a live target. The legacy
+	      // ready-state fallback has no event, so replay its pending progress.
+	      // A throwing listener must not block settlement; rethrow asynchronously,
+	      // matching how listener errors surface on the throttle timer path.
+	      try {
+	        if (event) {
+	          flushDownloadWithEvent && flushDownloadWithEvent(event);
+	        } else {
+	          flushDownload && flushDownload();
+	        }
+	      } catch (err) {
+	        setTimeout(() => {
+	          throw err;
+	        });
+	      }
+
+	      // A final progress callback can cancel the request synchronously.
+	      if (!request) {
+	        return;
+	      }
+
 	      // Prepare the response
 	      const responseHeaders = AxiosHeaders.from('getAllResponseHeaders' in request && request.getAllResponseHeaders());
 	      const responseData = !responseType || responseType === 'text' || responseType === 'json' ? request.responseText : request.response;
@@ -49510,7 +50222,7 @@ function requireAxios () {
 
 	    // Handle progress if needed
 	    if (onDownloadProgress) {
-	      [downloadThrottled, flushDownload] = progressEventReducer(onDownloadProgress, true);
+	      [downloadThrottled, flushDownload, flushDownloadWithEvent] = progressEventReducer(onDownloadProgress, true);
 	      request.addEventListener('progress', downloadThrottled);
 	    }
 
@@ -49579,9 +50291,18 @@ function requireAxios () {
 	    });
 	    signals = null;
 	  };
-	  signals.forEach(signal => signal.addEventListener('abort', onabort, {
-	    once: true
-	  }));
+	  signals.forEach(signal => {
+	    if (aborted) {
+	      return;
+	    }
+	    if (signal.aborted) {
+	      onabort.call(signal);
+	      return;
+	    }
+	    signal.addEventListener('abort', onabort, {
+	      once: true
+	    });
+	  });
 	  const {
 	    signal
 	  } = controller;
@@ -49672,6 +50393,17 @@ function requireAxios () {
 	};
 
 	const DEFAULT_CHUNK_SIZE = 64 * 1024;
+	const DEFAULT_REQUEST_OPTIONS = {
+	  cache: 'default',
+	  redirect: 'follow',
+	  referrer: 'about:client',
+	  referrerPolicy: '',
+	  mode: 'cors',
+	  integrity: '',
+	  keepalive: false,
+	  priority: 'auto',
+	  window: null
+	};
 	const {
 	  isFunction
 	} = utils$1;
@@ -49814,7 +50546,8 @@ function requireAxios () {
 	      withCredentials = 'same-origin',
 	      fetchOptions,
 	      maxContentLength,
-	      maxBodyLength
+	      maxBodyLength,
+	      maxRedirects
 	    } = resolveConfig(config);
 	    const hasMaxContentLength = utils$1.isNumber(maxContentLength) && maxContentLength > -1;
 	    const hasMaxBodyLength = utils$1.isNumber(maxBodyLength) && maxBodyLength > -1;
@@ -49945,17 +50678,46 @@ function requireAxios () {
 
 	      // Set User-Agent header if not already set (fetch defaults to 'node' in Node.js)
 	      headers.set('User-Agent', 'axios/' + VERSION, false);
-	      const resolvedOptions = {
-	        ...fetchOptions,
+	      const safeFetchOptions = fetchOptions == null ? fetchOptions : Object.assign(Object.create(null), fetchOptions);
+	      if (safeFetchOptions) {
+	        // These options are owned by Axios and are already reflected in the
+	        // resolved Request passed to fetch.
+	        delete safeFetchOptions.body;
+	        delete safeFetchOptions.headers;
+	        delete safeFetchOptions.method;
+	        delete safeFetchOptions.signal;
+	        delete safeFetchOptions.duplex;
+	        delete safeFetchOptions.credentials;
+	      }
+	      const resolvedOptions = Object.assign(Object.create(null), safeFetchOptions, {
 	        signal: composedSignal,
 	        method: method.toUpperCase(),
 	        headers: toByteStringHeaderObject(headers.normalize()),
 	        body: data,
 	        duplex: 'half',
 	        credentials: isCredentialsSupported ? withCredentials : undefined
-	      };
+	      });
+	      if (isRequestSupported) {
+	        utils$1.forEach(DEFAULT_REQUEST_OPTIONS, (value, key) => {
+	          if (resolvedOptions[key] === undefined) {
+	            resolvedOptions[key] = value;
+	          }
+	        });
+	        if (resolvedOptions.signal === undefined) {
+	          resolvedOptions.signal = null;
+	        }
+	        if (resolvedOptions.body === undefined) {
+	          resolvedOptions.body = null;
+	        }
+	      }
+	      if (maxRedirects === 0) {
+	        resolvedOptions.redirect = 'manual';
+	        if (safeFetchOptions) {
+	          safeFetchOptions.redirect = 'manual';
+	        }
+	      }
 	      request = isRequestSupported && new Request(url, resolvedOptions);
-	      let response = await (isRequestSupported ? _fetch(request, fetchOptions) : _fetch(url, resolvedOptions));
+	      let response = await (isRequestSupported ? _fetch(request, safeFetchOptions) : _fetch(url, resolvedOptions));
 	      const responseHeaders = AxiosHeaders.from(response.headers);
 
 	      // Cheap pre-check: if the server honestly declares a content-length that
@@ -50235,9 +50997,13 @@ function requireAxios () {
 	 *
 	 * @returns {Promise} The Promise to be fulfilled
 	 */
-	function dispatchRequest(config) {
+	function dispatchRequest(_config) {
+	  // Interceptors may replace the merged config with an ordinary object. Flatten
+	  // it at the dispatch boundary so shared prototype members cannot become
+	  // request behavior, while preserving intentional template/class members.
+	  const config = utils$1.toSafeFlatObject(_config);
 	  throwIfCancellationRequested(config);
-	  config.headers = AxiosHeaders.from(config.headers);
+	  config.headers = AxiosHeaders.from(utils$1.getSafeProp(config, 'headers'));
 
 	  // Transform request data
 	  config.data = transformData.call(config, config.transformRequest);
@@ -50393,18 +51159,17 @@ function requireAxios () {
 	      return await this._request(configOrUrl, config);
 	    } catch (err) {
 	      if (err instanceof Error) {
-	        let dummy = {};
-	        Error.captureStackTrace ? Error.captureStackTrace(dummy) : dummy = new Error();
-
-	        // slice off the Error: ... line
-	        const stack = (() => {
-	          if (!dummy.stack) {
-	            return '';
-	          }
-	          const firstNewlineIndex = dummy.stack.indexOf('\n');
-	          return firstNewlineIndex === -1 ? '' : dummy.stack.slice(firstNewlineIndex + 1);
-	        })();
 	        try {
+	          let dummy = {};
+	          Error.captureStackTrace ? Error.captureStackTrace(dummy) : dummy = new Error();
+	          const dummyStack = dummy.stack;
+	          let stack = '';
+
+	          // slice off the Error: ... line
+	          if (typeof dummyStack === 'string') {
+	            const firstNewlineIndex = dummyStack.indexOf('\n');
+	            stack = firstNewlineIndex === -1 ? '' : dummyStack.slice(firstNewlineIndex + 1);
+	          }
 	          if (!err.stack) {
 	            err.stack = stack;
 	            // match without the 2 top stack lines
@@ -50417,7 +51182,7 @@ function requireAxios () {
 	            }
 	          }
 	        } catch (e) {
-	          // ignore the case where "stack" is an un-writable property
+	          // Ignore failures from custom stack hooks or un-writable stack properties.
 	        }
 	      }
 	      throw err;
@@ -50473,11 +51238,11 @@ function requireAxios () {
 	    }, true);
 
 	    // Set config.method
-	    config.method = (config.method || this.defaults.method || 'get').toLowerCase();
+	    config.method = (utils$1.getSafeProp(config, 'method') || utils$1.getSafeProp(this.defaults, 'method') || 'get').toLowerCase();
 
 	    // Flatten headers
 	    let contextHeaders = headers && utils$1.merge(headers.common, headers[config.method]);
-	    headers && utils$1.forEach(['delete', 'get', 'head', 'post', 'put', 'patch', 'query', 'common'], method => {
+	    headers && utils$1.forEach(methodList.concat('common'), method => {
 	      delete headers[method];
 	    });
 	    config.headers = AxiosHeaders.concat(contextHeaders, headers);
@@ -50522,16 +51287,29 @@ function requireAxios () {
 	      const onFulfilled = requestInterceptorChain[i++];
 	      const onRejected = requestInterceptorChain[i++];
 	      try {
-	        newConfig = onFulfilled(newConfig);
+	        newConfig = onFulfilled ? onFulfilled(newConfig) : newConfig;
 	      } catch (error) {
-	        onRejected.call(this, error);
+	        if (!onRejected) {
+	          promise = Promise.reject(error);
+	          break;
+	        }
+	        try {
+	          const rejectedResult = onRejected.call(this, error);
+	          if (utils$1.isThenable(rejectedResult)) {
+	            promise = Promise.resolve(rejectedResult).then(() => dispatchRequest.call(this, newConfig));
+	          }
+	        } catch (rejectedError) {
+	          promise = Promise.reject(rejectedError);
+	        }
 	        break;
 	      }
 	    }
-	    try {
-	      promise = dispatchRequest.call(this, newConfig);
-	    } catch (error) {
-	      return Promise.reject(error);
+	    if (!promise) {
+	      try {
+	        promise = dispatchRequest.call(this, newConfig);
+	      } catch (error) {
+	        promise = Promise.reject(error);
+	      }
 	    }
 	    i = 0;
 	    len = responseInterceptorChain.length;
@@ -50770,14 +51548,22 @@ function requireAxios () {
 	  Gone: 410,
 	  LengthRequired: 411,
 	  PreconditionFailed: 412,
+	  /**
+	   * @deprecated Use `ContentTooLarge` instead.
+	   */
 	  PayloadTooLarge: 413,
+	  ContentTooLarge: 413,
 	  UriTooLong: 414,
 	  UnsupportedMediaType: 415,
 	  RangeNotSatisfiable: 416,
 	  ExpectationFailed: 417,
 	  ImATeapot: 418,
 	  MisdirectedRequest: 421,
+	  /**
+	   * @deprecated Use `UnprocessableContent` instead.
+	   */
 	  UnprocessableEntity: 422,
+	  UnprocessableContent: 422,
 	  Locked: 423,
 	  FailedDependency: 424,
 	  TooEarly: 425,
@@ -50797,6 +51583,7 @@ function requireAxios () {
 	  LoopDetected: 508,
 	  NotExtended: 510,
 	  NetworkAuthenticationRequired: 511,
+	  WebServerReturnsAnUnknownError: 520,
 	  WebServerIsDown: 521,
 	  ConnectionTimedOut: 522,
 	  OriginIsUnreachable: 523,
@@ -50805,7 +51592,9 @@ function requireAxios () {
 	  InvalidSslCertificate: 526
 	};
 	Object.entries(HttpStatusCode).forEach(([key, value]) => {
-	  HttpStatusCode[value] = key;
+	  if (HttpStatusCode[value] === undefined) {
+	    HttpStatusCode[value] = key;
+	  }
 	});
 
 	/**
@@ -50873,7 +51662,6 @@ function requireAxios () {
 	axios.default = axios;
 
 	axios_1 = axios;
-	
 	return axios_1;
 }
 
@@ -50946,6 +51734,31 @@ function requireAxiosProvider () {
 	        this.configureRequest();
 	        this.configureResponse();
 	    }
+	    withTimeout(timeout) {
+	        this.axios.defaults.timeout = timeout;
+	        return this;
+	    }
+	    get(url, config) {
+	        return this.unwrap(this.axios.get(url, config));
+	    }
+	    delete(url, config) {
+	        return this.unwrap(this.axios.delete(url, config));
+	    }
+	    head(url, config) {
+	        return this.unwrap(this.axios.head(url, config));
+	    }
+	    post(url, data, config) {
+	        return this.unwrap(this.axios.post(url, data, config));
+	    }
+	    put(url, data, config) {
+	        return this.unwrap(this.axios.put(url, data, config));
+	    }
+	    patch(url, data, config) {
+	        return this.unwrap(this.axios.patch(url, data, config));
+	    }
+	    async unwrap(request) {
+	        return (await request).data;
+	    }
 	    configureRequest() {
 	        this.axios.interceptors.request.use((config) => {
 	            return new Promise((resolve) => {
@@ -50962,7 +51775,7 @@ function requireAxiosProvider () {
 	    configureResponse() {
 	        this.axios.interceptors.response.use((response) => {
 	            this.pendingRequests = Math.max(0, this.pendingRequests - 1);
-	            return Promise.resolve(response.data);
+	            return response;
 	        }, (error) => {
 	            this.pendingRequests = Math.max(0, this.pendingRequests - 1);
 	            return Promise.reject(error);
@@ -51155,12 +51968,37 @@ function requireRetry () {
 	return retry;
 }
 
+var httpClient = {};
+
+var hasRequiredHttpClient;
+
+function requireHttpClient () {
+	if (hasRequiredHttpClient) return httpClient;
+	hasRequiredHttpClient = 1;
+	Object.defineProperty(httpClient, "__esModule", { value: true });
+	return httpClient;
+}
+
 var hasRequiredCore;
 
 function requireCore () {
 	if (hasRequiredCore) return core;
 	hasRequiredCore = 1;
 	(function (exports) {
+		var __createBinding = (core && core.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+		    if (k2 === undefined) k2 = k;
+		    var desc = Object.getOwnPropertyDescriptor(m, k);
+		    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+		      desc = { enumerable: true, get: function() { return m[k]; } };
+		    }
+		    Object.defineProperty(o, k2, desc);
+		}) : (function(o, m, k, k2) {
+		    if (k2 === undefined) k2 = k;
+		    o[k2] = m[k];
+		}));
+		var __exportStar = (core && core.__exportStar) || function(m, exports) {
+		    for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
+		};
 		Object.defineProperty(exports, "__esModule", { value: true });
 		exports.isOptionalNumber = exports.isOptionalString = exports.CrowdinApi = exports.handleHttpClientError = exports.CrowdinValidationError = exports.CrowdinError = exports.BooleanInt = void 0;
 		const axios_1 = /*@__PURE__*/ requireAxios();
@@ -51169,6 +52007,7 @@ function requireCore () {
 		const fetchClient_1 = requireFetchClient();
 		const fetchClientError_1 = requireFetchClientError();
 		const retry_1 = requireRetry();
+		__exportStar(requireHttpClient(), exports);
 		(function (BooleanInt) {
 		    BooleanInt[BooleanInt["TRUE"] = 1] = "TRUE";
 		    BooleanInt[BooleanInt["FALSE"] = 0] = "FALSE";
@@ -51286,7 +52125,7 @@ function requireCore () {
 		        this.retryService = new retry_1.RetryService(retryConfig);
 		        if (config === null || config === void 0 ? void 0 : config.httpRequestTimeout) {
 		            CrowdinApi.FETCH_INSTANCE.withTimeout(config === null || config === void 0 ? void 0 : config.httpRequestTimeout);
-		            CrowdinApi.AXIOS_INSTANCE.defaults.timeout = config === null || config === void 0 ? void 0 : config.httpRequestTimeout;
+		            CrowdinApi.AXIOS_INSTANCE.withTimeout(config === null || config === void 0 ? void 0 : config.httpRequestTimeout);
 		        }
 		        this.config = config;
 		    }
@@ -51306,7 +52145,7 @@ function requireCore () {
 		        return this.post(url, req, this.defaultConfig());
 		    }
 		    addQueryParam(url, name, value) {
-		        if (value) {
+		        if (value !== undefined && value !== null) {
 		            url += new RegExp(/\?.+=.*/g).test(url) ? '&' : '?';
 		            url += `${name}=${this.encodeUrlParam(value)}`;
 		        }
@@ -51431,7 +52270,7 @@ function requireCore () {
 		}
 		exports.CrowdinApi = CrowdinApi;
 		CrowdinApi.CROWDIN_API_DOMAIN = 'api.crowdin.com';
-		CrowdinApi.AXIOS_INSTANCE = new axiosProvider_1.AxiosProvider().axios;
+		CrowdinApi.AXIOS_INSTANCE = new axiosProvider_1.AxiosProvider();
 		CrowdinApi.FETCH_INSTANCE = new fetchClient_1.FetchClient();
 		let deprecationEmittedForOptionalParams = false;
 		function emitDeprecationWarning() {
@@ -51858,6 +52697,48 @@ function requireAi () {
 	     */
 	    downloadAiOrganizationFileTranslationStrings(jobIdentifier) {
 	        const url = `${this.url}/ai/file-translations/${jobIdentifier}/translations`;
+	        return this.get(url, this.defaultConfig());
+	    }
+	    /**
+	     * @param options optional parameters for the request
+	     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.ai.requestLogs.getMany
+	     */
+	    listAiOrganizationRequestLogs(options) {
+	        var _a, _b;
+	        let url = `${this.url}/ai/request-logs`;
+	        url = this.addQueryParam(url, 'requestId', options === null || options === void 0 ? void 0 : options.requestId);
+	        url = this.addQueryParam(url, 'projectId', options === null || options === void 0 ? void 0 : options.projectId);
+	        url = this.addQueryParam(url, 'userId', options === null || options === void 0 ? void 0 : options.userId);
+	        url = this.addQueryParam(url, 'aiProviderId', options === null || options === void 0 ? void 0 : options.aiProviderId);
+	        url = this.addQueryParam(url, 'model', options === null || options === void 0 ? void 0 : options.model);
+	        url = this.addQueryParam(url, 'sourceAction', options === null || options === void 0 ? void 0 : options.sourceAction);
+	        url = this.addQueryParam(url, 'promptAction', options === null || options === void 0 ? void 0 : options.promptAction);
+	        url = this.addQueryParam(url, 'statuses', options === null || options === void 0 ? void 0 : options.statuses);
+	        url = this.addQueryParam(url, 'systemCredentials', (_a = options === null || options === void 0 ? void 0 : options.systemCredentials) === null || _a === void 0 ? void 0 : _a.toString());
+	        url = this.addQueryParam(url, 'isAutoTriggered', (_b = options === null || options === void 0 ? void 0 : options.isAutoTriggered) === null || _b === void 0 ? void 0 : _b.toString());
+	        url = this.addQueryParam(url, 'tokenName', options === null || options === void 0 ? void 0 : options.tokenName);
+	        url = this.addQueryParam(url, 'oauthClientId', options === null || options === void 0 ? void 0 : options.oauthClientId);
+	        url = this.addQueryParam(url, 'createdAfter', options === null || options === void 0 ? void 0 : options.createdAfter);
+	        url = this.addQueryParam(url, 'createdBefore', options === null || options === void 0 ? void 0 : options.createdBefore);
+	        return this.getList(url, options === null || options === void 0 ? void 0 : options.limit, options === null || options === void 0 ? void 0 : options.offset);
+	    }
+	    /**
+	     * @param options optional parameters for the request
+	     * @see https://support.crowdin.com/developer/enterprise/api/v2/#tag/AI/operation/api.ai.usage.members.getMany
+	     */
+	    listAiOrganizationUsageMembers(options) {
+	        var _a;
+	        let url = `${this.url}/ai/usage/members`;
+	        url = this.addQueryParam(url, 'userIds', (_a = options === null || options === void 0 ? void 0 : options.userIds) === null || _a === void 0 ? void 0 : _a.join(','));
+	        url = this.addQueryParam(url, 'orderBy', options === null || options === void 0 ? void 0 : options.orderBy);
+	        return this.getList(url, options === null || options === void 0 ? void 0 : options.limit, options === null || options === void 0 ? void 0 : options.offset);
+	    }
+	    /**
+	     * @param memberId user identifier
+	     * @see https://support.crowdin.com/developer/enterprise/api/v2/#tag/AI/operation/api.ai.usage.members.get
+	     */
+	    getAiOrganizationUsageMember(memberId) {
+	        const url = `${this.url}/ai/usage/members/${memberId}`;
 	        return this.get(url, this.defaultConfig());
 	    }
 	    /**
@@ -52328,6 +53209,51 @@ function requireAi () {
 	    }
 	    /**
 	     * @param userId user identifier
+	     * @param options optional parameters for the request
+	     * @see https://developer.crowdin.com/api/v2/#operation/api.ai.requestLogs.getMany
+	     */
+	    listAiUserRequestLogs(userId, options) {
+	        var _a, _b;
+	        let url = `${this.url}/users/${userId}/ai/request-logs`;
+	        url = this.addQueryParam(url, 'requestId', options === null || options === void 0 ? void 0 : options.requestId);
+	        url = this.addQueryParam(url, 'projectId', options === null || options === void 0 ? void 0 : options.projectId);
+	        url = this.addQueryParam(url, 'userId', options === null || options === void 0 ? void 0 : options.userId);
+	        url = this.addQueryParam(url, 'aiProviderId', options === null || options === void 0 ? void 0 : options.aiProviderId);
+	        url = this.addQueryParam(url, 'model', options === null || options === void 0 ? void 0 : options.model);
+	        url = this.addQueryParam(url, 'sourceAction', options === null || options === void 0 ? void 0 : options.sourceAction);
+	        url = this.addQueryParam(url, 'promptAction', options === null || options === void 0 ? void 0 : options.promptAction);
+	        url = this.addQueryParam(url, 'statuses', options === null || options === void 0 ? void 0 : options.statuses);
+	        url = this.addQueryParam(url, 'systemCredentials', (_a = options === null || options === void 0 ? void 0 : options.systemCredentials) === null || _a === void 0 ? void 0 : _a.toString());
+	        url = this.addQueryParam(url, 'isAutoTriggered', (_b = options === null || options === void 0 ? void 0 : options.isAutoTriggered) === null || _b === void 0 ? void 0 : _b.toString());
+	        url = this.addQueryParam(url, 'tokenName', options === null || options === void 0 ? void 0 : options.tokenName);
+	        url = this.addQueryParam(url, 'oauthClientId', options === null || options === void 0 ? void 0 : options.oauthClientId);
+	        url = this.addQueryParam(url, 'createdAfter', options === null || options === void 0 ? void 0 : options.createdAfter);
+	        url = this.addQueryParam(url, 'createdBefore', options === null || options === void 0 ? void 0 : options.createdBefore);
+	        return this.getList(url, options === null || options === void 0 ? void 0 : options.limit, options === null || options === void 0 ? void 0 : options.offset);
+	    }
+	    /**
+	     * @param userId user identifier
+	     * @param options optional parameters for the request
+	     * @see https://support.crowdin.com/developer/api/v2/#tag/AI/operation/api.ai.usage.members.getMany
+	     */
+	    listAiUserUsageMembers(userId, options) {
+	        var _a;
+	        let url = `${this.url}/users/${userId}/ai/usage/members`;
+	        url = this.addQueryParam(url, 'userIds', (_a = options === null || options === void 0 ? void 0 : options.userIds) === null || _a === void 0 ? void 0 : _a.join(','));
+	        url = this.addQueryParam(url, 'orderBy', options === null || options === void 0 ? void 0 : options.orderBy);
+	        return this.getList(url, options === null || options === void 0 ? void 0 : options.limit, options === null || options === void 0 ? void 0 : options.offset);
+	    }
+	    /**
+	     * @param userId user identifier
+	     * @param memberId user identifier
+	     * @see https://support.crowdin.com/developer/api/v2/#tag/AI/operation/api.ai.usage.members.get
+	     */
+	    getAiUserUsageMember(userId, memberId) {
+	        const url = `${this.url}/users/${userId}/ai/usage/members/${memberId}`;
+	        return this.get(url, this.defaultConfig());
+	    }
+	    /**
+	     * @param userId user identifier
 	     * @param aiProviderId ai Provider identifier
 	     * @param path raw provider API path after `/gateway/`
 	     * @see https://support.crowdin.com/developer/api/v2/#tag/AI-Gateway/operation/api.ai.providers.gateway.crowdin.get
@@ -52430,9 +53356,9 @@ function requireApplications () {
 	     * @see https://developer.crowdin.com/api/v2/#operation/api.applications.installations.delete
 	     */
 	    deleteApplicationInstallation(applicationId, force) {
-	        const url = `${this.url}/applications/installations/${applicationId}`;
+	        let url = `${this.url}/applications/installations/${applicationId}`;
 	        if (force) {
-	            this.addQueryParam(url, 'force', String(force));
+	            url = this.addQueryParam(url, 'force', String(force));
 	        }
 	        return this.delete(url, this.defaultConfig());
 	    }
@@ -52492,6 +53418,41 @@ function requireApplications () {
 	    editApplicationData(applicationId, path, request) {
 	        const url = `${this.url}/applications/${applicationId}/api/${path}`;
 	        return this.patch(url, request, this.defaultConfig());
+	    }
+	    /**
+	     * @param options optional pagination and filter parameters for the request
+	     * @see https://developer.crowdin.com/api/v2/#operation/api.applications.consents.getMany
+	     */
+	    listApplicationConsentDecisions(options) {
+	        let url = `${this.url}/applications/consents`;
+	        url = this.addQueryParam(url, 'identifier', options === null || options === void 0 ? void 0 : options.identifier);
+	        url = this.addQueryParam(url, 'orderBy', options === null || options === void 0 ? void 0 : options.orderBy);
+	        return this.getList(url, options === null || options === void 0 ? void 0 : options.limit, options === null || options === void 0 ? void 0 : options.offset);
+	    }
+	    /**
+	     * @param request request body
+	     * @see https://developer.crowdin.com/api/v2/#operation/api.applications.consents.post
+	     */
+	    createApplicationConsentDecision(request) {
+	        const url = `${this.url}/applications/consents`;
+	        return this.post(url, request, this.defaultConfig());
+	    }
+	    /**
+	     * @param consentId consent decision identifier
+	     * @param request request body
+	     * @see https://developer.crowdin.com/api/v2/#operation/api.applications.consents.patch
+	     */
+	    editApplicationConsentDecision(consentId, request) {
+	        const url = `${this.url}/applications/consents/${consentId}`;
+	        return this.patch(url, request, this.defaultConfig());
+	    }
+	    /**
+	     * @param consentId consent decision identifier
+	     * @see https://developer.crowdin.com/api/v2/#operation/api.applications.consents.delete
+	     */
+	    deleteApplicationConsentDecision(consentId) {
+	        const url = `${this.url}/applications/consents/${consentId}`;
+	        return this.delete(url, this.defaultConfig());
 	    }
 	}
 	applications.Applications = Applications;
@@ -53038,6 +53999,14 @@ function requireGlossaries () {
 	     */
 	    concordanceSearch(projectId, request) {
 	        const url = `${this.url}/projects/${projectId}/glossaries/concordance`;
+	        return this.post(url, request, this.defaultConfig());
+	    }
+	    /**
+	     * @param request request body
+	     * @see https://developer.crowdin.com/api/v2/#operation/api.glossaries.concordance.post
+	     */
+	    organizationConcordanceSearch(request) {
+	        const url = `${this.url}/glossaries/concordance`;
 	        return this.post(url, request, this.defaultConfig());
 	    }
 	}
@@ -54283,6 +55252,18 @@ function requireSourceFiles () {
 		        const url = `${this.url}/projects/${projectId}/branches/${branchId}/clones/${cloneId}`;
 		        return this.get(url, this.defaultConfig());
 		    }
+		    /**
+		     * @param options optional parameters for the request
+		     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.branches.getMany
+		     */
+		    listBranches(options) {
+		        var _a;
+		        let url = `${this.url}/branches`;
+		        url = this.addQueryParam(url, 'filter', options.filter);
+		        url = this.addQueryParam(url, 'projectIds', (_a = options.projectIds) === null || _a === void 0 ? void 0 : _a.join(','));
+		        url = this.addQueryParam(url, 'userId', options.userId);
+		        return this.getList(url, options.limit, options.offset);
+		    }
 		    listProjectBranches(projectId, options, deprecatedLimit, deprecatedOffset) {
 		        if ((0, core_1.isOptionalString)(options, '1' in arguments)) {
 		            options = { name: options, limit: deprecatedLimit, offset: deprecatedOffset };
@@ -54313,11 +55294,26 @@ function requireSourceFiles () {
 		    /**
 		     * @param projectId project identifier
 		     * @param branchId branch identifier
+		     * @param options optional delete options
 		     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.branches.delete
 		     */
-		    deleteBranch(projectId, branchId) {
+		    deleteBranch(projectId, branchId, options) {
 		        const url = `${this.url}/projects/${projectId}/branches/${branchId}`;
-		        return this.delete(url, this.defaultConfig());
+		        const config = this.defaultConfig();
+		        if (options === null || options === void 0 ? void 0 : options.respondAsync) {
+		            config.headers['Prefer'] = 'respond-async';
+		        }
+		        return this.delete(url, config);
+		    }
+		    /**
+		     * @param projectId project identifier
+		     * @param branchId branch identifier
+		     * @param jobIdentifier deletion job identifier
+		     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.branches.jobs.get
+		     */
+		    checkDeleteBranchJobStatus(projectId, branchId, jobIdentifier) {
+		        const url = `${this.url}/projects/${projectId}/branches/${branchId}/jobs/${jobIdentifier}`;
+		        return this.get(url, this.defaultConfig());
 		    }
 		    /**
 		     * @param projectId project identifier
@@ -54359,6 +55355,18 @@ function requireSourceFiles () {
 		        const url = `${this.url}/projects/${projectId}/branches/${branchId}/merges/${mergeId}/summary`;
 		        return this.get(url, this.defaultConfig());
 		    }
+		    /**
+		     * @param options optional parameters for the request
+		     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.directories.getMany
+		     */
+		    listDirectories(options) {
+		        var _a;
+		        let url = `${this.url}/directories`;
+		        url = this.addQueryParam(url, 'filter', options.filter);
+		        url = this.addQueryParam(url, 'projectIds', (_a = options.projectIds) === null || _a === void 0 ? void 0 : _a.join(','));
+		        url = this.addQueryParam(url, 'userId', options.userId);
+		        return this.getList(url, options.limit, options.offset);
+		    }
 		    listProjectDirectories(projectId, options, deprecatedDirectoryId, deprecatedLimit, deprecatedOffset, deprecatedFilter, deprecatedRecursion) {
 		        let url = `${this.url}/projects/${projectId}/directories`;
 		        if ((0, core_1.isOptionalNumber)(options, '1' in arguments)) {
@@ -54399,11 +55407,26 @@ function requireSourceFiles () {
 		    /**
 		     * @param projectId project identifier
 		     * @param directoryId directory identifier
+		     * @param options optional delete options
 		     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.directories.delete
 		     */
-		    deleteDirectory(projectId, directoryId) {
+		    deleteDirectory(projectId, directoryId, options) {
 		        const url = `${this.url}/projects/${projectId}/directories/${directoryId}`;
-		        return this.delete(url, this.defaultConfig());
+		        const config = this.defaultConfig();
+		        if (options === null || options === void 0 ? void 0 : options.respondAsync) {
+		            config.headers['Prefer'] = 'respond-async';
+		        }
+		        return this.delete(url, config);
+		    }
+		    /**
+		     * @param projectId project identifier
+		     * @param directoryId directory identifier
+		     * @param jobIdentifier deletion job identifier
+		     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.directories.jobs.get
+		     */
+		    checkDeleteDirectoryJobStatus(projectId, directoryId, jobIdentifier) {
+		        const url = `${this.url}/projects/${projectId}/directories/${directoryId}/jobs/${jobIdentifier}`;
+		        return this.get(url, this.defaultConfig());
 		    }
 		    /**
 		     * @param projectId project identifier
@@ -54414,6 +55437,18 @@ function requireSourceFiles () {
 		    editDirectory(projectId, directoryId, request) {
 		        const url = `${this.url}/projects/${projectId}/directories/${directoryId}`;
 		        return this.patch(url, request, this.defaultConfig());
+		    }
+		    /**
+		     * @param options optional parameters for the request
+		     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.files.getMany
+		     */
+		    listFiles(options) {
+		        var _a;
+		        let url = `${this.url}/files`;
+		        url = this.addQueryParam(url, 'filter', options.filter);
+		        url = this.addQueryParam(url, 'projectIds', (_a = options.projectIds) === null || _a === void 0 ? void 0 : _a.join(','));
+		        url = this.addQueryParam(url, 'userId', options.userId);
+		        return this.getList(url, options.limit, options.offset);
 		    }
 		    listProjectFiles(projectId, options, deprecatedDirectoryId, deprecatedLimit, deprecatedOffset, deprecatedRecursion, deprecatedFilter) {
 		        let url = `${this.url}/projects/${projectId}/files`;
@@ -54465,11 +55500,26 @@ function requireSourceFiles () {
 		    /**
 		     * @param projectId project identifier
 		     * @param fileId file identifier
+		     * @param options optional delete options
 		     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.files.delete
 		     */
-		    deleteFile(projectId, fileId) {
+		    deleteFile(projectId, fileId, options) {
 		        const url = `${this.url}/projects/${projectId}/files/${fileId}`;
-		        return this.delete(url, this.defaultConfig());
+		        const config = this.defaultConfig();
+		        if (options === null || options === void 0 ? void 0 : options.respondAsync) {
+		            config.headers['Prefer'] = 'respond-async';
+		        }
+		        return this.delete(url, config);
+		    }
+		    /**
+		     * @param projectId project identifier
+		     * @param fileId file identifier
+		     * @param jobIdentifier deletion job identifier
+		     * @see https://developer.crowdin.com/api/v2/#operation/api.projects.files.jobs.get
+		     */
+		    checkDeleteFileJobStatus(projectId, fileId, jobIdentifier) {
+		        const url = `${this.url}/projects/${projectId}/files/${fileId}/jobs/${jobIdentifier}`;
+		        return this.get(url, this.defaultConfig());
 		    }
 		    /**
 		     * @param projectId project identifier
@@ -54721,6 +55771,20 @@ function requireSourceStrings () {
 		        let url = `${this.url}/projects/${projectId}/strings/${stringId}`;
 		        url = this.addQueryParam(url, 'updateOption', query === null || query === void 0 ? void 0 : query.updateOption);
 		        return this.patch(url, request, this.defaultConfig());
+		    }
+		    /**
+		     * @param options optional parameters for the request
+		     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.strings.getMany
+		     */
+		    listStrings(options) {
+		        var _a;
+		        let url = `${this.url}/strings`;
+		        url = this.addQueryParam(url, 'filter', options.filter);
+		        url = this.addQueryParam(url, 'projectIds', (_a = options.projectIds) === null || _a === void 0 ? void 0 : _a.join(','));
+		        url = this.addQueryParam(url, 'userId', options.userId);
+		        url = this.addQueryParam(url, 'scope', options.scope);
+		        url = this.addQueryParam(url, 'denormalizePlaceholders', options.denormalizePlaceholders);
+		        return this.getList(url, options.limit, options.offset);
 		    }
 		}
 		exports.SourceStrings = SourceStrings;
@@ -55234,6 +56298,7 @@ function requireTasks () {
 		        url = this.addQueryParam(url, 'status', options.status);
 		        url = this.addQueryParam(url, 'assigneeId', options.assigneeId);
 		        url = this.addQueryParam(url, 'orderBy', options.orderBy);
+		        url = this.addQueryParam(url, 'batchId', options.batchId);
 		        return this.getList(url, options.limit, options.offset);
 		    }
 		    /**
@@ -55749,6 +56814,23 @@ function requireTranslationMemory () {
 	        return this.post(url, request, this.defaultConfig());
 	    }
 	    /**
+	     * @param request request body
+	     * @see https://developer.crowdin.com/api/v2/#operation/api.tms.concordance.post
+	     */
+	    organizationConcordanceSearch(request) {
+	        const url = `${this.url}/tms/concordance`;
+	        return this.post(url, request, this.defaultConfig());
+	    }
+	    /**
+	     * @param tmId tm identifier
+	     * @param request batch operations
+	     * @see https://developer.crowdin.com/api/v2/#operation/api.tms.segments.patchBatch
+	     */
+	    batchOperationsOnTmSegments(tmId, request) {
+	        const url = `${this.url}/tms/${tmId}/segments`;
+	        return this.patch(url, request, this.defaultConfig());
+	    }
+	    /**
 	     * @param tmId tm identifier
 	     * @param request request body
 	     * @see https://developer.crowdin.com/api/v2/#operation/api.tms.imports.post
@@ -56129,6 +57211,20 @@ function requireTranslations () {
 	    importTranslationsReport(projectId, importId) {
 	        const url = `${this.url}/projects/${projectId}/translations/imports/${importId}/report`;
 	        return this.get(url, this.defaultConfig());
+	    }
+	    /**
+	     * @param options optional parameters for the request
+	     * @see https://developer.crowdin.com/enterprise/api/v2/#operation/api.translations.getMany
+	     */
+	    listTranslations(options) {
+	        var _a, _b;
+	        let url = `${this.url}/translations`;
+	        url = this.addQueryParam(url, 'filter', options.filter);
+	        url = this.addQueryParam(url, 'projectIds', (_a = options.projectIds) === null || _a === void 0 ? void 0 : _a.join(','));
+	        url = this.addQueryParam(url, 'userId', options.userId);
+	        url = this.addQueryParam(url, 'languageIds', (_b = options.languageIds) === null || _b === void 0 ? void 0 : _b.join(','));
+	        url = this.addQueryParam(url, 'denormalizePlaceholders', options.denormalizePlaceholders);
+	        return this.getList(url, options.limit, options.offset);
 	    }
 	}
 	translations.Translations = Translations;
@@ -57677,12 +58773,65 @@ const hasOwnProperty = (
     hasOwnProperty.call(obj, prop)
 )(Object.prototype);
 
+const isUnsafeObjectKey = (prop) =>
+  typeof prop === 'string' &&
+  (prop === '__proto__' || prop === 'constructor' || prop === 'prototype');
+
 /**
- * Walk the prototype chain (excluding the shared Object.prototype) looking for
- * an own `prop`. This distinguishes genuine own/inherited members — including
- * class accessors and template prototypes — from members injected via
- * Object.prototype pollution (e.g. `Object.prototype.username = '...'`), which
- * live on Object.prototype itself and are therefore never matched.
+ * Determine whether an inherited object must be treated as a shared-prototype
+ * boundary. Cross-realm Object.prototype objects cannot be distinguished
+ * reliably from application-created null-prototype objects because their
+ * properties are mutable, so all inherited terminal prototypes are excluded
+ * as a fail-closed boundary. A null-prototype source still keeps its own
+ * properties, as produced by mergeConfig and other safe materialization paths.
+ *
+ * @param {*} obj The object to inspect
+ * @param {*} prototype The object's prototype
+ * @param {boolean} source Whether obj is the original traversal source
+ *
+ * @returns {boolean} True when obj is a safe prototype traversal boundary
+ */
+const isPrototypeBoundary = (obj, prototype, source) =>
+  obj === Object.prototype || (!source && prototype === null);
+
+/**
+ * Determine whether an object can retain its identity through code paths that
+ * add, replace, and remove config properties without bypassing unsafe-key
+ * filtering. Immutable objects, unsafe-key-bearing objects, and objects with
+ * accessor or restricted data properties must be materialized instead.
+ *
+ * @param {*} obj The object to inspect
+ *
+ * @returns {boolean} True when every own property is safe and fully mutable
+ */
+const isSafeAndFullyMutable = (obj) => {
+  if (!Object.isExtensible(obj)) {
+    return false;
+  }
+
+  const props = Object.getOwnPropertyNames(obj);
+
+  if (Object.getOwnPropertySymbols) {
+    props.push(...Object.getOwnPropertySymbols(obj));
+  }
+
+  return props.every((prop) => {
+    if (isUnsafeObjectKey(prop)) {
+      return false;
+    }
+
+    const descriptor = Object.getOwnPropertyDescriptor(obj, prop);
+
+    return !!descriptor && descriptor.configurable && descriptor.writable === true;
+  });
+};
+
+/**
+ * Walk the prototype chain (excluding the source realm's Object.prototype)
+ * looking for an own `prop`. This distinguishes genuine own/inherited members
+ * — including class accessors and template prototypes — from members injected
+ * via Object.prototype pollution (e.g. `Object.prototype.username = '...'`),
+ * which live on Object.prototype itself and are therefore never matched.
  *
  * @param {*} thing The value whose chain to inspect
  * @param {string|symbol} prop The property key to look for
@@ -57693,16 +58842,22 @@ const hasOwnInPrototypeChain = (thing, prop) => {
   let obj = thing;
   const seen = [];
 
-  while (obj != null && obj !== Object.prototype) {
+  while (obj != null) {
     if (seen.indexOf(obj) !== -1) {
       return false;
     }
     seen.push(obj);
 
+    const prototype = getPrototypeOf(obj);
+
+    if (isPrototypeBoundary(obj, prototype, obj === thing)) {
+      return false;
+    }
+
     if (hasOwnProperty(obj, prop)) {
       return true;
     }
-    obj = getPrototypeOf(obj);
+    obj = prototype;
   }
   return false;
 };
@@ -57720,6 +58875,69 @@ const hasOwnInPrototypeChain = (thing, prop) => {
  */
 const getSafeProp = (obj, prop) =>
   obj != null && hasOwnInPrototypeChain(obj, prop) ? obj[prop] : undefined;
+
+/**
+ * Flatten an object and its application-defined prototype chain into a
+ * null-prototype object. Members inherited only from the source realm's
+ * Object.prototype are deliberately excluded, while class/template members
+ * below that boundary are preserved.
+ *
+ * @param {*} thing The value to flatten
+ *
+ * @returns {*} A null-prototype copy, or the original value when it is already
+ * structurally safe or is not an object
+ */
+const toSafeFlatObject = (thing) => {
+  if (thing == null || (typeof thing !== 'object' && typeof thing !== 'function')) {
+    return thing;
+  }
+
+  const sourcePrototype = getPrototypeOf(thing);
+
+  if (sourcePrototype === null && isSafeAndFullyMutable(thing)) {
+    return thing;
+  }
+
+  const result = Object.create(null);
+  const merged = Object.create(null);
+  const seen = [];
+  let current = thing;
+
+  while (current != null) {
+    if (seen.indexOf(current) !== -1) {
+      break;
+    }
+
+    seen.push(current);
+
+    const prototype = current === thing ? sourcePrototype : getPrototypeOf(current);
+
+    if (isPrototypeBoundary(current, prototype, current === thing)) {
+      break;
+    }
+
+    const props = Object.getOwnPropertyNames(current);
+
+    if (Object.getOwnPropertySymbols) {
+      props.push(...Object.getOwnPropertySymbols(current));
+    }
+
+    for (const prop of props) {
+      if (isUnsafeObjectKey(prop)) {
+        continue;
+      }
+
+      if (!hasOwnProperty(merged, prop)) {
+        result[prop] = thing[prop];
+        merged[prop] = true;
+      }
+    }
+
+    current = prototype;
+  }
+
+  return result;
+};
 
 const kindOf$1 = ((cache) => (thing) => {
   const str = toString.call(thing);
@@ -57852,12 +59070,10 @@ const isPlainObject = (val) => {
 
   const prototype = getPrototypeOf(val);
   return (
-    (prototype === null ||
-      prototype === Object.prototype ||
-      getPrototypeOf(prototype) === null) &&
-    // Treat any genuine (non-Object.prototype-polluted) Symbol.toStringTag or
-    // Symbol.iterator as evidence the value is a tagged/iterable type rather
-    // than a plain object, while ignoring keys injected onto Object.prototype.
+    (prototype === null || prototype === Object.prototype || getPrototypeOf(prototype) === null) &&
+    // Treat safe own/inherited Symbol.toStringTag or Symbol.iterator members as
+    // evidence the value is tagged/iterable, while ignoring members reachable
+    // only through shared or terminal prototype boundaries.
     !hasOwnInPrototypeChain(val, toStringTag) &&
     !hasOwnInPrototypeChain(val, iterator)
   );
@@ -57944,6 +59160,7 @@ const isBlob = kindOfTest('Blob');
  * @returns {boolean} True if value is a FileList, otherwise false
  */
 const isFileList = kindOfTest('FileList');
+const isSet = kindOfTest('Set');
 
 /**
  * Determine if a value is a Stream
@@ -58509,12 +59726,23 @@ const toJSONObject = (obj) => {
       if (!('toJSON' in source)) {
         // add-on descent / delete-on-ascent: preserves path semantics, so DAG nodes serialise at every occurrence (see #7230).
         visited.add(source);
-        const target = isArray(source) ? [] : {};
 
-        forEach(source, (value, key) => {
-          const reducedValue = visit(value);
-          !isUndefined(reducedValue) && (target[key] = reducedValue);
-        });
+        let target;
+
+        if (isSet(source)) {
+          target = [];
+          for (const value of source) {
+            const reducedValue = visit(value);
+            !isUndefined(reducedValue) && target.push(reducedValue);
+          }
+        } else {
+          target = isArray(source) ? [] : {};
+
+          forEach(source, (value, key) => {
+            const reducedValue = visit(value);
+            !isUndefined(reducedValue) && (target[key] = reducedValue);
+          });
+        }
 
         visited.delete(source);
 
@@ -58659,6 +59887,7 @@ var utils$1 = {
   hasOwnProp: hasOwnProperty, // an alias to avoid ESLint no-prototype-builtins detection
   hasOwnInPrototypeChain,
   getSafeProp,
+  toSafeFlatObject,
   reduceDescriptors,
   freezeMethods,
   toObjectSet,
@@ -58726,18 +59955,20 @@ var parseHeaders = (rawHeaders) => {
       key = line.substring(0, i).trim().toLowerCase();
       val = line.substring(i + 1).trim();
 
-      if (!key || (parsed[key] && ignoreDuplicateOf[key])) {
+      const hasKey = utils$1.hasOwnProp(parsed, key);
+
+      if (!key || (hasKey && utils$1.hasOwnProp(ignoreDuplicateOf, key))) {
         return;
       }
 
       if (key === 'set-cookie') {
-        if (parsed[key]) {
+        if (hasKey) {
           parsed[key].push(val);
         } else {
           parsed[key] = [val];
         }
       } else {
-        parsed[key] = parsed[key] ? parsed[key] + ', ' + val : val;
+        parsed[key] = hasKey ? parsed[key] + ', ' + val : val;
       }
     });
 
@@ -58801,7 +60032,7 @@ function toByteStringHeaderObject(headers) {
   return byteStringHeaders;
 }
 
-const $internals = Symbol('internals');
+const $internals$1 = Symbol('internals');
 
 function normalizeHeader(header) {
   return header && String(header).trim().toLowerCase();
@@ -58825,6 +60056,124 @@ function parseTokens(str) {
   }
 
   return tokens;
+}
+
+const parameterNameRE = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
+
+function trimOWS(value) {
+  let start = 0;
+  let end = value.length;
+
+  while (start < end) {
+    const code = value.charCodeAt(start);
+
+    if (code !== 0x09 && code !== 0x20) {
+      break;
+    }
+
+    start += 1;
+  }
+
+  while (end > start) {
+    const code = value.charCodeAt(end - 1);
+
+    if (code !== 0x09 && code !== 0x20) {
+      break;
+    }
+
+    end -= 1;
+  }
+
+  return start === 0 && end === value.length ? value : value.slice(start, end);
+}
+
+function decodeQuotedString(value) {
+  const last = value.length - 1;
+
+  if (last < 1 || value.charCodeAt(0) !== 0x22 || value.charCodeAt(last) !== 0x22) {
+    return value;
+  }
+
+  let decoded = '';
+
+  for (let i = 1; i < last; i++) {
+    const code = value.charCodeAt(i);
+
+    if (code === 0x22) {
+      return value;
+    }
+
+    if (code === 0x5c) {
+      i += 1;
+
+      if (i >= last) {
+        return value;
+      }
+    }
+
+    decoded += value[i];
+  }
+
+  return decoded;
+}
+
+function parseParameters(value) {
+  const parameters = Object.create(null);
+  const str = String(value);
+  let start = 0;
+  let quoted = false;
+  let escaped = false;
+
+  function parseParameter(end) {
+    const part = trimOWS(str.slice(start, end));
+    const equals = part.indexOf('=');
+
+    if (equals < 1) {
+      return;
+    }
+
+    const name = trimOWS(part.slice(0, equals));
+
+    if (!parameterNameRE.test(name)) {
+      return;
+    }
+
+    const normalizedName = name.toLowerCase();
+
+    if (
+      normalizedName === '__proto__' ||
+      normalizedName === 'constructor' ||
+      normalizedName === 'prototype'
+    ) {
+      return;
+    }
+
+    const parameterValue = trimOWS(part.slice(equals + 1));
+    parameters[normalizedName] = decodeQuotedString(parameterValue);
+  }
+
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i);
+
+    if (quoted) {
+      if (escaped) {
+        escaped = false;
+      } else if (code === 0x5c) {
+        escaped = true;
+      } else if (code === 0x22) {
+        quoted = false;
+      }
+    } else if (code === 0x22) {
+      quoted = true;
+    } else if (code === 0x2c || code === 0x3b) {
+      parseParameter(i);
+      start = i + 1;
+    }
+  }
+
+  parseParameter(str.length);
+
+  return parameters;
 }
 
 const isValidHeaderName = (str) => /^[-_a-zA-Z0-9^`|~,!#$%&'*+.]+$/.test(str.trim());
@@ -59078,7 +60427,8 @@ let AxiosHeaders$1 = class AxiosHeaders {
   }
 
   getSetCookie() {
-    return this.get('set-cookie') || [];
+    const value = this.get('set-cookie');
+    return utils$1.isArray(value) ? value : value == null || value === false ? [] : [value];
   }
 
   get [Symbol.toStringTag]() {
@@ -59087,6 +60437,10 @@ let AxiosHeaders$1 = class AxiosHeaders {
 
   static from(thing) {
     return thing instanceof this ? thing : new this(thing);
+  }
+
+  static parseParameters(value) {
+    return parseParameters(value);
   }
 
   static concat(first, ...targets) {
@@ -59099,8 +60453,8 @@ let AxiosHeaders$1 = class AxiosHeaders {
 
   static accessor(header) {
     const internals =
-      (this[$internals] =
-      this[$internals] =
+      (this[$internals$1] =
+      this[$internals$1] =
         {
           accessors: {},
         });
@@ -59214,9 +60568,40 @@ function redactConfig(config, redactKeys) {
   return visit(config);
 }
 
+function stringifySafely$1(value) {
+  try {
+    return String(value);
+  } catch (err) {
+    return '';
+  }
+}
+
+function aggregateErrorMessage(error) {
+  const message = error.errors
+    .map((entry) => {
+      try {
+        return entry && entry.message ? stringifySafely$1(entry.message) : stringifySafely$1(entry);
+      } catch (err) {
+        return '';
+      }
+    })
+    .filter(Boolean)
+    .join('; ');
+
+  return message || error.name || 'AggregateError';
+}
+
 let AxiosError$1 = class AxiosError extends Error {
   static from(error, code, config, request, response, customProps) {
-    const axiosError = new AxiosError(error.message, code || error.code, config, request, response);
+    // `AggregateError` (thrown by Node on dual-stack/Happy-Eyeballs connection
+    // failures) has an empty `message`; its detail lives in `errors[]`. Without
+    // this, the wrapped error surfaces with a blank message (see #6721).
+    let message = error.message;
+    if (!message && utils$1.isArray(error.errors) && error.errors.length) {
+      message = aggregateErrorMessage(error);
+    }
+
+    const axiosError = new AxiosError(message, code || error.code, config, request, response);
     // Match native `Error` `cause` semantics: non-enumerable. The wrapped
     // error often carries circular internals (sockets, requests, agents), so
     // an enumerable `cause` makes structured loggers (pino/winston) and any
@@ -59330,6 +60715,16 @@ AxiosError$1.ERR_FORM_DATA_DEPTH_EXCEEDED = 'ERR_FORM_DATA_DEPTH_EXCEEDED';
 var form_dataExports = requireForm_data();
 var FormData$1 = /*@__PURE__*/getDefaultExportFromCjs(form_dataExports);
 
+var PlatformBuffer = {
+  isBufferAvailable() {
+    return typeof Buffer !== 'undefined';
+  },
+
+  from(value) {
+    return Buffer.from(value);
+  }
+};
+
 // Default nesting limit shared with the inverse transform (formDataToJSON) so
 // the FormData <-> JSON round-trip stays symmetric.
 const DEFAULT_FORM_DATA_MAX_DEPTH = 100;
@@ -59423,28 +60818,18 @@ function toFormData$1(obj, formData, options) {
   // eslint-disable-next-line no-param-reassign
   formData = formData || new (FormData$1 || FormData)();
 
-  // eslint-disable-next-line no-param-reassign
-  options = utils$1.toFlatObject(
-    options,
-    {
-      metaTokens: true,
-      dots: false,
-      indexes: false,
-    },
-    false,
-    function defined(option, source) {
-      // eslint-disable-next-line no-eq-null,eqeqeq
-      return !utils$1.isUndefined(source[option]);
-    }
-  );
+  const option = (name, fallback) => {
+    const value = utils$1.getSafeProp(options, name);
+    return utils$1.isUndefined(value) ? fallback : value;
+  };
 
-  const metaTokens = options.metaTokens;
+  const metaTokens = option('metaTokens', true);
   // eslint-disable-next-line no-use-before-define
-  const visitor = options.visitor || defaultVisitor;
-  const dots = options.dots;
-  const indexes = options.indexes;
-  const _Blob = options.Blob || (typeof Blob !== 'undefined' && Blob);
-  const maxDepth = options.maxDepth === undefined ? DEFAULT_FORM_DATA_MAX_DEPTH : options.maxDepth;
+  const visitor = option('visitor') || defaultVisitor;
+  const dots = option('dots', false);
+  const indexes = option('indexes', false);
+  const _Blob = option('Blob') || (typeof Blob !== 'undefined' && Blob);
+  const maxDepth = option('maxDepth', DEFAULT_FORM_DATA_MAX_DEPTH);
   const useBlob = _Blob && utils$1.isSpecCompliantForm(formData);
   const stack = [];
 
@@ -59471,10 +60856,13 @@ function toFormData$1(obj, formData, options) {
       if (useBlob && typeof _Blob === 'function') {
         return new _Blob([value]);
       }
-      if (typeof Buffer !== 'undefined') {
-        return Buffer.from(value);
+      if (PlatformBuffer && PlatformBuffer.isBufferAvailable()) {
+        return PlatformBuffer.from(value);
       }
-      throw new AxiosError$1('Blob is not supported. Use a Buffer instead.', AxiosError$1.ERR_NOT_SUPPORT);
+      throw new AxiosError$1(
+        'Blob is not supported. Use a Buffer instead.',
+        AxiosError$1.ERR_NOT_SUPPORT
+      );
     }
 
     return value;
@@ -59726,9 +61114,57 @@ function buildURL(url, params, options) {
   return url;
 }
 
+const $internals = Symbol('internals');
+
+// `handlers` is public and may be replaced with a nullish value by user code;
+// `clear()` has always tolerated that. Treat it as an empty stack rather than
+// dereferencing it.
+function countHandlers(handlers) {
+  return handlers ? handlers.length : 0;
+}
+
+function trimHandlers(handlers) {
+  if (!handlers) {
+    return;
+  }
+
+  while (handlers.length && handlers[handlers.length - 1] === null) {
+    handlers.pop();
+  }
+}
+
+function syncHandlerEntries(manager, internals) {
+  const handlers = manager.handlers;
+  const length = countHandlers(handlers);
+
+  if (handlers !== internals.handlersRef) {
+    internals.handlersRef = handlers;
+    internals.handlerEntries.clear();
+  } else if (length !== internals.handlersLength) {
+    if (!length) {
+      internals.handlerEntries.clear();
+    } else {
+      internals.handlerEntries.forEach(function removeStaleEntry(entry, id) {
+        if (handlers[entry.index] !== entry.handler) {
+          internals.handlerEntries.delete(id);
+        }
+      });
+    }
+  }
+
+  internals.handlersLength = length;
+}
+
 class InterceptorManager {
   constructor() {
     this.handlers = [];
+    this[$internals] = {
+      handlersRef: this.handlers,
+      handlersLength: this.handlers.length,
+      handlerEntries: new Map(),
+      iterationDepth: 0,
+      nextId: 0,
+    };
   }
 
   /**
@@ -59741,13 +61177,30 @@ class InterceptorManager {
    * @return {Number} An ID used to remove interceptor later
    */
   use(fulfilled, rejected, options) {
-    this.handlers.push({
+    const handler = {
       fulfilled,
       rejected,
       synchronous: options ? options.synchronous : false,
       runWhen: options ? options.runWhen : null,
+    };
+    const internals = this[$internals];
+
+    if (this.handlers == null) {
+      this.handlers = [];
+    }
+
+    syncHandlerEntries(this, internals);
+
+    const id = internals.nextId++;
+
+    this.handlers.push(handler);
+    internals.handlerEntries.set(id, {
+      handler,
+      index: this.handlers.length - 1,
     });
-    return this.handlers.length - 1;
+    internals.handlersLength = this.handlers.length;
+
+    return id;
   }
 
   /**
@@ -59758,8 +61211,27 @@ class InterceptorManager {
    * @returns {void}
    */
   eject(id) {
-    if (this.handlers[id]) {
-      this.handlers[id] = null;
+    const internals = this[$internals];
+
+    syncHandlerEntries(this, internals);
+
+    const entry = internals.handlerEntries.get(id);
+
+    if (entry) {
+      internals.handlerEntries.delete(id);
+
+      // Ignore IDs invalidated by clear or direct replacement of handlers.
+      if (this.handlers[entry.index] !== entry.handler) {
+        return;
+      }
+
+      this.handlers[entry.index] = null;
+
+      // Do not reuse an index while forEach is walking its length snapshot.
+      if (!internals.iterationDepth) {
+        trimHandlers(this.handlers);
+        internals.handlersLength = this.handlers.length;
+      }
     }
   }
 
@@ -59771,6 +61243,7 @@ class InterceptorManager {
   clear() {
     if (this.handlers) {
       this.handlers = [];
+      syncHandlerEntries(this, this[$internals]);
     }
   }
 
@@ -59785,11 +61258,25 @@ class InterceptorManager {
    * @returns {void}
    */
   forEach(fn) {
-    utils$1.forEach(this.handlers, function forEachHandler(h) {
-      if (h !== null) {
-        fn(h);
+    const internals = this[$internals];
+
+    syncHandlerEntries(this, internals);
+
+    internals.iterationDepth++;
+
+    try {
+      utils$1.forEach(this.handlers, function forEachHandler(h) {
+        if (h !== null) {
+          fn(h);
+        }
+      });
+    } finally {
+      if (!--internals.iterationDepth) {
+        syncHandlerEntries(this, internals);
+        trimHandlers(this.handlers);
+        internals.handlersLength = countHandlers(this.handlers);
       }
-    });
+    }
   }
 }
 
@@ -59930,12 +61417,18 @@ function throwIfDepthExceeded(index) {
  * @returns An array of strings.
  */
 function parsePropPath(name) {
-  // foo[x][y][z]
-  // foo.x.y.z
-  // foo-x-y-z
-  // foo x y z
+  // foo[x][y][z] -> ['foo', 'x', 'y', 'z']
+  // foo.x.y.z    -> ['foo', 'x', 'y', 'z']
+  // A path is split on `.` and on `[...]` groups. A segment — whether written
+  // in dot notation or captured inside brackets — may contain any character
+  // except `.`, `[` and `]`, so a key like `user-name` or `user name` is kept
+  // literal instead of being split (#5402). `.`, `[` and `]` keep their existing
+  // meaning, e.g. `foo[bar.baz]` -> ['foo', 'bar', 'baz'] and `[]` is an array push.
+  // Excluding `[` from the bracket group also makes the match fail fast at the
+  // next `[`, so a malformed name cannot rescan to the end of the string from
+  // every unmatched `[` — parsing stays linear in the length of the name.
   const path = [];
-  const pattern = /\w+|\[(\w*)]/g;
+  const pattern = /[^.[\]]+|\[([^.[\]]*)]/g;
   let match;
 
   while ((match = pattern.exec(name)) !== null) {
@@ -60022,6 +61515,20 @@ function formDataToJSON(formData) {
 
   return null;
 }
+
+const methodList = Object.freeze([
+  'get',
+  'delete',
+  'head',
+  'options',
+  'post',
+  'put',
+  'patch',
+  'purge',
+  'link',
+  'unlink',
+  'query',
+]);
 
 const own = (obj, key) => (obj != null && utils$1.hasOwnProp(obj, key) ? obj[key] : undefined);
 
@@ -60185,7 +61692,7 @@ const defaults = {
   },
 };
 
-utils$1.forEach(['delete', 'get', 'head', 'post', 'put', 'patch', 'query'], (method) => {
+utils$1.forEach(methodList, (method) => {
   defaults.headers[method] = {};
 });
 
@@ -60284,33 +61791,89 @@ function isAbsoluteURL(url) {
  * @returns {string} The combined URL
  */
 function combineURLs(baseURL, relativeURL) {
-  return relativeURL
-    ? baseURL.replace(/\/?\/$/, '') + '/' + relativeURL.replace(/^\/+/, '')
-    : baseURL;
+  if (!relativeURL) {
+    return baseURL;
+  }
+
+  let end = baseURL.length;
+
+  while (end > 0 && baseURL.charCodeAt(end - 1) === 47) {
+    end--;
+  }
+
+  return baseURL.slice(0, end) + '/' + relativeURL.replace(/^\/+/, '');
+}
+
+const urlParserControlCharacters = /[\t\n\r]/g;
+
+/**
+ * Match WHATWG URL preprocessing before checking a URL's protocol.
+ *
+ * @param {string} url
+ *
+ * @returns {string}
+ */
+function normalizeURLForProtocolCheck(url) {
+  if (typeof url !== 'string') {
+    return url;
+  }
+
+  let start = 0;
+
+  while (start < url.length && url.charCodeAt(start) <= 0x20) {
+    start++;
+  }
+
+  return url.slice(start).replace(urlParserControlCharacters, '');
 }
 
 const malformedHttpProtocol = /^https?:(?!\/\/)/i;
-const httpProtocolControlCharacters = /[\t\n\r]/g;
 
-function stripLeadingC0ControlOrSpace(url) {
-  let i = 0;
-  while (i < url.length && url.charCodeAt(i) <= 0x20) {
-    i++;
+// Redact the parts of a URL that can carry secrets before it is embedded in an
+// error message. AxiosError.toJSON() serializes `message` verbatim and errors
+// are commonly logged, while the opt-in `config.redact` model only cleans
+// config keys — it cannot reach the message. Redact only the genuinely
+// sensitive substrings — userinfo (credentials), query parameter values and
+// fragment contents — with the same REDACTED marker the config redaction uses,
+// while keeping the scheme, host, path and parameter names so the offending
+// request stays accurately identifiable.
+function redactFragment(fragment) {
+  if (!fragment) {
+    return fragment;
   }
-  return url.slice(i);
+
+  return fragment.replace(/(^|&)([^=&]*=)?[^&]+/g, (match, separator, parameterName = '') => {
+    return `${separator}${parameterName}${REDACTED}`;
+  });
 }
 
-function normalizeURLForProtocolCheck(url) {
-  return stripLeadingC0ControlOrSpace(url).replace(httpProtocolControlCharacters, '');
+function redactSensitiveURLParts(url) {
+  const redactedURL = url.replace(/^(https?:\/{0,2})[^/?#]*@/i, `$1${REDACTED}@`);
+  const fragmentIndex = redactedURL.indexOf('#');
+  const urlWithoutFragment =
+    fragmentIndex === -1 ? redactedURL : redactedURL.slice(0, fragmentIndex);
+  const redactedURLWithoutFragment = urlWithoutFragment.replace(
+    /([?&][^=&#]*=)[^&#]*/g,
+    `$1${REDACTED}`
+  );
+
+  if (fragmentIndex === -1) {
+    return redactedURLWithoutFragment;
+  }
+
+  return `${redactedURLWithoutFragment}#${redactFragment(redactedURL.slice(fragmentIndex + 1))}`;
 }
 
 function assertValidHttpProtocolURL(url, config) {
-  if (typeof url === 'string' && malformedHttpProtocol.test(normalizeURLForProtocolCheck(url))) {
-    throw new AxiosError$1(
-      'Invalid URL: missing "//" after protocol',
-      AxiosError$1.ERR_INVALID_URL,
-      config
-    );
+  if (typeof url === 'string') {
+    const normalizedURL = normalizeURLForProtocolCheck(url);
+    if (malformedHttpProtocol.test(normalizedURL)) {
+      throw new AxiosError$1(
+        `Invalid URL ${JSON.stringify(redactSensitiveURLParts(normalizedURL))}: missing "//" after protocol`,
+        AxiosError$1.ERR_INVALID_URL,
+        config
+      );
+    }
   }
 }
 
@@ -60442,7 +62005,7 @@ var HttpsProxyAgent = /*@__PURE__*/getDefaultExportFromCjs(distExports);
 var followRedirectsExports = requireFollowRedirects();
 var followRedirects = /*@__PURE__*/getDefaultExportFromCjs(followRedirectsExports);
 
-const VERSION$1 = "1.18.1";
+const VERSION$1 = "1.20.0";
 
 function parseProtocol(url) {
   const match = /^([-+\w]{1,25}):(?:\/\/)?/.exec(url);
@@ -60451,7 +62014,7 @@ function parseProtocol(url) {
 
 // RFC 2397: data:[<mediatype>][;base64],<data>
 // mediatype = type/subtype followed by optional ;name=value parameters
-const DATA_URL_PATTERN = /^([^,;]+\/[^,;]+)?((?:;[^,;=]+=[^,;]+)*)(;base64)?,([\s\S]*)$/;
+const DATA_URL_PATTERN = /^([^,;/]+\/[^,;/]+)?((?:;[^,;=]+=[^,;]+)*)(;base64)?,([\s\S]*)$/;
 
 /**
  * Parse data uri to a Buffer or Blob
@@ -60494,9 +62057,10 @@ function fromDataURI(uri, asBlob, options) {
       mime = 'text/plain' + params;
     }
 
-    const buffer = encoding === 'base64'
-      ? Buffer.from(body, 'base64')
-      : Buffer.from(decodeURIComponent(body), encoding);
+    const buffer =
+      encoding === 'base64'
+        ? Buffer.from(body, 'base64')
+        : Buffer.from(decodeURIComponent(body), encoding);
 
     if (asBlob) {
       if (!_Blob) {
@@ -60510,6 +62074,32 @@ function fromDataURI(uri, asBlob, options) {
   }
 
   throw new AxiosError$1('Unsupported protocol ' + protocol, AxiosError$1.ERR_NOT_SUPPORT);
+}
+
+const FORM_DATA_CONTENT_HEADERS = ['content-type', 'content-length'];
+
+/**
+ * Apply the headers generated by a FormData implementation to the request headers,
+ * honoring the `formDataHeaderPolicy` option: with 'content-only', copy only the
+ * content-* headers; otherwise merge all of them.
+ *
+ * @param {AxiosHeaders} headers - the request headers to mutate
+ * @param {Object | null | undefined} formHeaders - headers produced by the FormData implementation
+ * @param {String} [policy] - the resolved `formDataHeaderPolicy` config value
+ *
+ * @returns {void}
+ */
+function setFormDataHeaders(headers, formHeaders, policy) {
+  if (policy !== 'content-only') {
+    headers.set(formHeaders);
+    return;
+  }
+
+  Object.entries(formHeaders || {}).forEach(([key, val]) => {
+    if (FORM_DATA_CONTENT_HEADERS.includes(key.toLowerCase())) {
+      headers.set(key, val);
+    }
+  });
 }
 
 const kInternals = Symbol('internals');
@@ -60819,6 +62409,7 @@ class Http2Sessions {
 
   getSession(authority, options) {
     options = Object.assign(
+      Object.create(null),
       {
         sessionTimeout: 1000,
       },
@@ -60909,6 +62500,7 @@ class Http2Sessions {
     }
 
     session.once('close', removeSession);
+    session.once('error', removeSession);
 
     let entry = [session, options];
 
@@ -60937,11 +62529,127 @@ const callbackify = (fn, reducer) => {
 
 const LOOPBACK_HOSTNAMES = new Set(['localhost', '0.0.0.0']);
 
+const trimTrailingDots = (value) => {
+  let end = value.length;
+
+  while (end && value.charCodeAt(end - 1) === 46) {
+    end--;
+  }
+
+  return end === value.length ? value : value.slice(0, end);
+};
+
 const isIPv4Loopback = (host) => {
   const parts = host.split('.');
   if (parts.length !== 4) return false;
   if (parts[0] !== '127') return false;
   return parts.every((p) => /^\d+$/.test(p) && Number(p) >= 0 && Number(p) <= 255);
+};
+
+/**
+ * Canonicalize an IPv4 address written in shorthand, octal, or hex form into
+ * dotted-decimal. IPv6 addresses and non-IP strings are returned unchanged so
+ * the existing IPv4-mapped IPv6 unmap path and the isLoopback path can still
+ * see them.
+ *
+ * Shorthand expansion mirrors Node's URL parser: literal parts fill from the
+ * left, the final part fills the remaining octets from the right with
+ * zero-padding on the left.
+ *   127.1     -> 127.0.0.1
+ *   127.0.1   -> 127.0.0.1
+ *   1.2.3     -> 1.2.0.3
+ *
+ * Each octet is parsed with an explicit base: 16 for `0x`/`0X` prefix, 8 for
+ * zero-prefixed multi-digit all-`0-7` parts, 10 otherwise. Zero-prefixed
+ * decimal-looking parts that contain `8` or `9` are rejected to match Node's
+ * URL parser, and the comparison layer falls through to non-bypass if either
+ * side rejects the form (fail-safe).
+ *
+ * Returns the input unchanged on any parse failure, out-of-range octet, or
+ * unusual shape (1-part, 5+ parts) so the comparison layer fails closed.
+ */
+const parseIPv4Octet = (text) => {
+  if (/^0[xX][0-9a-fA-F]+$/.test(text)) {
+    const n = parseInt(text.slice(2), 16);
+    return Number.isFinite(n) ? n : null;
+  }
+  if (text.length > 1 && /^0[0-7]+$/.test(text)) {
+    const n = parseInt(text, 8);
+    return Number.isFinite(n) ? n : null;
+  }
+  if (text.length > 1 && /^0[0-9]+$/.test(text)) {
+    return null;
+  }
+  if (/^[0-9]+$/.test(text)) {
+    const n = parseInt(text, 10);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+};
+
+const normalizeIPAddress = (host) => {
+  if (typeof host !== 'string' || !host || host.indexOf(':') !== -1) {
+    return host;
+  }
+
+  let h = host;
+  if (h.charAt(0) === '[' && h.charAt(h.length - 1) === ']') {
+    h = h.slice(1, -1);
+  }
+  h = trimTrailingDots(h);
+
+  // Allowed characters for any IPv4 shape: digits, dot, 'x', 'X', hex digits.
+  if (!/^[0-9.xXa-fA-F]+$/.test(h)) return host;
+
+  const parts = h.split('.');
+
+  // No part may be empty (e.g. "127..0.1" or "127.0.0."). Trailing dots are
+  // already stripped above; this guards against the empty-middle case.
+  if (parts.some((p) => p === '')) return host;
+
+  if (parts.length === 4) {
+    // Full IPv4 form: each part is an octet.
+    const octets = parts.map(parseIPv4Octet);
+    if (octets.some((n) => n === null || n < 0 || n > 255)) return host;
+    return octets.join('.');
+  }
+
+  if (parts.length > 4) {
+    return host;
+  }
+
+  // Shorthand: 1..3 parts. Node's URL parser treats a 1-part input as a 32-bit
+  // integer split into octets, which has surprising semantics (e.g. "127" ->
+  // "0.0.0.127"). Reject 1-part inputs to keep the helper predictable: the
+  // fail-safe returns the input unchanged and the comparison layer falls
+  // through to non-bypass.
+  if (parts.length === 1) return host;
+
+  // 2..3 parts: literal parts fill from the left, tail fills remaining octets
+  // from the right with zero-padding.
+  const literalOctets = parts.slice(0, -1);
+  const tail = parts[parts.length - 1];
+  const tailSlots = 4 - literalOctets.length;
+
+  // Tail is parsed as a full IPv4 number (hex/octal/decimal) and packed
+  // low-byte-right into the remaining octets, matching Node's URL parser.
+  // e.g. 127.65535 (tail 0xFFFF into 3 slots) -> 127.0.255.255;
+  //      127.0x00ff (tail 0xFF into 3 slots) -> 127.0.0.255;
+  //      127.0.65535 (tail 0xFFFF into 2 slots) -> 127.0.255.255.
+  const tailValue = parseIPv4Octet(tail);
+  if (tailValue === null) return host;
+  const maxTail = (1 << (8 * tailSlots)) - 1;
+  if (tailValue < 0 || tailValue > maxTail) return host;
+
+  const tailOctets = new Array(tailSlots).fill(0);
+  for (let i = tailSlots - 1, v = tailValue; i >= 0; i--, v >>= 8) {
+    tailOctets[i] = v & 0xff;
+  }
+
+  const literal = literalOctets.map(parseIPv4Octet);
+  if (literal.some((n) => n === null || n < 0 || n > 255)) return host;
+
+  return [...literal, ...tailOctets].join('.');
 };
 
 const isIPv6ZeroGroup = (group) => /^0{1,4}$/.test(group);
@@ -60965,9 +62673,7 @@ const isIPv6Unspecified = (host) => {
     const explicitGroups = leftGroups.length + rightGroups.length;
 
     return (
-      explicitGroups < 8 &&
-      leftGroups.every(isIPv6ZeroGroup) &&
-      rightGroups.every(isIPv6ZeroGroup)
+      explicitGroups < 8 && leftGroups.every(isIPv6ZeroGroup) && rightGroups.every(isIPv6ZeroGroup)
     );
   }
 
@@ -61063,7 +62769,8 @@ const parseNoProxyEntry = (entry) => {
 // allowing the proxy-bypass policy to be circumvented by using the alternate
 // representation. Returns the input unchanged when not IPv4-mapped.
 const IPV4_MAPPED_DOTTED_RE = /^(?:::|(?:0{1,4}:){1,4}:|(?:0{1,4}:){5})ffff:(\d+\.\d+\.\d+\.\d+)$/i;
-const IPV4_MAPPED_HEX_RE = /^(?:::|(?:0{1,4}:){1,4}:|(?:0{1,4}:){5})ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i;
+const IPV4_MAPPED_HEX_RE =
+  /^(?:::|(?:0{1,4}:){1,4}:|(?:0{1,4}:){5})ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i;
 
 const unmapIPv4MappedIPv6 = (host) => {
   if (typeof host !== 'string' || host.indexOf(':') === -1) return host;
@@ -61081,6 +62788,57 @@ const unmapIPv4MappedIPv6 = (host) => {
   return host;
 };
 
+const IPV4_OCTET_RE = /^(?:0|[1-9]\d{0,2})$/;
+
+const ipv4ToBytes = (host) => {
+  const parts = host.split('.');
+
+  return parts.length === 4 &&
+    parts.every((part) => IPV4_OCTET_RE.test(part) && Number(part) <= 255)
+    ? parts.map(Number)
+    : null;
+};
+
+const IPV6_GROUP_RE = /^[0-9a-f]{1,4}$/i;
+
+const ipv6ToBytes = (host) => {
+  const halves = host.split('::');
+
+  if (halves.length > 2) {
+    return null;
+  }
+
+  const groups = halves[0] ? halves[0].split(':') : [];
+
+  if (halves.length === 2) {
+    const rear = halves[1] ? halves[1].split(':') : [];
+    const missing = 8 - groups.length - rear.length;
+
+    if (missing < 1) {
+      return null;
+    }
+
+    groups.push(...new Array(missing).fill('0'), ...rear);
+  }
+
+  if (groups.length !== 8 || groups.some((group) => !IPV6_GROUP_RE.test(group))) {
+    return null;
+  }
+
+  return groups.flatMap((group) => {
+    const value = Number.parseInt(group, 16);
+    return [(value >> 8) & 0xff, value & 0xff];
+  });
+};
+
+const ipToBytes = (host) => {
+  if (typeof host !== 'string' || !host) {
+    return null;
+  }
+
+  return host.indexOf(':') !== -1 ? ipv6ToBytes(host) : ipv4ToBytes(host);
+};
+
 const normalizeNoProxyHost = (hostname) => {
   if (!hostname) {
     return hostname;
@@ -61090,7 +62848,120 @@ const normalizeNoProxyHost = (hostname) => {
     hostname = hostname.slice(1, -1);
   }
 
-  return unmapIPv4MappedIPv6(hostname.replace(/\.+$/, ''));
+  const trimmed = trimTrailingDots(hostname);
+
+  // IPv4 shorthand/octal/hex → dotted-decimal; helper is a no-op for inputs
+  // containing ':' (IPv6 and IPv4-mapped IPv6) so we fall through to unmap.
+  const ipv4 = normalizeIPAddress(trimmed);
+  if (ipv4 !== trimmed) {
+    return ipv4;
+  }
+
+  return unmapIPv4MappedIPv6(trimmed);
+};
+
+const normalizeCidrBase = (input) => {
+  let base = input;
+  const startsBracket = base.charAt(0) === '[';
+  const endsBracket = base.charAt(base.length - 1) === ']';
+  const hasBracket = base.includes('[') || base.includes(']');
+
+  if (startsBracket || endsBracket) {
+    if (!startsBracket || !endsBracket) {
+      return null;
+    }
+
+    base = base.slice(1, -1);
+
+    if (base.indexOf(':') === -1 || base.includes('[') || base.includes(']')) {
+      return null;
+    }
+  } else if (hasBracket) {
+    return null;
+  }
+
+  if (!base || base.charAt(base.length - 1) === '.') {
+    return null;
+  }
+
+  const wasIPv6 = base.indexOf(':') !== -1;
+
+  if (wasIPv6) {
+    try {
+      base = new URL(`http://[${base}]/`).hostname.slice(1, -1);
+    } catch (_err) {
+      return null;
+    }
+  } else {
+    base = normalizeIPAddress(base);
+
+    if (!ipv4ToBytes(base)) {
+      return null;
+    }
+  }
+
+  return { normalized: unmapIPv4MappedIPv6(base), wasIPv6 };
+};
+
+const CIDR_ENTRY_RE = /^(.+)\/(0|[1-9]\d{0,2})$/;
+
+const parseCidrEntry = (entry) => {
+  if (entry.indexOf('/') === -1) {
+    return undefined;
+  }
+
+  const match = CIDR_ENTRY_RE.exec(entry);
+
+  if (!match) {
+    return null;
+  }
+
+  let prefix = Number(match[2]);
+  const parsedBase = normalizeCidrBase(match[1]);
+
+  if (!parsedBase) {
+    return null;
+  }
+
+  const { normalized, wasIPv6 } = parsedBase;
+
+  if (wasIPv6 && normalized.indexOf(':') === -1) {
+    if (prefix < 96) {
+      return null;
+    }
+
+    prefix -= 96;
+  }
+
+  const bytes = ipToBytes(normalized);
+
+  if (!bytes || prefix > bytes.length * 8) {
+    return null;
+  }
+
+  return { bytes, prefix };
+};
+
+const isInSubnet = (addressBytes, networkBytes, prefix) => {
+  const fullBytes = prefix >> 3;
+
+  for (let i = 0; i < fullBytes; i++) {
+    if (addressBytes[i] !== networkBytes[i]) {
+      return false;
+    }
+  }
+
+  const remainingBits = prefix & 7;
+
+  if (remainingBits) {
+    const mask = (0xff << (8 - remainingBits)) & 0xff;
+
+    if ((addressBytes[fullBytes] & mask) !== (networkBytes[fullBytes] & mask)) {
+      return false;
+    }
+  }
+
+  return true;
 };
 
 function shouldBypassProxy(location) {
@@ -61116,10 +62987,26 @@ function shouldBypassProxy(location) {
     Number.parseInt(parsed.port, 10) || DEFAULT_PORTS[parsed.protocol.split(':', 1)[0]] || 0;
 
   const hostname = normalizeNoProxyHost(parsed.hostname.toLowerCase());
+  const hostnameBytes = ipToBytes(hostname);
 
   return noProxy.split(/[\s,]+/).some((entry) => {
     if (!entry) {
       return false;
+    }
+
+    if (entry === '*') {
+      return true;
+    }
+
+    const cidr = parseCidrEntry(entry);
+
+    if (cidr !== undefined) {
+      return (
+        cidr !== null &&
+        !!hostnameBytes &&
+        hostnameBytes.length === cidr.bytes.length &&
+        isInSubnet(hostnameBytes, cidr.bytes, cidr.prefix)
+      );
     }
 
     let [entryHost, entryPort] = parseNoProxyEntry(entry);
@@ -61202,7 +63089,7 @@ function speedometer(samplesCount, min) {
  * Throttle decorator
  * @param {Function} fn
  * @param {Number} freq
- * @return {Function}
+ * @return {Array<Function>}
  */
 function throttle(fn, freq) {
   let timestamp = 0;
@@ -61237,8 +63124,9 @@ function throttle(fn, freq) {
   };
 
   const flush = () => lastArgs && invoke(lastArgs);
+  const flushWith = (...args) => invoke(args);
 
-  return [throttled, flush];
+  return [throttled, flush, flushWith];
 }
 
 const progressEventReducer = (listener, isDownloadStream, freq = 3) => {
@@ -61246,12 +63134,12 @@ const progressEventReducer = (listener, isDownloadStream, freq = 3) => {
   const _speedometer = speedometer(50, 250);
 
   return throttle((e) => {
-    if (!e || typeof e.loaded !== 'number') {
+    if (!e || !utils$1.isNumber(e.loaded)) {
       return;
     }
     const rawLoaded = e.loaded;
     const total = e.lengthComputable ? e.total : undefined;
-    const loaded = total != null ? Math.min(rawLoaded, total) : rawLoaded;
+    const loaded = Math.max(0, total != null ? Math.min(rawLoaded, total) : rawLoaded);
     const progressBytes = Math.max(0, loaded - bytesNotified);
     const rate = _speedometer(progressBytes);
 
@@ -61288,18 +63176,16 @@ const progressEventDecorator = (total, throttled) => {
 };
 
 const asyncDecorator =
-  (fn) =>
+  (fn, scheduler = utils$1.asap) =>
   (...args) =>
-    utils$1.asap(() => fn(...args));
+    scheduler(() => fn(...args));
 
 /**
- * Estimate decoded byte length of a data:// URL *without* allocating large buffers.
- * - For base64: compute exact decoded size using length and padding;
- *               handle %XX at the character-count level (no string allocation).
- * - For non-base64: compute the exact percent-decoded UTF-8 byte length.
- *
- * @param {string} url
- * @returns {number}
+ * Estimate data: URL byte lengths *without* allocating large buffers.
+ * - Fetch percent-decodes a base64 body before decoding it.
+ * - Node's Buffer.from(body, 'base64') sizes its backing allocation from the
+ *   raw body, including ignored characters and content after padding.
+ * - Non-base64 data is percent-decoded and then encoded as UTF-8.
  */
 const isHexDigit = (charCode) =>
   (charCode >= 48 && charCode <= 57) ||
@@ -61309,7 +63195,89 @@ const isHexDigit = (charCode) =>
 const isPercentEncodedByte = (str, i, len) =>
   i + 2 < len && isHexDigit(str.charCodeAt(i + 1)) && isHexDigit(str.charCodeAt(i + 2));
 
-function estimateDataURLDecodedBytes(url) {
+const hexValue = (charCode) => (charCode <= 57 ? charCode - 48 : (charCode & 0xdf) - 55);
+
+const isBase64Char = (charCode) =>
+  (charCode >= 65 && charCode <= 90) || // A-Z
+  (charCode >= 97 && charCode <= 122) || // a-z
+  (charCode >= 48 && charCode <= 57) || // 0-9
+  charCode === 43 || // +
+  charCode === 47 || // /
+  charCode === 45 || // - (base64url)
+  charCode === 95; // _ (base64url)
+
+const isBase64Whitespace = (charCode) =>
+  charCode === 9 || charCode === 10 || charCode === 12 || charCode === 13 || charCode === 32;
+
+const base64Bytes = (significant) => {
+  const groups = Math.floor(significant / 4);
+  const remainder = significant % 4;
+  return groups * 3 + (remainder === 2 ? 1 : remainder === 3 ? 2 : 0);
+};
+
+// Buffer.byteLength(body, 'base64') uses the raw string length as an allocation
+// upper bound even when Buffer.from later ignores characters or stops at '='.
+const estimateBase64BufferAllocation = (body) => {
+  const len = body.length;
+  let padding = 0;
+
+  if (len > 0 && body.charCodeAt(len - 1) === 61 /* '=' */) {
+    padding++;
+
+    if (len > 1 && body.charCodeAt(len - 2) === 61 /* '=' */) {
+      padding++;
+    }
+  }
+
+  return Math.floor(((len - padding) * 3) / 4);
+};
+
+const estimatePercentDecodedBase64Bytes = (body) => {
+  const len = body.length;
+  let significant = 0;
+  let padding = 0;
+  let invalid = false;
+
+  for (let i = 0; i < len; i++) {
+    let code = body.charCodeAt(i);
+
+    if (code === 37 /* '%' */ && isPercentEncodedByte(body, i, len)) {
+      code = hexValue(body.charCodeAt(i + 1)) * 16 + hexValue(body.charCodeAt(i + 2));
+      i += 2;
+    }
+
+    if (isBase64Whitespace(code)) {
+      continue;
+    }
+
+    if (code === 61 /* '=' */) {
+      padding++;
+      continue;
+    }
+
+    if (!isBase64Char(code) || padding > 0) {
+      invalid = true;
+      continue;
+    }
+
+    significant++;
+  }
+
+  // Fetch rejects malformed forgiving-base64 input. Returning the raw-size
+  // allocation bound keeps that invalid input from becoming a pre-check bypass.
+  if (
+    invalid ||
+    padding > 2 ||
+    (padding > 0 && (significant + padding) % 4 !== 0) ||
+    significant % 4 === 1
+  ) {
+    return estimateBase64BufferAllocation(body);
+  }
+
+  return base64Bytes(significant);
+};
+
+const estimateDataURLBytes = (url, estimateBase64) => {
   if (!url || typeof url !== 'string') return 0;
   if (!url.startsWith('data:')) return 0;
 
@@ -61321,52 +63289,7 @@ function estimateDataURLDecodedBytes(url) {
   const isBase64 = /;base64/i.test(meta);
 
   if (isBase64) {
-    let effectiveLen = body.length;
-    const len = body.length; // cache length
-
-    for (let i = 0; i < len; i++) {
-      if (body.charCodeAt(i) === 37 /* '%' */ && i + 2 < len) {
-        const a = body.charCodeAt(i + 1);
-        const b = body.charCodeAt(i + 2);
-        const isHex = isHexDigit(a) && isHexDigit(b);
-
-        if (isHex) {
-          effectiveLen -= 2;
-          i += 2;
-        }
-      }
-    }
-
-    let pad = 0;
-    let idx = len - 1;
-
-    const tailIsPct3D = (j) =>
-      j >= 2 &&
-      body.charCodeAt(j - 2) === 37 && // '%'
-      body.charCodeAt(j - 1) === 51 && // '3'
-      (body.charCodeAt(j) === 68 || body.charCodeAt(j) === 100); // 'D' or 'd'
-
-    if (idx >= 0) {
-      if (body.charCodeAt(idx) === 61 /* '=' */) {
-        pad++;
-        idx--;
-      } else if (tailIsPct3D(idx)) {
-        pad++;
-        idx -= 3;
-      }
-    }
-
-    if (pad === 1 && idx >= 0) {
-      if (body.charCodeAt(idx) === 61 /* '=' */) {
-        pad++;
-      } else if (tailIsPct3D(idx)) {
-        pad++;
-      }
-    }
-
-    const groups = Math.floor(effectiveLen / 4);
-    const bytes = groups * 3 - (pad || 0);
-    return bytes > 0 ? bytes : 0;
+    return estimateBase64(body);
   }
 
   // Compute UTF-8 byte length directly from UTF-16 code units without allocating
@@ -61396,6 +63319,32 @@ function estimateDataURLDecodedBytes(url) {
     }
   }
   return bytes;
+};
+
+/**
+ * Estimate the percent-decoded payload size used by Fetch data: URLs.
+ *
+ * @param {string} url
+ * @returns {number}
+ */
+function estimateDataURLDecodedBytes(url) {
+  // Fetch removes URL fragments before processing a data: URL.
+  const fragmentIndex = typeof url === 'string' ? url.indexOf('#') : -1;
+
+  return estimateDataURLBytes(
+    fragmentIndex === -1 ? url : url.slice(0, fragmentIndex),
+    estimatePercentDecodedBase64Bytes
+  );
+}
+
+/**
+ * Estimate the Buffer backing allocation used by Node's raw base64 decoder.
+ *
+ * @param {string} url
+ * @returns {number}
+ */
+function estimateDataURLBufferAllocation(url) {
+  return estimateDataURLBytes(url, estimateBase64BufferAllocation);
 }
 
 const zlibOptions = {
@@ -61417,29 +63366,26 @@ const isBrotliSupported = utils$1.isFunction(zlib.createBrotliDecompress);
 const isZstdSupported = utils$1.isFunction(zlib.createZstdDecompress);
 const ACCEPT_ENCODING = 'gzip, compress, deflate' + (isBrotliSupported ? ', br' : '');
 const ACCEPT_ENCODING_WITH_ZSTD = ACCEPT_ENCODING + (isZstdSupported ? ', zstd' : '');
+const scheduleProgress =
+  typeof process !== 'undefined' && process.nextTick ? process.nextTick.bind(process) : utils$1.asap;
 
 const { http: httpFollow, https: httpsFollow } = followRedirects;
 
 const isHttps = /https:?/;
-const FORM_DATA_CONTENT_HEADERS$1 = ['content-type', 'content-length'];
-
-function setFormDataHeaders$1(headers, formHeaders, policy) {
-  if (policy !== 'content-only') {
-    headers.set(formHeaders);
-    return;
-  }
-
-  Object.entries(formHeaders).forEach(([key, val]) => {
-    if (FORM_DATA_CONTENT_HEADERS$1.includes(key.toLowerCase())) {
-      headers.set(key, val);
-    }
-  });
-}
 
 // Symbols used to bind a single 'error' listener to a pooled socket and track
 // the request currently owning that socket across keep-alive reuse (issue #10780).
 const kAxiosSocketListener = Symbol('axios.http.socketListener');
 const kAxiosCurrentReq = Symbol('axios.http.currentReq');
+
+// A shared listener avoids retaining an adapter context for the lifetime of a
+// pooled socket. EventEmitter invokes listeners with `this` set to the emitter.
+function handleSocketError(err) {
+  const current = this[kAxiosCurrentReq];
+  if (current && !current.destroyed) {
+    current.destroy(err);
+  }
+}
 
 // Tags HttpsProxyAgent instances installed by setProxy() so the redirect path
 // can strip them without clobbering a user-supplied agent that happens to be
@@ -61488,16 +63434,14 @@ function isNodeEnvProxyEnabled(agent, nodeVersion = process.versions && process.
   const agentOptions = agent && agent.options;
 
   return Boolean(
-    agentOptions &&
-      utils$1.hasOwnProp(agentOptions, 'proxyEnv') &&
-      agentOptions.proxyEnv != null
+    agentOptions && utils$1.hasOwnProp(agentOptions, 'proxyEnv') && agentOptions.proxyEnv != null
   );
 }
 
 function getProxyEnvAgent(options, configHttpAgent, configHttpsAgent) {
   return isHttps.test(options.protocol)
-    ? (configHttpsAgent || https.globalAgent)
-    : (configHttpAgent || http.globalAgent);
+    ? configHttpsAgent || https.globalAgent
+    : configHttpAgent || http.globalAgent;
 }
 
 function getTunnelingAgent(agentOptions, userHttpsAgent) {
@@ -61510,17 +63454,18 @@ function getTunnelingAgent(agentOptions, userHttpsAgent) {
     '#' +
     (agentOptions.auth || '');
   const cache = userHttpsAgent
-    ? (tunnelingAgentCacheUser.get(userHttpsAgent) ||
-        tunnelingAgentCacheUser.set(userHttpsAgent, new Map()).get(userHttpsAgent))
+    ? tunnelingAgentCacheUser.get(userHttpsAgent) ||
+      tunnelingAgentCacheUser.set(userHttpsAgent, new Map()).get(userHttpsAgent)
     : tunnelingAgentCache;
   let agent = cache.get(key);
   if (agent) return agent;
   // Forward the user's TLS options (custom CA, rejectUnauthorized, client cert,
   // etc.) into the tunneling agent so they apply to the origin TLS upgrade
   // performed after CONNECT. Our proxy fields take precedence on conflict.
-  const merged = userHttpsAgent && userHttpsAgent.options
-    ? { ...userHttpsAgent.options, ...agentOptions }
-    : agentOptions;
+  const merged =
+    userHttpsAgent && userHttpsAgent.options
+      ? { ...userHttpsAgent.options, ...agentOptions }
+      : agentOptions;
   agent = new HttpsProxyAgent(merged);
   if (userHttpsAgent && userHttpsAgent.options) {
     const originTLSOptions = { ...userHttpsAgent.options };
@@ -61617,13 +63562,22 @@ function isSameOriginRedirect(redirectOptions, requestDetails) {
  * @param {http.ClientRequestArgs} options
  * @param {AxiosProxyConfig} configProxy configuration from Axios options object
  * @param {string} location
+ * @param {boolean} [allowEnvProxy=true] whether environment proxy configuration can be used
  *
- * @returns {http.ClientRequestArgs}
+ * @returns {boolean} whether a proxy applies to the selected transport
  */
-function setProxy(options, configProxy, location, isRedirect, configHttpsAgent, configHttpAgent) {
+function setProxy(
+  options,
+  configProxy,
+  location,
+  isRedirect,
+  configHttpsAgent,
+  configHttpAgent,
+  allowEnvProxy = true
+) {
   let proxy = configProxy;
   const proxyEnvAgent = getProxyEnvAgent(options, configHttpAgent, configHttpsAgent);
-  if (!proxy && proxy !== false && !isNodeEnvProxyEnabled(proxyEnvAgent)) {
+  if (!proxy && proxy !== false && allowEnvProxy && !isNodeEnvProxyEnabled(proxyEnvAgent)) {
     const proxyUrl = getProxyForUrl(location);
     if (proxyUrl) {
       if (!shouldBypassProxy(location)) {
@@ -61780,9 +63734,15 @@ function setProxy(options, configProxy, location, isRedirect, configHttpsAgent, 
       redirectOptions.href,
       true,
       configHttpsAgent,
-      configHttpAgent
+      configHttpAgent,
+      allowEnvProxy
     );
   };
+
+  return Boolean(
+    proxy ||
+      (configProxy !== false && allowEnvProxy && isNodeEnvProxyEnabled(proxyEnvAgent))
+  );
 }
 
 const isHttpAdapterSupported =
@@ -61817,7 +63777,7 @@ const wrapAsync = (asyncExecutor) => {
 
 const resolveFamily = ({ address, family }) => {
   if (!utils$1.isString(address)) {
-    throw TypeError('address must be a string');
+    throw new AxiosError$1('address must be a string', AxiosError$1.ERR_BAD_OPTION_VALUE);
   }
   return {
     address,
@@ -61827,6 +63787,43 @@ const resolveFamily = ({ address, family }) => {
 
 const buildAddressEntry = (address, family) =>
   resolveFamily(utils$1.isObject(address) ? address : { address, family });
+
+const normalizedLookupCache = new WeakMap();
+
+const normalizeLookup = (lookup) => {
+  let normalized = normalizedLookupCache.get(lookup);
+
+  if (normalized) {
+    return normalized;
+  }
+
+  const callbackLookup = callbackify(lookup, (value) => (utils$1.isArray(value) ? value : [value]));
+
+  // Support opt.all, which is required by current Node.js releases.
+  normalized = (hostname, opt, cb) => {
+    callbackLookup(hostname, opt, (err, arg0, arg1) => {
+      if (err) {
+        return cb(err);
+      }
+
+      let addresses;
+
+      try {
+        addresses = utils$1.isArray(arg0)
+          ? arg0.map((addr) => buildAddressEntry(addr))
+          : [buildAddressEntry(arg0, arg1)];
+      } catch (error) {
+        return cb(error);
+      }
+
+      opt.all ? cb(err, addresses) : cb(err, addresses[0].address, addresses[0].family);
+    });
+  };
+
+  normalizedLookupCache.set(lookup, normalized);
+
+  return normalized;
+};
 
 const http2Transport = {
   request(options, cb) {
@@ -61892,6 +63889,7 @@ var httpAdapter = isHttpAdapterSupported &&
       let family = own('family');
       let httpVersion = own('httpVersion');
       if (httpVersion === undefined) httpVersion = 1;
+      const rawHttpVersion = httpVersion;
       let http2Options = own('http2Options');
       const httpAgent = own('httpAgent');
       const httpsAgent = own('httpsAgent');
@@ -61909,34 +63907,36 @@ var httpAdapter = isHttpAdapterSupported &&
       let req;
       let connectPhaseTimer;
 
-      httpVersion = +httpVersion;
+      try {
+        httpVersion = +httpVersion;
+      } catch (err) {
+        throw new AxiosError$1(
+          'Invalid protocol version: value is not a number',
+          AxiosError$1.ERR_BAD_OPTION_VALUE,
+          config
+        );
+      }
 
       if (Number.isNaN(httpVersion)) {
-        throw TypeError(`Invalid protocol version: '${config.httpVersion}' is not a number`);
+        throw new AxiosError$1(
+          `Invalid protocol version: '${rawHttpVersion}' is not a number`,
+          AxiosError$1.ERR_BAD_OPTION_VALUE,
+          config
+        );
       }
 
       if (httpVersion !== 1 && httpVersion !== 2) {
-        throw TypeError(`Unsupported protocol version '${httpVersion}'`);
+        throw new AxiosError$1(
+          `Unsupported protocol version '${httpVersion}'`,
+          AxiosError$1.ERR_BAD_OPTION_VALUE,
+          config
+        );
       }
 
       const isHttp2 = httpVersion === 2;
 
       if (lookup) {
-        const _lookup = callbackify(lookup, (value) => (utils$1.isArray(value) ? value : [value]));
-        // hotfix to support opt.all option which is required for node 20.x
-        lookup = (hostname, opt, cb) => {
-          _lookup(hostname, opt, (err, arg0, arg1) => {
-            if (err) {
-              return cb(err);
-            }
-
-            const addresses = utils$1.isArray(arg0)
-              ? arg0.map((addr) => buildAddressEntry(addr))
-              : [buildAddressEntry(arg0, arg1)];
-
-            opt.all ? cb(err, addresses) : cb(err, addresses[0].address, addresses[0].family);
-          });
-        };
+        lookup = normalizeLookup(lookup);
       }
 
       const abortEmitter = new EventEmitter();
@@ -62029,7 +64029,9 @@ var httpAdapter = isHttpAdapterSupported &&
       // prototype cannot influence URL base selection.
       const urlBase = socketPath
         ? 'http://localhost'
-        : (platform.hasBrowserEnv ? platform.origin : undefined);
+        : platform.hasBrowserEnv
+          ? platform.origin
+          : undefined;
       const parsed = new URL(fullPath, urlBase);
       const protocol = parsed.protocol || supportedProtocols[0];
 
@@ -62038,7 +64040,7 @@ var httpAdapter = isHttpAdapterSupported &&
         if (maxContentLength > -1) {
           // Use the exact string passed to fromDataURI (the configured url); fall back to fullPath if needed.
           const dataUrl = String(own('url') || fullPath || '');
-          const estimated = estimateDataURLDecodedBytes(dataUrl);
+          const estimated = estimateDataURLBufferAllocation(dataUrl);
 
           if (estimated > maxContentLength) {
             return reject(
@@ -62128,7 +64130,7 @@ var httpAdapter = isHttpAdapterSupported &&
         utils$1.isFunction(data.getHeaders) &&
         data.getHeaders !== Object.prototype.getHeaders
       ) {
-        setFormDataHeaders$1(headers, data.getHeaders(), own('formDataHeaderPolicy'));
+        setFormDataHeaders(headers, data.getHeaders(), own('formDataHeaderPolicy'));
 
         if (!headers.hasContentLength()) {
           try {
@@ -62203,7 +64205,7 @@ var httpAdapter = isHttpAdapterSupported &&
               data,
               progressEventDecorator(
                 contentLength,
-                progressEventReducer(asyncDecorator(onUploadProgress), false, 3)
+                progressEventReducer(asyncDecorator(onUploadProgress, scheduleProgress), false, 3)
               )
             )
           );
@@ -62238,7 +64240,7 @@ var httpAdapter = isHttpAdapterSupported &&
         return reject(
           AxiosError$1.from(err, AxiosError$1.ERR_BAD_REQUEST, config, null, null, {
             url: own('url'),
-            exists: true
+            exists: true,
           })
         );
       }
@@ -62246,9 +64248,15 @@ var httpAdapter = isHttpAdapterSupported &&
       headers.set(
         'Accept-Encoding',
         utils$1.hasOwnProp(transitional, 'advertiseZstdAcceptEncoding') &&
-        transitional.advertiseZstdAcceptEncoding === true ? ACCEPT_ENCODING_WITH_ZSTD : ACCEPT_ENCODING,
+          transitional.advertiseZstdAcceptEncoding === true
+          ? ACCEPT_ENCODING_WITH_ZSTD
+          : ACCEPT_ENCODING,
         false
       );
+
+      if (isHttp2 && lookup) {
+        http2Options = Object.assign(Object.create(null), http2Options, { lookup });
+      }
 
       // Null-prototype to block prototype pollution gadgets on properties read
       // directly by Node's http.request (e.g. insecureHTTPParser, lookup).
@@ -62263,10 +64271,13 @@ var httpAdapter = isHttpAdapterSupported &&
         beforeRedirect: dispatchBeforeRedirect,
         beforeRedirects: Object.create(null),
         http2Options,
+        createConnection: undefined,
       });
 
       // cacheable-lookup integration hotfix
       !utils$1.isUndefined(lookup) && (options.lookup = lookup);
+
+      let proxyApplied = false;
 
       if (socketPath) {
         if (typeof socketPath !== 'string') {
@@ -62303,13 +64314,17 @@ var httpAdapter = isHttpAdapterSupported &&
           ? parsed.hostname.slice(1, -1)
           : parsed.hostname;
         options.port = parsed.port;
-        setProxy(
+        proxyApplied = setProxy(
           options,
           configProxy,
           protocol + '//' + parsed.hostname + (parsed.port ? ':' + parsed.port : '') + options.path,
           false,
           httpsAgent,
-          httpAgent
+          httpAgent,
+          // The HTTP/2 transport connects independently of HTTP/1 agents, so it
+          // cannot apply either axios-resolved or agent-local environment proxies.
+          // Explicit proxy config is still processed and rejected below.
+          !isHttp2
         );
       }
       let transport;
@@ -62327,6 +64342,16 @@ var httpAdapter = isHttpAdapterSupported &&
       }
 
       if (isHttp2) {
+        if (proxyApplied) {
+          return reject(
+            new AxiosError$1(
+              'HTTP/2 requests with a proxy are not supported',
+              AxiosError$1.ERR_NOT_SUPPORT,
+              config
+            )
+          );
+        }
+
         transport = http2Transport;
       } else {
         const configTransport = own('transport');
@@ -62441,7 +64466,11 @@ var httpAdapter = isHttpAdapterSupported &&
                 transformStream,
                 progressEventDecorator(
                   responseLength,
-                  progressEventReducer(asyncDecorator(onDownloadProgress), true, 3)
+                  progressEventReducer(
+                    asyncDecorator(onDownloadProgress, scheduleProgress),
+                    true,
+                    3
+                  )
                 )
               )
             );
@@ -62639,18 +64668,10 @@ var httpAdapter = isHttpAdapterSupported &&
           socket.setKeepAlive(true, 1000 * 60);
         }
 
-        // Install a single 'error' listener per socket (not per request) to avoid
-        // accumulating listeners on pooled keep-alive sockets that get reassigned
-        // to new requests before the previous request's 'close' fires (issue #10780).
-        // The listener is bound to the socket's currently-active request via a
-        // symbol, which is swapped as the socket is reassigned.
+        // Install one shared 'error' listener per socket. The symbol follows the
+        // currently-active request as pooled sockets are reassigned (issue #10780).
         if (!socket[kAxiosSocketListener]) {
-          socket.on('error', function handleSocketError(err) {
-            const current = socket[kAxiosCurrentReq];
-            if (current && !current.destroyed) {
-              current.destroy(err);
-            }
-          });
+          socket.on('error', handleSocketError);
           socket[kAxiosSocketListener] = true;
         }
 
@@ -62852,6 +64873,17 @@ var cookies = platform.hasStandardBrowserEnv
 
 const headersToObject = (thing) => (thing instanceof AxiosHeaders$1 ? { ...thing } : thing);
 
+const ownEnumerableKeys = (thing) => {
+  if (Object.getOwnPropertySymbols && Object.getOwnPropertyDescriptor) {
+    return Object.keys(thing).concat(
+      Object.getOwnPropertySymbols(thing).filter(
+        (symbol) => Object.getOwnPropertyDescriptor(thing, symbol).enumerable
+      )
+    );
+  }
+  return Object.keys(thing);
+};
+
 /**
  * Config-specific merge-function which creates a new config-object
  * by merging two configuration objects together.
@@ -62917,7 +64949,9 @@ function mergeConfig$1(config1, config2) {
   }
 
   function getMergedTransitionalOption(prop) {
-    const transitional2 = utils$1.hasOwnProp(config2, 'transitional') ? config2.transitional : undefined;
+    const transitional2 = utils$1.hasOwnProp(config2, 'transitional')
+      ? config2.transitional
+      : undefined;
 
     if (!utils$1.isUndefined(transitional2)) {
       if (utils$1.isPlainObject(transitional2)) {
@@ -62929,7 +64963,9 @@ function mergeConfig$1(config1, config2) {
       }
     }
 
-    const transitional1 = utils$1.hasOwnProp(config1, 'transitional') ? config1.transitional : undefined;
+    const transitional1 = utils$1.hasOwnProp(config1, 'transitional')
+      ? config1.transitional
+      : undefined;
 
     if (utils$1.isPlainObject(transitional1) && utils$1.hasOwnProp(transitional1, prop)) {
       return transitional1[prop];
@@ -62956,7 +64992,7 @@ function mergeConfig$1(config1, config2) {
     transformResponse: defaultToConfig2,
     paramsSerializer: defaultToConfig2,
     timeout: defaultToConfig2,
-    timeoutMessage: defaultToConfig2,
+    timeoutErrorMessage: defaultToConfig2,
     withCredentials: defaultToConfig2,
     withXSRFToken: defaultToConfig2,
     adapter: defaultToConfig2,
@@ -62981,7 +65017,7 @@ function mergeConfig$1(config1, config2) {
       mergeDeepProperties(headersToObject(a), headersToObject(b), prop, true),
   };
 
-  utils$1.forEach(Object.keys({ ...config1, ...config2 }), function computeConfigValue(prop) {
+  utils$1.forEach(ownEnumerableKeys({ ...config1, ...config2 }), function computeConfigValue(prop) {
     if (prop === '__proto__' || prop === 'constructor' || prop === 'prototype') return;
     const merge = utils$1.hasOwnProp(mergeMap, prop) ? mergeMap[prop] : mergeDeepProperties;
     const a = utils$1.hasOwnProp(config1, prop) ? config1[prop] : undefined;
@@ -63003,21 +65039,6 @@ function mergeConfig$1(config1, config2) {
   }
 
   return config;
-}
-
-const FORM_DATA_CONTENT_HEADERS = ['content-type', 'content-length'];
-
-function setFormDataHeaders(headers, formHeaders, policy) {
-  if (policy !== 'content-only') {
-    headers.set(formHeaders);
-    return;
-  }
-
-  Object.entries(formHeaders || {}).forEach(([key, val]) => {
-    if (FORM_DATA_CONTENT_HEADERS.includes(key.toLowerCase())) {
-      headers.set(key, val);
-    }
-  });
 }
 
 /**
@@ -63074,15 +65095,17 @@ function resolveConfig(config) {
   }
 
   if (utils$1.isFormData(data)) {
+    const getHeaders = utils$1.getSafeProp(data, 'getHeaders');
+
     if (
       platform.hasStandardBrowserEnv ||
       platform.hasStandardBrowserWebWorkerEnv ||
       utils$1.isReactNative(data)
     ) {
       headers.setContentType(undefined); // browser/web worker/RN handles it
-    } else if (utils$1.isFunction(data.getHeaders)) {
+    } else if (utils$1.isFunction(getHeaders)) {
       // Node.js FormData (like form-data package)
-      setFormDataHeaders(headers, data.getHeaders(), own('formDataHeaderPolicy'));
+      setFormDataHeaders(headers, getHeaders.call(data), own('formDataHeaderPolicy'));
     }
   }
 
@@ -63124,7 +65147,7 @@ var xhrAdapter = isXHRAdapterSupported &&
       let { responseType, onUploadProgress, onDownloadProgress } = _config;
       let onCanceled;
       let uploadThrottled, downloadThrottled;
-      let flushUpload, flushDownload;
+      let flushUpload, flushDownload, flushDownloadWithEvent;
 
       function done() {
         flushUpload && flushUpload(); // flush events
@@ -63142,10 +65165,55 @@ var xhrAdapter = isXHRAdapterSupported &&
       // Set the request timeout in MS
       request.timeout = _config.timeout;
 
-      function onloadend() {
+      function onloadend(event) {
         if (!request) {
           return;
         }
+
+        // Status 0 means no response was received, which onerror and onabort normally
+        // reject before this runs. Firefox 152 fires only readystatechange and loadend for
+        // navigation-canceled requests (https://bugzilla.mozilla.org/show_bug.cgi?id=1505389),
+        // leaving settle() to resolve them as an empty success. ECONNABORTED is the error
+        // onabort raised on Firefox 151. Reads over file:, which some environments report as
+        // status 0 on success, are excluded by the request URL's scheme after browser-style
+        // preprocessing, by the page origin's scheme for relative URLs (which inherit it), or
+        // by responseURL where implemented.
+        if (
+          request.status === 0 &&
+          (parseProtocol(normalizeURLForProtocolCheck(_config.url)) ||
+            parseProtocol(platform.origin)) !== 'file' &&
+          !(request.responseURL && request.responseURL.startsWith('file:'))
+        ) {
+          reject(new AxiosError$1('Request aborted', AxiosError$1.ECONNABORTED, config, request));
+          done();
+
+          // Clean up request
+          request = null;
+          return;
+        }
+
+        // When loadend is still dispatching, flushing with it gives progress
+        // listeners a final delivery whose event has a live target. The legacy
+        // ready-state fallback has no event, so replay its pending progress.
+        // A throwing listener must not block settlement; rethrow asynchronously,
+        // matching how listener errors surface on the throttle timer path.
+        try {
+          if (event) {
+            flushDownloadWithEvent && flushDownloadWithEvent(event);
+          } else {
+            flushDownload && flushDownload();
+          }
+        } catch (err) {
+          setTimeout(() => {
+            throw err;
+          });
+        }
+
+        // A final progress callback can cancel the request synchronously.
+        if (!request) {
+          return;
+        }
+
         // Prepare the response
         const responseHeaders = AxiosHeaders$1.from(
           'getAllResponseHeaders' in request && request.getAllResponseHeaders()
@@ -63277,7 +65345,10 @@ var xhrAdapter = isXHRAdapterSupported &&
 
       // Handle progress if needed
       if (onDownloadProgress) {
-        [downloadThrottled, flushDownload] = progressEventReducer(onDownloadProgress, true);
+        [downloadThrottled, flushDownload, flushDownloadWithEvent] = progressEventReducer(
+          onDownloadProgress,
+          true
+        );
         request.addEventListener('progress', downloadThrottled);
       }
 
@@ -63373,7 +65444,18 @@ const composeSignals = (signals, timeout) => {
     signals = null;
   };
 
-  signals.forEach((signal) => signal.addEventListener('abort', onabort, { once: true }));
+  signals.forEach((signal) => {
+    if (aborted) {
+      return;
+    }
+
+    if (signal.aborted) {
+      onabort.call(signal);
+      return;
+    }
+
+    signal.addEventListener('abort', onabort, { once: true });
+  });
 
   const { signal } = controller;
 
@@ -63474,6 +65556,18 @@ const trackStream = (stream, chunkSize, onProgress, onFinish) => {
 
 const DEFAULT_CHUNK_SIZE = 64 * 1024;
 
+const DEFAULT_REQUEST_OPTIONS = {
+  cache: 'default',
+  redirect: 'follow',
+  referrer: 'about:client',
+  referrerPolicy: '',
+  mode: 'cors',
+  integrity: '',
+  keepalive: false,
+  priority: 'auto',
+  window: null,
+};
+
 const { isFunction } = utils$1;
 
 /**
@@ -63524,9 +65618,7 @@ const maybeWithAuthCredentials = (url) => {
 
 const factory = (env) => {
   const globalObject =
-    utils$1.global !== undefined && utils$1.global !== null
-      ? utils$1.global
-      : globalThis;
+    utils$1.global !== undefined && utils$1.global !== null ? utils$1.global : globalThis;
   const { ReadableStream, TextEncoder } = globalObject;
 
   env = utils$1.merge.call(
@@ -63665,6 +65757,7 @@ const factory = (env) => {
       fetchOptions,
       maxContentLength,
       maxBodyLength,
+      maxRedirects,
     } = resolveConfig(config);
 
     const hasMaxContentLength = utils$1.isNumber(maxContentLength) && maxContentLength > -1;
@@ -63715,7 +65808,7 @@ const factory = (env) => {
         const password = utils$1.getSafeProp(configAuth, 'password') || '';
         auth = {
           username,
-          password
+          password,
         };
       }
 
@@ -63727,7 +65820,7 @@ const factory = (env) => {
           const urlPassword = decodeURIComponentSafe(parsedURL.password);
           auth = {
             username: urlUsername,
-            password: urlPassword
+            password: urlPassword,
           };
         }
 
@@ -63801,7 +65894,9 @@ const factory = (env) => {
         (onUploadProgress || mustEnforceStreamBody)
       ) {
         requestContentLength =
-          requestContentLength == null ? await resolveBodyLength(headers, data) : requestContentLength;
+          requestContentLength == null
+            ? await resolveBodyLength(headers, data)
+            : requestContentLength;
 
         // A declared length of 0 is only trusted to skip the wrap when we are
         // not enforcing a stream limit (which must not rely on that header).
@@ -63814,7 +65909,10 @@ const factory = (env) => {
 
           let contentTypeHeader;
 
-          if (utils$1.isFormData(data) && (contentTypeHeader = _request.headers.get('content-type'))) {
+          if (
+            utils$1.isFormData(data) &&
+            (contentTypeHeader = _request.headers.get('content-type'))
+          ) {
             headers.setContentType(contentTypeHeader);
           }
 
@@ -63877,20 +65975,57 @@ const factory = (env) => {
       // Set User-Agent header if not already set (fetch defaults to 'node' in Node.js)
       headers.set('User-Agent', 'axios/' + VERSION$1, false);
 
-      const resolvedOptions = {
-        ...fetchOptions,
+      const safeFetchOptions =
+        fetchOptions == null ? fetchOptions : Object.assign(Object.create(null), fetchOptions);
+
+      if (safeFetchOptions) {
+        // These options are owned by Axios and are already reflected in the
+        // resolved Request passed to fetch.
+        delete safeFetchOptions.body;
+        delete safeFetchOptions.headers;
+        delete safeFetchOptions.method;
+        delete safeFetchOptions.signal;
+        delete safeFetchOptions.duplex;
+        delete safeFetchOptions.credentials;
+      }
+
+      const resolvedOptions = Object.assign(Object.create(null), safeFetchOptions, {
         signal: composedSignal,
         method: method.toUpperCase(),
         headers: toByteStringHeaderObject(headers.normalize()),
         body: data,
         duplex: 'half',
         credentials: isCredentialsSupported ? withCredentials : undefined,
-      };
+      });
+
+      if (isRequestSupported) {
+        utils$1.forEach(DEFAULT_REQUEST_OPTIONS, (value, key) => {
+          if (resolvedOptions[key] === undefined) {
+            resolvedOptions[key] = value;
+          }
+        });
+
+        if (resolvedOptions.signal === undefined) {
+          resolvedOptions.signal = null;
+        }
+
+        if (resolvedOptions.body === undefined) {
+          resolvedOptions.body = null;
+        }
+      }
+
+      if (maxRedirects === 0) {
+        resolvedOptions.redirect = 'manual';
+
+        if (safeFetchOptions) {
+          safeFetchOptions.redirect = 'manual';
+        }
+      }
 
       request = isRequestSupported && new Request(url, resolvedOptions);
 
       let response = await (isRequestSupported
-        ? _fetch(request, fetchOptions)
+        ? _fetch(request, safeFetchOptions)
         : _fetch(url, resolvedOptions));
 
       const responseHeaders = AxiosHeaders$1.from(response.headers);
@@ -64248,10 +66383,15 @@ function throwIfCancellationRequested(config) {
  *
  * @returns {Promise} The Promise to be fulfilled
  */
-function dispatchRequest(config) {
+function dispatchRequest(_config) {
+  // Interceptors may replace the merged config with an ordinary object. Flatten
+  // it at the dispatch boundary so shared prototype members cannot become
+  // request behavior, while preserving intentional template/class members.
+  const config = utils$1.toSafeFlatObject(_config);
+
   throwIfCancellationRequested(config);
 
-  config.headers = AxiosHeaders$1.from(config.headers);
+  config.headers = AxiosHeaders$1.from(utils$1.getSafeProp(config, 'headers'));
 
   // Transform request data
   config.data = transformData.call(config, config.transformRequest);
@@ -64444,21 +66584,21 @@ let Axios$1 = class Axios {
       return await this._request(configOrUrl, config);
     } catch (err) {
       if (err instanceof Error) {
-        let dummy = {};
+        try {
+          let dummy = {};
 
-        Error.captureStackTrace ? Error.captureStackTrace(dummy) : (dummy = new Error());
+          Error.captureStackTrace ? Error.captureStackTrace(dummy) : (dummy = new Error());
 
-        // slice off the Error: ... line
-        const stack = (() => {
-          if (!dummy.stack) {
-            return '';
+          const dummyStack = dummy.stack;
+          let stack = '';
+
+          // slice off the Error: ... line
+          if (typeof dummyStack === 'string') {
+            const firstNewlineIndex = dummyStack.indexOf('\n');
+
+            stack = firstNewlineIndex === -1 ? '' : dummyStack.slice(firstNewlineIndex + 1);
           }
 
-          const firstNewlineIndex = dummy.stack.indexOf('\n');
-
-          return firstNewlineIndex === -1 ? '' : dummy.stack.slice(firstNewlineIndex + 1);
-        })();
-        try {
           if (!err.stack) {
             err.stack = stack;
             // match without the 2 top stack lines
@@ -64474,7 +66614,7 @@ let Axios$1 = class Axios {
             }
           }
         } catch (e) {
-          // ignore the case where "stack" is an un-writable property
+          // Ignore failures from custom stack hooks or un-writable stack properties.
         }
       }
 
@@ -64545,13 +66685,17 @@ let Axios$1 = class Axios {
     );
 
     // Set config.method
-    config.method = (config.method || this.defaults.method || 'get').toLowerCase();
+    config.method = (
+      utils$1.getSafeProp(config, 'method') ||
+      utils$1.getSafeProp(this.defaults, 'method') ||
+      'get'
+    ).toLowerCase();
 
     // Flatten headers
     let contextHeaders = headers && utils$1.merge(headers.common, headers[config.method]);
 
     headers &&
-      utils$1.forEach(['delete', 'get', 'head', 'post', 'put', 'patch', 'query', 'common'], (method) => {
+      utils$1.forEach(methodList.concat('common'), (method) => {
         delete headers[method];
       });
 
@@ -64610,17 +66754,35 @@ let Axios$1 = class Axios {
       const onFulfilled = requestInterceptorChain[i++];
       const onRejected = requestInterceptorChain[i++];
       try {
-        newConfig = onFulfilled(newConfig);
+        newConfig = onFulfilled ? onFulfilled(newConfig) : newConfig;
       } catch (error) {
-        onRejected.call(this, error);
+        if (!onRejected) {
+          promise = Promise.reject(error);
+          break;
+        }
+
+        try {
+          const rejectedResult = onRejected.call(this, error);
+
+          if (utils$1.isThenable(rejectedResult)) {
+            promise = Promise.resolve(rejectedResult).then(() =>
+              dispatchRequest.call(this, newConfig)
+            );
+          }
+        } catch (rejectedError) {
+          promise = Promise.reject(rejectedError);
+        }
+
         break;
       }
     }
 
-    try {
-      promise = dispatchRequest.call(this, newConfig);
-    } catch (error) {
-      return Promise.reject(error);
+    if (!promise) {
+      try {
+        promise = dispatchRequest.call(this, newConfig);
+      } catch (error) {
+        promise = Promise.reject(error);
+      }
     }
 
     i = 0;
@@ -64886,14 +67048,22 @@ const HttpStatusCode$1 = {
   Gone: 410,
   LengthRequired: 411,
   PreconditionFailed: 412,
+  /**
+   * @deprecated Use `ContentTooLarge` instead.
+   */
   PayloadTooLarge: 413,
+  ContentTooLarge: 413,
   UriTooLong: 414,
   UnsupportedMediaType: 415,
   RangeNotSatisfiable: 416,
   ExpectationFailed: 417,
   ImATeapot: 418,
   MisdirectedRequest: 421,
+  /**
+   * @deprecated Use `UnprocessableContent` instead.
+   */
   UnprocessableEntity: 422,
+  UnprocessableContent: 422,
   Locked: 423,
   FailedDependency: 424,
   TooEarly: 425,
@@ -64913,6 +67083,7 @@ const HttpStatusCode$1 = {
   LoopDetected: 508,
   NotExtended: 510,
   NetworkAuthenticationRequired: 511,
+  WebServerReturnsAnUnknownError: 520,
   WebServerIsDown: 521,
   ConnectionTimedOut: 522,
   OriginIsUnreachable: 523,
@@ -64922,7 +67093,9 @@ const HttpStatusCode$1 = {
 };
 
 Object.entries(HttpStatusCode$1).forEach(([key, value]) => {
-  HttpStatusCode$1[value] = key;
+  if (HttpStatusCode$1[value] === undefined) {
+    HttpStatusCode$1[value] = key;
+  }
 });
 
 /**
@@ -71528,7 +73701,7 @@ class Contributors {
     }
 }
 
-mainExports.config();
+distExports$1.config();
 async function run() {
     try {
         const tableConfig = {
